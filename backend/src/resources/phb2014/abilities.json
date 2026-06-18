@@ -1,0 +1,44 @@
+[
+  {
+    "id": "ability.strength",
+    "rule_type": "ability",
+    "name": {"en": "Strength", "zh-CN": "力量"},
+    "description": {"en": "Measures physical power.", "zh-CN": "衡量身体力量。"},
+    "source": "PHB 2014"
+  },
+  {
+    "id": "ability.dexterity",
+    "rule_type": "ability",
+    "name": {"en": "Dexterity", "zh-CN": "敏捷"},
+    "description": {"en": "Measures agility and reflexes.", "zh-CN": "衡量灵活性与反应。"},
+    "source": "PHB 2014"
+  },
+  {
+    "id": "ability.constitution",
+    "rule_type": "ability",
+    "name": {"en": "Constitution", "zh-CN": "体质"},
+    "description": {"en": "Measures health and endurance.", "zh-CN": "衡量健康与耐力。"},
+    "source": "PHB 2014"
+  },
+  {
+    "id": "ability.intelligence",
+    "rule_type": "ability",
+    "name": {"en": "Intelligence", "zh-CN": "智力"},
+    "description": {"en": "Measures reasoning and memory.", "zh-CN": "衡量推理与记忆。"},
+    "source": "PHB 2014"
+  },
+  {
+    "id": "ability.wisdom",
+    "rule_type": "ability",
+    "name": {"en": "Wisdom", "zh-CN": "感知"},
+    "description": {"en": "Measures awareness and insight.", "zh-CN": "衡量观察与洞察。"},
+    "source": "PHB 2014"
+  },
+  {
+    "id": "ability.charisma",
+    "rule_type": "ability",
+    "name": {"en": "Charisma", "zh-CN": "魅力"},
+    "description": {"en": "Measures force of personality.", "zh-CN": "衡量人格影响力。"},
+    "source": "PHB 2014"
+  }
+]

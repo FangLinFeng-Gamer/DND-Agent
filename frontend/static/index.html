@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DND-Agent · Tavern of Tales</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpolygon points='50,4 90,27 90,73 50,96 10,73 10,27' fill='%23150f08' stroke='%23f0d060' stroke-width='5'/%3E%3Cpolygon points='50,24 74,66 26,66' fill='none' stroke='%23f0d060' stroke-width='4'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500;600;700;800&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css?v=20260618-game-room-layout10">
+  </head>
+  <body>
+    <div class="embers" aria-hidden="true">
+      <i style="--x:6%;  --dur:11s; --delay:0s;    --dx:42px"></i>
+      <i style="--x:14%; --dur:14s; --delay:3.2s;  --dx:-30px"></i>
+      <i style="--x:23%; --dur:10s; --delay:6.1s;  --dx:24px"></i>
+      <i style="--x:31%; --dur:16s; --delay:1.4s;  --dx:-48px"></i>
+      <i style="--x:42%; --dur:12s; --delay:8.3s;  --dx:36px"></i>
+      <i style="--x:50%; --dur:15s; --delay:4.7s;  --dx:-22px"></i>
+      <i style="--x:59%; --dur:11s; --delay:9.6s;  --dx:50px"></i>
+      <i style="--x:67%; --dur:13s; --delay:2.2s;  --dx:-38px"></i>
+      <i style="--x:76%; --dur:17s; --delay:7.4s;  --dx:28px"></i>
+      <i style="--x:84%; --dur:12s; --delay:5.5s;  --dx:-44px"></i>
+      <i style="--x:91%; --dur:14s; --delay:.8s;   --dx:20px"></i>
+      <i style="--x:97%; --dur:10s; --delay:10.9s; --dx:-26px"></i>
+    </div>
+
+    <div class="app-shell">
+      <header class="topbar floating-nav">
+        <div class="brand">
+          <svg class="brand-die" viewBox="0 0 100 100" aria-hidden="true" fill="none" stroke="currentColor">
+            <polygon points="50,3 91,26 91,74 50,97 9,74 9,26" stroke-width="3"/>
+            <polygon points="50,22 76,67 24,67" stroke-width="2.4"/>
+            <path d="M50 3 L50 22 M91 26 L76 67 M9 26 L24 67 M50 97 L76 67 M50 97 L24 67 M91 74 L76 67 M9 74 L24 67 M50 22 L9 26 M50 22 L91 26" stroke-width="1.5" opacity=".8"/>
+            <text x="50" y="55" text-anchor="middle" font-size="19" font-weight="bold" fill="currentColor" stroke="none" font-family="serif">20</text>
+          </svg>
+          <h1>DND-Agent</h1>
+        </div>
+        <nav class="view-nav" aria-label="Primary views">
+          <button type="button" class="secondary" data-view-target="home" data-i18n="home">Home</button>
+          <button type="button" class="secondary" data-view-target="races" data-i18n="races">Races</button>
+          <button type="button" class="secondary" data-view-target="character-create" data-i18n="characterCreation">Character Creation</button>
+          <button type="button" class="secondary" data-view-target="story-create" data-i18n="stories">Stories</button>
+          <button type="button" class="secondary" data-view-target="game" data-i18n="play">Play</button>
+          <button type="button" class="secondary" data-view-target="model-config" data-i18n="models">Models</button>
+        </nav>
+        <div class="topbar-actions">
+          <button type="button" class="nav-primary" data-view-target="game" data-i18n="homePrimaryCta">Start Game</button>
+          <label class="language-control">
+            <span data-i18n="language">Language</span>
+            <select id="language-select" aria-label="Language">
+              <option value="en">English</option>
+              <option value="zh-CN">中文</option>
+            </select>
+          </label>
+          <div id="status" class="status" role="status" aria-live="polite" data-i18n="startingUp">Starting up</div>
+        </div>
+      </header>
+
+      <main id="home-view" class="app-view home-view">
+        <section class="home-hero" aria-labelledby="home-title">
+          <div class="home-hero-board">
+            <div class="home-dnd-cluster" aria-hidden="true">
+              <div class="home-die-card">D20</div>
+              <div class="home-character-sheet">
+                <strong data-i18n="homeCharacterSheetLabel">Character Sheet</strong>
+                <div><span>STR</span><span>DEX</span><span>CON</span></div>
+                <div><span>INT</span><span>WIS</span><span>CHA</span></div>
+              </div>
+              <div class="home-campaign-map">
+                <strong data-i18n="homeCampaignMapLabel">Campaign Map</strong>
+                <span></span>
+              </div>
+            </div>
+
+            <div class="home-hero-content">
+              <p class="home-kicker" data-i18n="homeKicker">Tabletop Adventure</p>
+              <h2 id="home-title" data-i18n="homeTitle">DND Agent</h2>
+              <p class="home-subtitle" data-i18n="homeSubtitle">Choose a story, bring a hero, and start a living tabletop session.</p>
+              <div class="home-actions">
+                <button type="button" data-view-target="game" data-i18n="homePrimaryCta">Start Game</button>
+                <button type="button" class="secondary" data-view-target="story-create" data-i18n="homeSecondaryCta">Browse Stories</button>
+              </div>
+              <div class="home-dice-strip" aria-hidden="true"><span>d4</span><span>d6</span><span>d8</span><span>d10</span><span>d12</span><span>d20</span></div>
+            </div>
+
+            <p class="home-hero-word" data-i18n="homeHeroWord">Adventure</p>
+          </div>
+        </section>
+
+        <section class="home-tabletop" aria-label="DND Agent entry points">
+          <div class="home-section-intro">
+            <p data-i18n="homeSectionKicker">Into the Tabletop</p>
+            <p data-i18n="homeSectionBody">Stories, characters, rules, and the DM all converge on one goal: starting the next adventure.</p>
+          </div>
+
+          <div class="home-bento">
+            <button type="button" class="home-card main" data-home-card="start-game" data-view-target="game">
+              <strong data-i18n="homeStartGameTitle">Start Game</strong>
+              <p data-i18n="homeStartGameBody">Choose a story, choose a hero, and open a playable session.</p>
+              <span class="home-card-tags"><span data-i18n="homeTagStory">Story</span><span data-i18n="homeTagCharacter">Character</span><span data-i18n="homeTagSession">Session</span></span>
+            </button>
+            <button type="button" class="home-card" data-home-card="create-hero" data-view-target="character-create">
+              <strong data-i18n="homeCreateHeroTitle">Create Hero</strong>
+              <p data-i18n="homeCreateHeroBody">Prepare a legal DND character before entering the game.</p>
+              <span class="home-card-tags"><span data-i18n="homeTagAttributes">Attributes</span><span data-i18n="homeTagClass">Class</span><span data-i18n="homeTagBackground">Background</span></span>
+            </button>
+            <button type="button" class="home-card story-card" data-home-card="story" data-view-target="story-create">
+              <strong data-i18n="homeStoryTitle">Story</strong>
+              <p data-i18n="homeStoryBody">Pick the current scenario or write a reusable adventure hook.</p>
+            </button>
+            <button type="button" class="home-card" data-home-card="dm" data-view-target="game">
+              <strong data-i18n="homeDmTitle">DM</strong>
+              <p data-i18n="homeDmBody">Review narration, NPCs, rulings, and dice outcomes once the session is underway.</p>
+              <span class="home-card-tags"><span data-i18n="homeTagScene">Scene</span><span data-i18n="homeTagNpc">NPC</span><span data-i18n="homeTagRulings">Rulings</span></span>
+            </button>
+            <button type="button" class="home-card" data-home-card="rules" data-view-target="races">
+              <strong data-i18n="homeRulesTitle">Rules</strong>
+              <p data-i18n="homeRulesBody">Browse races, spells, items, and rule references while playing.</p>
+              <span class="home-card-tags"><span data-i18n="homeTagSpells">Spells</span><span data-i18n="homeTagItems">Items</span><span data-i18n="homeTagRaces">Races</span></span>
+            </button>
+          </div>
+        </section>
+      </main>
+
+      <main id="races-view" class="app-view race-view hidden">
+        <section class="panel race-library">
+          <div class="section-head">
+            <h2 data-i18n="races">Races</h2>
+            <button id="refresh-races" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+          </div>
+          <div id="race-list" class="story-list"></div>
+        </section>
+
+        <section class="panel race-detail-panel">
+          <div class="section-head">
+            <h2 data-i18n="raceInfo">Race Information</h2>
+            <button type="button" data-view-target="character-create" data-i18n="createCharacter">Create Character</button>
+          </div>
+          <div id="race-detail" class="detail-empty" data-i18n="selectRace">Select a race.</div>
+        </section>
+      </main>
+
+      <main id="character-create-view" class="app-view character-create-view hidden">
+        <div class="character-create-main">
+          <section class="panel character-agent-panel">
+            <div class="section-head">
+              <h2 data-i18n="characterCreation">Character Creation</h2>
+              <button type="button" class="secondary" data-view-target="races" data-i18n="browseRaces">Browse Races</button>
+            </div>
+            <div id="character-creation-messages" class="agent-messages" aria-live="polite"></div>
+            <form id="character-agent-form" class="message-form">
+              <textarea id="character-agent-input" rows="2" autocomplete="off" data-i18n-placeholder="characterAgentPlaceholder"></textarea>
+              <button id="character-agent-send" type="submit" data-i18n="send">Send</button>
+            </form>
+          </section>
+
+          <section class="panel character-library">
+            <div class="section-head">
+              <h2 data-i18n="characters">Characters</h2>
+              <button id="refresh-characters-create" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+            </div>
+            <div id="character-create-list" class="list" role="list"></div>
+          </section>
+        </div>
+
+        <section class="panel character-draft-panel">
+          <div class="section-head">
+            <h2 data-i18n="characterDraft">Character Draft</h2>
+            <button id="character-confirm" type="button" disabled data-i18n="confirmCharacter">Confirm Character</button>
+          </div>
+          <form id="character-form" class="story-form character-draft-form">
+            <label>
+              <span data-i18n="name">Name</span>
+              <input id="character-name" name="name" readonly>
+            </label>
+          </form>
+          <div id="character-wizard" class="character-wizard"></div>
+          <div id="character-validation" class="character-validation"></div>
+        </section>
+      </main>
+
+      <main id="story-create-view" class="app-view story-create-view hidden">
+        <section class="panel story-editor">
+          <div class="section-head">
+            <h2 id="story-form-title" data-i18n="createStory">Create Story</h2>
+            <button type="button" class="secondary" data-view-target="game" data-i18n="backToGame">Back to Game</button>
+          </div>
+          <form id="story-form" class="story-form">
+            <label>
+              <span data-i18n="title">Title</span>
+              <input id="story-title" autocomplete="off" required>
+            </label>
+            <label>
+              <span data-i18n="storyDescription">Description</span>
+              <textarea id="story-description" rows="2"></textarea>
+            </label>
+            <label>
+              <span data-i18n="worldBackground">World Background</span>
+              <textarea id="story-world-background" rows="4" required></textarea>
+            </label>
+            <label>
+              <span data-i18n="mainQuest">Main Quest</span>
+              <textarea id="story-main-quest" rows="3" required></textarea>
+            </label>
+            <label>
+              <span data-i18n="openingLocation">Opening Location</span>
+              <input id="story-opening-location" autocomplete="off" required>
+            </label>
+            <label>
+              <span data-i18n="openingEnvironment">Opening Environment</span>
+              <textarea id="story-opening-environment" rows="3" required></textarea>
+            </label>
+            <label>
+              <span data-i18n="openingObjective">Opening Objective</span>
+              <textarea id="story-opening-objective" rows="2" required></textarea>
+            </label>
+            <div class="form-actions">
+              <button type="submit" data-i18n="saveStory">Save Story</button>
+              <button id="cancel-story-edit" type="button" class="secondary hidden" data-i18n="cancelEdit">Cancel Edit</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel story-library">
+          <div class="section-head">
+            <h2 data-i18n="storyLibrary">Story Library</h2>
+            <button id="refresh-stories" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+          </div>
+          <div id="story-list" class="story-list"></div>
+        </section>
+
+        <section class="panel story-map-panel">
+          <div class="section-head">
+            <div>
+              <h2 data-i18n="storyMapBinding">Story Map</h2>
+              <p class="field-hint" data-i18n="storyMapBindingHint">Bind a reusable map scene before starting a game.</p>
+            </div>
+            <button id="refresh-story-maps" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+          </div>
+          <div id="map-action-message" class="map-action-message detail-empty" data-i18n="selectStoryBeforeMap">Select or save a story before binding a map.</div>
+          <div class="map-tools story-map-tools">
+            <form id="map-upload-form" class="compact-form map-upload-form">
+              <label>
+                <span data-i18n="uploadMap">Upload Map</span>
+                <input id="map-upload-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+              </label>
+              <button type="submit" data-i18n="uploadMap">Upload Map</button>
+            </form>
+            <div class="map-library">
+              <h3 data-i18n="mapAssetLibrary">Map Assets</h3>
+              <div id="map-asset-list" class="map-list"></div>
+            </div>
+            <form id="map-scene-form" class="compact-form map-scene-form">
+              <label>
+                <span data-i18n="mapSceneName">Scene Name</span>
+                <input id="map-scene-name" autocomplete="off">
+              </label>
+              <button type="submit" data-i18n="createMapScene">Create Map Scene</button>
+            </form>
+            <div class="map-library">
+              <h3 data-i18n="mapScenes">Map Scenes</h3>
+              <div id="map-scene-list" class="map-list"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <main id="model-config-view" class="app-view model-config-view hidden">
+        <section class="panel model-editor">
+          <div class="section-head">
+            <h2 data-i18n="modelSettings">Model Settings</h2>
+            <button id="reset-model-form" type="button" class="secondary" data-i18n="resetModelForm">Reset</button>
+          </div>
+          <form id="model-form" class="story-form">
+            <label>
+              <span data-i18n="modelDisplayName">Display Name</span>
+              <input id="model-display-name" autocomplete="off" required>
+            </label>
+            <label>
+              <span data-i18n="modelProvider">Provider</span>
+              <select id="model-provider">
+                <option value="openai_compatible" data-i18n="openAICompatible">OpenAI Compatible</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="modelBaseUrl">Base URL</span>
+              <input id="model-base-url" autocomplete="off" placeholder="https://api.deepseek.com" data-i18n-placeholder="modelBaseUrlPlaceholder" required>
+              <small class="field-hint" data-i18n="modelBaseUrlHint">Use an API root URL or a full /chat/completions endpoint.</small>
+            </label>
+            <label>
+              <span data-i18n="modelApiKey">API Key</span>
+              <input id="model-api-key" type="password" autocomplete="off" required>
+            </label>
+            <label>
+              <span data-i18n="modelName">Model Name</span>
+              <input id="model-name" autocomplete="off" placeholder="local-dm" data-i18n-placeholder="modelNamePlaceholder" required>
+            </label>
+            <div class="form-row">
+              <label>
+                <span data-i18n="modelTemperature">Temperature</span>
+                <input id="model-temperature" type="number" min="0" max="2" step="0.1" value="0.7">
+              </label>
+              <label>
+                <span data-i18n="modelMaxContext">Max Context Tokens</span>
+                <input id="model-max-context" type="number" min="512" step="256" value="4096">
+              </label>
+            </div>
+            <div class="model-form-actions">
+              <button type="submit" data-i18n="saveModel">Save Model</button>
+              <button id="test-model-connection" type="button" class="secondary" data-i18n="testModelConnection">Test Connection</button>
+            </div>
+            <div id="model-connection-result" class="model-test-result" aria-live="polite"></div>
+          </form>
+        </section>
+
+        <section class="panel model-library">
+          <div class="section-head">
+            <h2 data-i18n="modelLibrary">Model Library</h2>
+            <button id="refresh-models" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+          </div>
+          <div id="model-list" class="story-list"></div>
+        </section>
+      </main>
+
+      <main id="game-view" class="app-view workspace hidden setup-mode">
+        <div class="game-frame">
+        <section id="game-setup" class="game-setup" aria-label="Game setup">
+          <header class="screen-title game-screen-title">
+            <div>
+              <span class="room-kicker" data-i18n="gameSetupTitle">Game Start</span>
+              <h1 data-i18n="gameSetupTitle">Game Start</h1>
+              <p data-i18n="gameSetupSubtitle">Choose a story, gather the party, then enter the room.</p>
+            </div>
+            <span class="route-tag">/game</span>
+          </header>
+
+          <div class="setup-layout">
+            <section class="panel setup-choice-panel" aria-label="Story and party choices">
+              <div class="panel-inner">
+                <div class="section-head">
+                  <div>
+                    <h2 data-i18n="selectStory">Story and Room</h2>
+                    <p class="field-hint" data-i18n="setupStepStory">Step 1 / 2</p>
+                  </div>
+                  <button id="refresh-adventures" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+                </div>
+                <label class="visually-hidden">
+                  <span data-i18n="story">Story</span>
+                  <select id="story-select"></select>
+                </label>
+                <div id="game-story-choice-list" class="choice-grid story-choice-grid" role="list"></div>
+
+                <div class="section-head setup-party-head">
+                  <div>
+                    <h2 data-i18n="selectPartyCharacters">Party Characters</h2>
+                    <p class="field-hint" data-i18n="setupStepParty">Step 2 / 2 - choose one to six</p>
+                  </div>
+                  <button id="refresh-characters" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+                </div>
+                <div class="setup-inline-actions">
+                  <button type="button" class="secondary" data-view-target="character-create" data-i18n="createCharacter">Create Character</button>
+                  <span class="field-hint" data-i18n="partySelectionHint">Choose 1 to 6 player characters for this adventure.</span>
+                </div>
+                <div id="character-list" class="choice-grid party-character-list" role="list"></div>
+              </div>
+            </section>
+
+            <aside class="setup-side" aria-label="Start room">
+              <section class="start-card">
+                <span class="room-kicker" data-i18n="createAdventure">Create Adventure</span>
+                <h2 data-i18n="setupStartCardTitle">Ready the Table</h2>
+                <p data-i18n="setupStartCardBody">The selected story and party are locked into this game room after creation.</p>
+                <form id="adventure-form" class="compact-form setup-adventure-form">
+                  <label>
+                    <span data-i18n="title">Title</span>
+                    <input id="adventure-title" name="title" value="Watchtower Road" autocomplete="off" required data-i18n-value="defaultAdventureTitle">
+                  </label>
+                  <div id="game-party-summary" class="selected-summary"></div>
+                  <div id="game-party-warning" class="map-action-message detail-empty"></div>
+                  <button type="submit" data-i18n="createAndEnterRoom">Create and Enter Room</button>
+                </form>
+              </section>
+
+              <section class="lock-note">
+                <strong data-i18n="lockedPartyRuleTitle">Locked after start</strong>
+                <span data-i18n="lockedPartyRule">The party will be locked after the adventure starts.</span>
+              </section>
+
+              <section class="panel existing-adventures-panel">
+                <div class="panel-inner">
+                  <div class="section-head">
+                    <h2 data-i18n="existingAdventures">Existing Adventures</h2>
+                  </div>
+                  <div id="adventure-list" class="adventure-list adventure-room-list" role="list"></div>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section id="game-room" class="game-room" aria-label="Game room">
+          <header class="screen-title game-screen-title">
+            <div>
+              <span class="room-kicker" data-i18n="gameRoomTitle">Game Room</span>
+              <h1 id="room-adventure-title" data-i18n="selectAdventure">Select an adventure</h1>
+              <p data-i18n="gameRoomSubtitle">Map, combat state and DM dialogue stay together for this session.</p>
+            </div>
+            <span id="room-route-tag" class="route-tag">/game</span>
+          </header>
+
+          <div class="room-layout">
+            <section class="room-status" aria-label="Room status">
+              <div class="room-status-main">
+                <span data-i18n="scene">Scene</span>
+                <strong id="room-scene-meta" data-i18n="noActiveScene">No active scene.</strong>
+              </div>
+              <div class="room-lock">
+                <span data-i18n="boundStory">Story</span>
+                <strong id="room-story-meta">-</strong>
+              </div>
+              <div class="room-lock">
+                <span data-i18n="boundParty">Party</span>
+                <strong id="room-party-meta">-</strong>
+              </div>
+              <div class="room-lock">
+                <span data-i18n="combat">Combat</span>
+                <strong id="room-combat-meta" data-i18n="noCombatState">No combat state.</strong>
+              </div>
+            </section>
+
+            <aside class="side-rail" aria-label="Character, party, combat and dice">
+              <section class="compact-panel room-current-actor">
+                <h2 data-i18n="currentActingCharacter">Current Actor</h2>
+                <div id="character-detail" class="detail-empty" data-i18n="noCharacterSelected">No character selected.</div>
+              </section>
+
+              <section class="compact-panel room-party-panel">
+                <h2 data-i18n="partyMembers">Party</h2>
+                <div id="room-party-list" class="combat-list"></div>
+              </section>
+
+              <section class="compact-panel room-actions-panel">
+                <h2 data-i18n="combatActions">Actions</h2>
+                <div class="combat-actions" aria-label="Combat actions">
+                  <button id="combat-action-attack" type="button" class="secondary" disabled data-i18n="combatActionAttack">Attack</button>
+                  <button id="combat-action-dodge" type="button" class="secondary" disabled data-i18n="combatActionDodge">Dodge</button>
+                  <button id="combat-action-dash" type="button" class="secondary" disabled data-i18n="combatActionDash">Dash</button>
+                  <button id="combat-action-disengage" type="button" class="secondary" disabled data-i18n="combatActionDisengage">Disengage</button>
+                  <button id="end-combat" type="button" class="secondary combat-end" disabled data-i18n="endCombat">End Combat</button>
+                </div>
+              </section>
+
+              <section class="compact-panel room-combat-panel">
+                <div class="section-head">
+                  <h2 data-i18n="combat">Combat</h2>
+                  <button id="start-combat" type="button" data-i18n="start">Start</button>
+                </div>
+                <form id="combat-form" class="compact-form inline-form">
+                  <label>
+                    <span data-i18n="enemy">Enemy</span>
+                    <input id="enemy-name" value="Road Bandit" autocomplete="off" data-i18n-value="defaultEnemy">
+                  </label>
+                  <label>
+                    <span data-i18n="hp">HP</span>
+                    <input id="enemy-hp" type="number" value="9" min="0">
+                  </label>
+                  <label>
+                    <span data-i18n="ac">AC</span>
+                    <input id="enemy-ac" type="number" value="12" min="1">
+                  </label>
+                  <button type="submit" class="visually-hidden" data-i18n="startCombat">Start Combat</button>
+                </form>
+                <div id="combat-result" class="combat-result detail-empty" data-i18n="combatNoResult">No action result yet.</div>
+                <div id="combat-detail" class="detail-empty" data-i18n="noCombatState">No combat state.</div>
+              </section>
+
+              <section class="compact-panel dice-section">
+                <h2 data-i18n="diceTray">Dice of Fate</h2>
+                <div id="dice-buttons" class="dice-buttons">
+                  <button type="button" class="die-btn" data-die="4">d4</button>
+                  <button type="button" class="die-btn" data-die="6">d6</button>
+                  <button type="button" class="die-btn" data-die="8">d8</button>
+                  <button type="button" class="die-btn" data-die="10">d10</button>
+                  <button type="button" class="die-btn" data-die="12">d12</button>
+                  <button type="button" class="die-btn" data-die="20">d20</button>
+                </div>
+                <div id="dice-result" class="dice-result is-empty" aria-live="polite"></div>
+                <ol id="dice-history" class="dice-history"></ol>
+              </section>
+
+              <section class="compact-panel quest-dock">
+                <h2 data-i18n="questLog">Quest Log</h2>
+                <div id="scene-detail" class="detail-empty" data-i18n="noActiveScene">No active scene.</div>
+              </section>
+            </aside>
+
+            <section class="map-stage" aria-label="Map stage">
+              <div class="map-toolbar">
+                <div>
+                  <span class="visually-hidden" data-i18n="maps">Maps</span>
+                  <strong data-i18n="mapStage">Map Stage</strong>
+                  <p class="field-hint" data-i18n="mapStageHint">Active scene, grid and combat tokens.</p>
+                </div>
+                <button id="refresh-maps" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+                <button id="sync-map-tokens" type="button" class="secondary" data-i18n="syncMapTokens">Sync Tokens</button>
+              </div>
+              <div class="map-canvas">
+                <div id="map-preview" class="map-board detail-empty" data-i18n="noMapSceneSelected">No map scene selected.</div>
+              </div>
+            </section>
+
+            <aside class="chat-panel room-chat-panel" aria-label="Adventure chat">
+              <div class="chat-head">
+                <div>
+                  <span class="room-kicker" data-i18n="dmAgentPanel">DM Agent</span>
+                  <h2 id="chat-title" data-i18n="selectAdventure">Select an adventure</h2>
+                  <p id="chat-subtitle" data-i18n="chooseCharacterThenAdventure">Choose or create a character, then start an adventure.</p>
+                </div>
+              </div>
+              <div id="messages" class="messages" aria-live="polite"></div>
+              <form id="message-form" class="message-form">
+                <textarea id="message-input" rows="3" placeholder="Ask the DM - what does your hero do?" required data-i18n-placeholder="messagePlaceholder"></textarea>
+                <button id="message-send" type="submit" data-i18n="askDm">Ask the DM</button>
+              </form>
+            </aside>
+
+            <footer class="bottom-dock" aria-label="Room tools">
+              <div class="dock-label">
+                <strong data-i18n="quickTools">Quick Tools</strong>
+                <span data-i18n="quickToolsHint">Rules lookup stays available without covering the board.</span>
+              </div>
+
+              <section class="dock-drawer rules-dock">
+                <h2 data-i18n="rulesReference">Rules Reference</h2>
+                <form id="rules-form" class="rules-form">
+                  <input id="rules-query" placeholder="Search rules or lore" autocomplete="off" data-i18n-placeholder="rulesPlaceholder">
+                  <button type="submit" data-i18n="search">Search</button>
+                </form>
+                <div id="rules-results" class="rules-results"></div>
+              </section>
+            </footer>
+          </div>
+        </section>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="/app.js?v=20260618-game-room-layout10"></script>
+  </body>
+</html>

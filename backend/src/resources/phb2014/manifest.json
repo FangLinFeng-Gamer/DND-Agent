@@ -1,0 +1,15 @@
+{
+  "version": "2014-phase-2-races",
+  "source": "PHB 2014",
+  "files": [
+    "abilities.json",
+    "proficiencies.json",
+    "races.json",
+    "classes.json",
+    "backgrounds.json",
+    "feats.json",
+    "spells.json",
+    "equipment.json",
+    "starting_equipment.json"
+  ]
+}

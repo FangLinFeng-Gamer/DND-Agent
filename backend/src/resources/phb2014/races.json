@@ -1,0 +1,261 @@
+[
+  {
+    "id":"race.dwarf","rule_type":"race","name":{"en":"Dwarf","zh-CN":"矮人"},
+    "description":{"en":"Stout, tradition-minded folk with exceptional endurance and stonecraft.","zh-CN":"体格敦实、重视传统，并以耐力和石工技艺著称的族群。"},"source":"PHB 2014",
+    "metadata":{"size":"medium","speed":25,"darkvision":60},
+    "choices":[{"id":"dwarf-tool","name":{"en":"Artisan tool","zh-CN":"工匠工具"},"minimum":1,"maximum":1,"option_ids":["tool.artisan.blacksmith","tool.artisan.brewer","tool.artisan.mason"]}],
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.constitution","value":2,"source":"race.dwarf"},
+      {"kind":"sense","target":"darkvision","value":60,"source":"race.dwarf"},
+      {"kind":"save_advantage","target":"effect.poison","value":true,"source":"race.dwarf"},
+      {"kind":"resistance","target":"damage.poison","value":true,"source":"race.dwarf"},
+      {"kind":"weapon_proficiency","target":"weapon.battleaxe","value":true,"source":"race.dwarf"},
+      {"kind":"weapon_proficiency","target":"weapon.handaxe","value":true,"source":"race.dwarf"},
+      {"kind":"weapon_proficiency","target":"weapon.light-hammer","value":true,"source":"race.dwarf"},
+      {"kind":"weapon_proficiency","target":"weapon.warhammer","value":true,"source":"race.dwarf"},
+      {"kind":"tool_proficiency_choice","target":"dwarf-tool","value":1,"source":"race.dwarf"},
+      {"kind":"conditional_expertise","target":"skill.history.stonework","value":true,"source":"race.dwarf"},
+      {"kind":"language","target":"language.common","value":true,"source":"race.dwarf"},
+      {"kind":"language","target":"language.dwarvish","value":true,"source":"race.dwarf"}
+    ]
+  },
+  {
+    "id":"race.hill-dwarf","rule_type":"subrace","parent_id":"race.dwarf","name":{"en":"Hill Dwarf","zh-CN":"丘陵矮人"},
+    "description":{"en":"Perceptive dwarves whose resilience grants additional vitality.","zh-CN":"感官敏锐，并拥有额外生命力的矮人。"},"source":"PHB 2014",
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.wisdom","value":1,"source":"race.hill-dwarf"},
+      {"kind":"hp_per_level","target":"hp.max","value":1,"source":"race.hill-dwarf"}
+    ]
+  },
+  {
+    "id":"race.mountain-dwarf","rule_type":"subrace","parent_id":"race.dwarf","name":{"en":"Mountain Dwarf","zh-CN":"山地矮人"},
+    "description":{"en":"Strong dwarves trained to fight in armor.","zh-CN":"力量强健，并受过护甲训练的矮人。"},"source":"PHB 2014",
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.strength","value":2,"source":"race.mountain-dwarf"},
+      {"kind":"armor_proficiency","target":"armor.light","value":true,"source":"race.mountain-dwarf"},
+      {"kind":"armor_proficiency","target":"armor.medium","value":true,"source":"race.mountain-dwarf"}
+    ]
+  },
+  {
+    "id":"race.elf","rule_type":"race","name":{"en":"Elf","zh-CN":"精灵"},
+    "description":{"en":"Graceful, perceptive, long-lived folk with fey ancestry.","zh-CN":"优雅敏锐、寿命悠长，并拥有妖精血统的族群。"},"source":"PHB 2014",
+    "metadata":{"size":"medium","speed":30,"darkvision":60},
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.dexterity","value":2,"source":"race.elf"},
+      {"kind":"sense","target":"darkvision","value":60,"source":"race.elf"},
+      {"kind":"skill_proficiency","target":"skill.perception","value":true,"source":"race.elf"},
+      {"kind":"save_advantage","target":"effect.charmed","value":true,"source":"race.elf"},
+      {"kind":"immunity","target":"effect.magical-sleep","value":true,"source":"race.elf"},
+      {"kind":"rest","target":"trance","value":4,"source":"race.elf"},
+      {"kind":"language","target":"language.common","value":true,"source":"race.elf"},
+      {"kind":"language","target":"language.elvish","value":true,"source":"race.elf"}
+    ]
+  },
+  {
+    "id":"race.high-elf","rule_type":"subrace","parent_id":"race.elf","name":{"en":"High Elf","zh-CN":"高等精灵"},
+    "description":{"en":"Studious elves with martial training, an arcane cantrip, and an extra language.","zh-CN":"重视学识，掌握武器训练、奥术戏法和额外语言的精灵。"},"source":"PHB 2014",
+    "choices":[{"id":"high-elf-language","name":{"en":"Additional language","zh-CN":"额外语言"},"minimum":1,"maximum":1,"option_ids":["language.abyssal","language.celestial","language.deep-speech","language.draconic","language.dwarvish","language.giant","language.gnomish","language.goblin","language.halfling","language.infernal","language.orc","language.primordial","language.sylvan","language.undercommon"]}],
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.intelligence","value":1,"source":"race.high-elf"},
+      {"kind":"weapon_proficiency","target":"weapon.longsword","value":true,"source":"race.high-elf"},
+      {"kind":"weapon_proficiency","target":"weapon.shortsword","value":true,"source":"race.high-elf"},
+      {"kind":"weapon_proficiency","target":"weapon.shortbow","value":true,"source":"race.high-elf"},
+      {"kind":"weapon_proficiency","target":"weapon.longbow","value":true,"source":"race.high-elf"},
+      {"kind":"cantrip_choice","target":"spell.wizard.cantrip","value":1,"source":"race.high-elf"},
+      {"kind":"language_choice","target":"high-elf-language","value":1,"source":"race.high-elf"}
+    ]
+  },
+  {
+    "id":"race.wood-elf","rule_type":"subrace","parent_id":"race.elf","name":{"en":"Wood Elf","zh-CN":"木精灵"},
+    "description":{"en":"Swift, perceptive elves adept at hiding in natural surroundings.","zh-CN":"行动迅捷、感官敏锐，并善于在自然环境中隐藏的精灵。"},"source":"PHB 2014",
+    "metadata":{"speed":35},
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.wisdom","value":1,"source":"race.wood-elf"},
+      {"kind":"weapon_proficiency","target":"weapon.longsword","value":true,"source":"race.wood-elf"},
+      {"kind":"weapon_proficiency","target":"weapon.shortsword","value":true,"source":"race.wood-elf"},
+      {"kind":"weapon_proficiency","target":"weapon.shortbow","value":true,"source":"race.wood-elf"},
+      {"kind":"weapon_proficiency","target":"weapon.longbow","value":true,"source":"race.wood-elf"},
+      {"kind":"speed","target":"walk","value":35,"source":"race.wood-elf"},
+      {"kind":"feature","target":"mask-of-the-wild","value":true,"source":"race.wood-elf"}
+    ]
+  },
+  {
+    "id":"race.drow","rule_type":"subrace","parent_id":"race.elf","name":{"en":"Drow","zh-CN":"卓尔"},
+    "description":{"en":"Underdark elves with superior darkvision and innate drow magic.","zh-CN":"来自幽暗地域，拥有强化黑暗视觉与卓尔魔法的精灵。"},"source":"PHB 2014",
+    "metadata":{"darkvision":120},
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.charisma","value":1,"source":"race.drow"},
+      {"kind":"sense","target":"darkvision","value":120,"source":"race.drow"},
+      {"kind":"feature","target":"sunlight-sensitivity","value":true,"source":"race.drow"},
+      {"kind":"innate_spell","target":"spell.dancing-lights","value":{"level":1,"ability":"charisma"},"source":"race.drow"},
+      {"kind":"innate_spell","target":"spell.faerie-fire","value":{"level":3,"uses":1},"source":"race.drow"},
+      {"kind":"innate_spell","target":"spell.darkness","value":{"level":5,"uses":1},"source":"race.drow"},
+      {"kind":"weapon_proficiency","target":"weapon.rapier","value":true,"source":"race.drow"},
+      {"kind":"weapon_proficiency","target":"weapon.shortsword","value":true,"source":"race.drow"},
+      {"kind":"weapon_proficiency","target":"weapon.hand-crossbow","value":true,"source":"race.drow"}
+    ]
+  },
+  {
+    "id":"race.halfling","rule_type":"race","name":{"en":"Halfling","zh-CN":"半身人"},
+    "description":{"en":"Small, nimble, brave folk blessed with remarkable luck.","zh-CN":"身材小巧、灵活勇敢，并拥有非凡好运的族群。"},"source":"PHB 2014",
+    "metadata":{"size":"small","speed":25},
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.dexterity","value":2,"source":"race.halfling"},
+      {"kind":"feature","target":"lucky","value":true,"source":"race.halfling"},
+      {"kind":"save_advantage","target":"effect.frightened","value":true,"source":"race.halfling"},
+      {"kind":"feature","target":"halfling-nimbleness","value":true,"source":"race.halfling"},
+      {"kind":"language","target":"language.common","value":true,"source":"race.halfling"},
+      {"kind":"language","target":"language.halfling","value":true,"source":"race.halfling"}
+    ]
+  },
+  {
+    "id":"race.lightfoot-halfling","rule_type":"subrace","parent_id":"race.halfling","name":{"en":"Lightfoot Halfling","zh-CN":"轻足半身人"},
+    "description":{"en":"Sociable halflings able to hide behind larger creatures.","zh-CN":"善于交际，并能借较大生物遮蔽自身的半身人。"},"source":"PHB 2014",
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.charisma","value":1,"source":"race.lightfoot-halfling"},
+      {"kind":"feature","target":"naturally-stealthy","value":true,"source":"race.lightfoot-halfling"}
+    ]
+  },
+  {
+    "id":"race.stout-halfling","rule_type":"subrace","parent_id":"race.halfling","name":{"en":"Stout Halfling","zh-CN":"敦实半身人"},
+    "description":{"en":"Hardy halflings with resistance to poison.","zh-CN":"体魄坚韧，并能抵抗毒素的半身人。"},"source":"PHB 2014",
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.constitution","value":1,"source":"race.stout-halfling"},
+      {"kind":"save_advantage","target":"effect.poison","value":true,"source":"race.stout-halfling"},
+      {"kind":"resistance","target":"damage.poison","value":true,"source":"race.stout-halfling"}
+    ]
+  },
+  {
+    "id":"race.human","rule_type":"race","name":{"en":"Human","zh-CN":"人类"},
+    "description":{"en":"Adaptable, ambitious people found throughout the worlds of D&D.","zh-CN":"适应力强、富有进取心，并遍布诸多世界的族群。"},"source":"PHB 2014",
+    "metadata":{"size":"medium","speed":30},
+    "choices":[{"id":"human-language","name":{"en":"Additional language","zh-CN":"额外语言"},"minimum":1,"maximum":1,"option_ids":["language.abyssal","language.celestial","language.deep-speech","language.draconic","language.dwarvish","language.elvish","language.giant","language.gnomish","language.goblin","language.halfling","language.infernal","language.orc","language.primordial","language.sylvan","language.undercommon"]}],
+    "grants":[
+      {"kind":"ability_bonus_all","target":"ability.*","value":1,"source":"race.human"},
+      {"kind":"language","target":"language.common","value":true,"source":"race.human"},
+      {"kind":"language_choice","target":"human-language","value":1,"source":"race.human"}
+    ]
+  },
+  {
+    "id":"race.variant-human","rule_type":"subrace","parent_id":"race.human","name":{"en":"Variant Human","zh-CN":"变体人类"},
+    "description":{"en":"An optional human build trading broad ability increases for focused talents.","zh-CN":"以全面属性提升换取集中天赋的可选人类构筑。"},"source":"PHB 2014",
+    "metadata":{"replaces_parent_grants":true},
+    "choices":[
+      {"id":"variant-human-abilities","name":{"en":"Ability increases","zh-CN":"属性提升"},"minimum":2,"maximum":2,"option_ids":["ability.strength","ability.dexterity","ability.constitution","ability.intelligence","ability.wisdom","ability.charisma"]},
+      {"id":"variant-human-skill","name":{"en":"Skill proficiency","zh-CN":"技能熟练"},"minimum":1,"maximum":1,"option_ids":["skill.acrobatics","skill.animal-handling","skill.arcana","skill.athletics","skill.deception","skill.history","skill.insight","skill.intimidation","skill.investigation","skill.medicine","skill.nature","skill.perception","skill.performance","skill.persuasion","skill.religion","skill.sleight-of-hand","skill.stealth","skill.survival"]}
+    ],
+    "grants":[
+      {"kind":"ability_bonus_choice","target":"variant-human-abilities","value":1,"source":"race.variant-human"},
+      {"kind":"skill_proficiency_choice","target":"variant-human-skill","value":1,"source":"race.variant-human"},
+      {"kind":"feat_choice","target":"feat","value":1,"source":"race.variant-human"}
+    ]
+  },
+  {
+    "id":"race.dragonborn","rule_type":"race","name":{"en":"Dragonborn","zh-CN":"龙裔"},
+    "description":{"en":"Proud draconic humanoids with a breath weapon and ancestral resistance.","zh-CN":"拥有吐息武器与祖先元素抗性的骄傲龙族人形生物。"},"source":"PHB 2014",
+    "metadata":{"size":"medium","speed":30},
+    "choices":[{"id":"dragonborn-ancestry","name":{"en":"Draconic ancestry","zh-CN":"龙族血统"},"minimum":1,"maximum":1,"option_ids":["race_option.dragonborn.black","race_option.dragonborn.blue","race_option.dragonborn.brass","race_option.dragonborn.bronze","race_option.dragonborn.copper","race_option.dragonborn.gold","race_option.dragonborn.green","race_option.dragonborn.red","race_option.dragonborn.silver","race_option.dragonborn.white"]}],
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.strength","value":2,"source":"race.dragonborn"},
+      {"kind":"ability_bonus","target":"ability.charisma","value":1,"source":"race.dragonborn"},
+      {"kind":"ancestry_choice","target":"dragonborn-ancestry","value":1,"source":"race.dragonborn"},
+      {"kind":"feature","target":"breath-weapon","value":true,"source":"race.dragonborn"},
+      {"kind":"resistance_from_choice","target":"dragonborn-ancestry","value":true,"source":"race.dragonborn"},
+      {"kind":"language","target":"language.common","value":true,"source":"race.dragonborn"},
+      {"kind":"language","target":"language.draconic","value":true,"source":"race.dragonborn"}
+    ]
+  },
+  {"id":"race_option.dragonborn.black","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"Black Dragon Ancestry","zh-CN":"黑龙血统"},"description":{"en":"Acid, 5 by 30 foot line, Dexterity save.","zh-CN":"强酸伤害，5×30尺线状范围，敏捷豁免。"},"source":"PHB 2014","metadata":{"damage":"acid","shape":"line","save":"dexterity"}},
+  {"id":"race_option.dragonborn.blue","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"Blue Dragon Ancestry","zh-CN":"蓝龙血统"},"description":{"en":"Lightning, 5 by 30 foot line, Dexterity save.","zh-CN":"闪电伤害，5×30尺线状范围，敏捷豁免。"},"source":"PHB 2014","metadata":{"damage":"lightning","shape":"line","save":"dexterity"}},
+  {"id":"race_option.dragonborn.brass","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"Brass Dragon Ancestry","zh-CN":"黄铜龙血统"},"description":{"en":"Fire, 5 by 30 foot line, Dexterity save.","zh-CN":"火焰伤害，5×30尺线状范围，敏捷豁免。"},"source":"PHB 2014","metadata":{"damage":"fire","shape":"line","save":"dexterity"}},
+  {"id":"race_option.dragonborn.bronze","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"Bronze Dragon Ancestry","zh-CN":"青铜龙血统"},"description":{"en":"Lightning, 5 by 30 foot line, Dexterity save.","zh-CN":"闪电伤害，5×30尺线状范围，敏捷豁免。"},"source":"PHB 2014","metadata":{"damage":"lightning","shape":"line","save":"dexterity"}},
+  {"id":"race_option.dragonborn.copper","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"Copper Dragon Ancestry","zh-CN":"赤铜龙血统"},"description":{"en":"Acid, 5 by 30 foot line, Dexterity save.","zh-CN":"强酸伤害，5×30尺线状范围，敏捷豁免。"},"source":"PHB 2014","metadata":{"damage":"acid","shape":"line","save":"dexterity"}},
+  {"id":"race_option.dragonborn.gold","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"Gold Dragon Ancestry","zh-CN":"金龙血统"},"description":{"en":"Fire, 15 foot cone, Dexterity save.","zh-CN":"火焰伤害，15尺锥状范围，敏捷豁免。"},"source":"PHB 2014","metadata":{"damage":"fire","shape":"cone","save":"dexterity"}},
+  {"id":"race_option.dragonborn.green","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"Green Dragon Ancestry","zh-CN":"绿龙血统"},"description":{"en":"Poison, 15 foot cone, Constitution save.","zh-CN":"毒素伤害，15尺锥状范围，体质豁免。"},"source":"PHB 2014","metadata":{"damage":"poison","shape":"cone","save":"constitution"}},
+  {"id":"race_option.dragonborn.red","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"Red Dragon Ancestry","zh-CN":"红龙血统"},"description":{"en":"Fire, 15 foot cone, Dexterity save.","zh-CN":"火焰伤害，15尺锥状范围，敏捷豁免。"},"source":"PHB 2014","metadata":{"damage":"fire","shape":"cone","save":"dexterity"}},
+  {"id":"race_option.dragonborn.silver","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"Silver Dragon Ancestry","zh-CN":"银龙血统"},"description":{"en":"Cold, 15 foot cone, Constitution save.","zh-CN":"寒冷伤害，15尺锥状范围，体质豁免。"},"source":"PHB 2014","metadata":{"damage":"cold","shape":"cone","save":"constitution"}},
+  {"id":"race_option.dragonborn.white","rule_type":"race_option","parent_id":"race.dragonborn","name":{"en":"White Dragon Ancestry","zh-CN":"白龙血统"},"description":{"en":"Cold, 15 foot cone, Constitution save.","zh-CN":"寒冷伤害，15尺锥状范围，体质豁免。"},"source":"PHB 2014","metadata":{"damage":"cold","shape":"cone","save":"constitution"}},
+  {
+    "id":"race.gnome","rule_type":"race","name":{"en":"Gnome","zh-CN":"侏儒"},
+    "description":{"en":"Small, inventive folk with sharp minds and magical resilience.","zh-CN":"身材小巧、富于创造，并拥有敏锐头脑与魔法抗性的族群。"},"source":"PHB 2014",
+    "metadata":{"size":"small","speed":25,"darkvision":60},
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.intelligence","value":2,"source":"race.gnome"},
+      {"kind":"sense","target":"darkvision","value":60,"source":"race.gnome"},
+      {"kind":"save_advantage","target":"mental-saves-against-magic","value":true,"source":"race.gnome"},
+      {"kind":"language","target":"language.common","value":true,"source":"race.gnome"},
+      {"kind":"language","target":"language.gnomish","value":true,"source":"race.gnome"}
+    ]
+  },
+  {
+    "id":"race.forest-gnome","rule_type":"subrace","parent_id":"race.gnome","name":{"en":"Forest Gnome","zh-CN":"森林侏儒"},
+    "description":{"en":"Elusive gnomes with minor illusion magic and rapport with small beasts.","zh-CN":"行踪隐秘，掌握次级幻术并能与小型野兽交流的侏儒。"},"source":"PHB 2014",
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.dexterity","value":1,"source":"race.forest-gnome"},
+      {"kind":"innate_spell","target":"spell.minor-illusion","value":{"ability":"intelligence"},"source":"race.forest-gnome"},
+      {"kind":"feature","target":"speak-with-small-beasts","value":true,"source":"race.forest-gnome"}
+    ]
+  },
+  {
+    "id":"race.rock-gnome","rule_type":"subrace","parent_id":"race.gnome","name":{"en":"Rock Gnome","zh-CN":"岩侏儒"},
+    "description":{"en":"Hardy inventors skilled in lore about magic items and mechanical devices.","zh-CN":"体魄坚韧，擅长魔法物品知识与机械装置制作的侏儒。"},"source":"PHB 2014",
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.constitution","value":1,"source":"race.rock-gnome"},
+      {"kind":"conditional_expertise","target":"skill.history.magic-items","value":true,"source":"race.rock-gnome"},
+      {"kind":"tool_proficiency","target":"tool.artisan.tinker","value":true,"source":"race.rock-gnome"},
+      {"kind":"feature","target":"tinker","value":true,"source":"race.rock-gnome"}
+    ]
+  },
+  {
+    "id":"race.half-elf","rule_type":"race","name":{"en":"Half-Elf","zh-CN":"半精灵"},
+    "description":{"en":"Versatile people combining human adaptability with elven senses and ancestry.","zh-CN":"兼具人类适应力与精灵感官、血统的多才族群。"},"source":"PHB 2014",
+    "metadata":{"size":"medium","speed":30,"darkvision":60},
+    "choices":[
+      {"id":"half-elf-abilities","name":{"en":"Additional ability increases","zh-CN":"额外属性提升"},"minimum":2,"maximum":2,"option_ids":["ability.strength","ability.dexterity","ability.constitution","ability.intelligence","ability.wisdom"]},
+      {"id":"half-elf-skills","name":{"en":"Skill versatility","zh-CN":"多才多艺"},"minimum":2,"maximum":2,"option_ids":["skill.acrobatics","skill.animal-handling","skill.arcana","skill.athletics","skill.deception","skill.history","skill.insight","skill.intimidation","skill.investigation","skill.medicine","skill.nature","skill.perception","skill.performance","skill.persuasion","skill.religion","skill.sleight-of-hand","skill.stealth","skill.survival"]},
+      {"id":"half-elf-language","name":{"en":"Additional language","zh-CN":"额外语言"},"minimum":1,"maximum":1,"option_ids":["language.abyssal","language.celestial","language.deep-speech","language.draconic","language.dwarvish","language.giant","language.gnomish","language.goblin","language.halfling","language.infernal","language.orc","language.primordial","language.sylvan","language.undercommon"]}
+    ],
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.charisma","value":2,"source":"race.half-elf"},
+      {"kind":"ability_bonus_choice","target":"half-elf-abilities","value":1,"source":"race.half-elf"},
+      {"kind":"sense","target":"darkvision","value":60,"source":"race.half-elf"},
+      {"kind":"save_advantage","target":"effect.charmed","value":true,"source":"race.half-elf"},
+      {"kind":"immunity","target":"effect.magical-sleep","value":true,"source":"race.half-elf"},
+      {"kind":"skill_proficiency_choice","target":"half-elf-skills","value":2,"source":"race.half-elf"},
+      {"kind":"language","target":"language.common","value":true,"source":"race.half-elf"},
+      {"kind":"language","target":"language.elvish","value":true,"source":"race.half-elf"},
+      {"kind":"language_choice","target":"half-elf-language","value":1,"source":"race.half-elf"}
+    ]
+  },
+  {
+    "id":"race.half-orc","rule_type":"race","name":{"en":"Half-Orc","zh-CN":"半兽人"},
+    "description":{"en":"Powerful survivors marked by orcish endurance and ferocity.","zh-CN":"拥有兽人般耐力与凶猛本能的强壮生存者。"},"source":"PHB 2014",
+    "metadata":{"size":"medium","speed":30,"darkvision":60},
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.strength","value":2,"source":"race.half-orc"},
+      {"kind":"ability_bonus","target":"ability.constitution","value":1,"source":"race.half-orc"},
+      {"kind":"sense","target":"darkvision","value":60,"source":"race.half-orc"},
+      {"kind":"skill_proficiency","target":"skill.intimidation","value":true,"source":"race.half-orc"},
+      {"kind":"feature","target":"relentless-endurance","value":true,"source":"race.half-orc"},
+      {"kind":"feature","target":"savage-attacks","value":true,"source":"race.half-orc"},
+      {"kind":"language","target":"language.common","value":true,"source":"race.half-orc"},
+      {"kind":"language","target":"language.orc","value":true,"source":"race.half-orc"}
+    ]
+  },
+  {
+    "id":"race.tiefling","rule_type":"race","name":{"en":"Tiefling","zh-CN":"提夫林"},
+    "description":{"en":"People of infernal heritage with innate magic and resistance to fire.","zh-CN":"拥有炼狱血统、天生魔法与火焰抗性的族群。"},"source":"PHB 2014",
+    "metadata":{"size":"medium","speed":30,"darkvision":60},
+    "grants":[
+      {"kind":"ability_bonus","target":"ability.intelligence","value":1,"source":"race.tiefling"},
+      {"kind":"ability_bonus","target":"ability.charisma","value":2,"source":"race.tiefling"},
+      {"kind":"sense","target":"darkvision","value":60,"source":"race.tiefling"},
+      {"kind":"resistance","target":"damage.fire","value":true,"source":"race.tiefling"},
+      {"kind":"innate_spell","target":"spell.thaumaturgy","value":{"level":1,"ability":"charisma"},"source":"race.tiefling"},
+      {"kind":"innate_spell","target":"spell.hellish-rebuke","value":{"level":3,"uses":1},"source":"race.tiefling"},
+      {"kind":"innate_spell","target":"spell.darkness","value":{"level":5,"uses":1},"source":"race.tiefling"},
+      {"kind":"language","target":"language.common","value":true,"source":"race.tiefling"},
+      {"kind":"language","target":"language.infernal","value":true,"source":"race.tiefling"}
+    ]
+  }
+]
