@@ -100,6 +100,7 @@ def test_character_detail_renders_inventory_object_labels(tmp_path):
             const { renderCharacter } = await import(__GAME_URL__);
 
             state.locale = "zh-CN";
+            state.characterDetailTab = "inventory";
             els.characterDetail = new FakeElement();
 
             renderCharacter({
@@ -236,6 +237,7 @@ def test_character_detail_localizes_inventory_item_ids(tmp_path):
             const { renderCharacter } = await import(__GAME_URL__);
 
             state.locale = "en";
+            state.characterDetailTab = "inventory";
             els.characterDetail = new FakeElement();
 
             renderCharacter({
@@ -384,6 +386,7 @@ def test_room_actor_and_party_render_static_room_cards(tmp_path):
             const { renderCharacter, renderRoomParty } = await import(__GAME_URL__);
 
             state.locale = "en";
+            state.characterDetailTab = "attributes";
             els.characterDetail = new FakeElement();
             els.roomPartyList = new FakeElement();
 
@@ -417,6 +420,7 @@ def test_room_actor_and_party_render_static_room_cards(tmp_path):
 
             state.selectedCharacterId = 1;
             state.selectedAdventure = { party_characters: party };
+            state.gameMode = "room";
 
             renderCharacter(party[0]);
             renderRoomParty();
@@ -427,6 +431,11 @@ def test_room_actor_and_party_render_static_room_cards(tmp_path):
             assert.ok(hasClass(els.characterDetail, "bar-track"));
             assert.ok(hasClass(els.characterDetail, "bar-fill"));
             assert.ok(hasClass(els.characterDetail, "stat-grid"));
+            assert.match(collectText(els.characterDetail), /Tav/);
+            assert.match(collectText(els.characterDetail), /Dale/);
+            assert.match(collectText(els.characterDetail), /Attributes/);
+            assert.match(collectText(els.characterDetail), /Equipment/);
+            assert.match(collectText(els.characterDetail), /Backpack/);
             assert.match(collectText(els.characterDetail), /WIS/);
             assert.match(collectText(els.characterDetail), /15/);
 
@@ -437,6 +446,10 @@ def test_room_actor_and_party_render_static_room_cards(tmp_path):
             assert.doesNotMatch(els.roomPartyList.children[0].className, /combatant/);
             assert.match(collectText(els.roomPartyList), /Current turn/);
             assert.match(collectText(els.roomPartyList), /Waiting/);
+
+            els.roomPartyList.children[1].listeners.click();
+            assert.equal(state.selectedCharacterId, 2);
+            assert.match(collectText(els.characterDetail), /Dale/);
             """
         )
         .replace("__STATE_URL__", state_url)

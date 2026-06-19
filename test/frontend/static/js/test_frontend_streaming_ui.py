@@ -13,6 +13,8 @@ def test_frontend_uses_streaming_dm_endpoint_and_busy_state():
     app_js = frontend_js_text()
 
     assert "/messages/stream" in app_js
+    assert "character_id" in app_js
+    assert "{ characterId: getSelectedCharacter()?.id }" in app_js
     assert "dmBusy" in app_js
     assert "setDmBusy(true)" in app_js
     assert "setDmBusy(false)" in app_js

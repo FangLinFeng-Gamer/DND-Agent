@@ -455,25 +455,14 @@
               <section class="compact-panel room-combat-panel">
                 <div class="section-head">
                   <h2 data-i18n="combat">Combat</h2>
-                  <button id="start-combat" type="button" data-i18n="start">Start</button>
                 </div>
-                <form id="combat-form" class="compact-form inline-form">
-                  <label>
-                    <span data-i18n="enemy">Enemy</span>
-                    <input id="enemy-name" value="Road Bandit" autocomplete="off" data-i18n-value="defaultEnemy">
-                  </label>
-                  <label>
-                    <span data-i18n="hp">HP</span>
-                    <input id="enemy-hp" type="number" value="9" min="0">
-                  </label>
-                  <label>
-                    <span data-i18n="ac">AC</span>
-                    <input id="enemy-ac" type="number" value="12" min="1">
-                  </label>
-                  <button type="submit" class="visually-hidden" data-i18n="startCombat">Start Combat</button>
-                </form>
+                <div id="combat-trigger-note" class="combat-trigger-note detail-empty" data-i18n="combatTriggerNote">Combat begins when the DM or story turns a threat into a fight.</div>
                 <div id="combat-result" class="combat-result detail-empty" data-i18n="combatNoResult">No action result yet.</div>
                 <div id="combat-detail" class="detail-empty" data-i18n="noCombatState">No combat state.</div>
+                <div class="combat-log-panel">
+                  <h3 data-i18n="combatLog">Action Log</h3>
+                  <div id="combat-log" class="combat-log" aria-live="polite"></div>
+                </div>
               </section>
 
               <section class="compact-panel dice-section">

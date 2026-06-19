@@ -13,6 +13,7 @@ SCHEMA = [
         race TEXT NOT NULL,
         class_name TEXT NOT NULL,
         level INTEGER NOT NULL,
+        experience_points INTEGER NOT NULL DEFAULT 0,
         background TEXT NOT NULL,
         alignment TEXT NOT NULL,
         hp_current INTEGER NOT NULL,
@@ -58,6 +59,7 @@ SCHEMA = [
         opening_objective TEXT NOT NULL,
         important_objects_json TEXT NOT NULL,
         npcs_json TEXT NOT NULL,
+        encounters_json TEXT NOT NULL DEFAULT '[]',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -81,6 +83,7 @@ SCHEMA = [
         character_id INTEGER NOT NULL,
         party_order INTEGER NOT NULL,
         role TEXT NOT NULL DEFAULT 'player',
+        state_json TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (adventure_id, character_id)
     )
@@ -109,6 +112,7 @@ SCHEMA = [
         round_number INTEGER NOT NULL,
         turn_index INTEGER NOT NULL,
         participants_json TEXT NOT NULL,
+        action_log_json TEXT NOT NULL DEFAULT '[]',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -357,7 +361,11 @@ class SQLiteStore:
                 conn.execute(statement)
             self._ensure_column(conn, "adventures", "story_id", "TEXT NOT NULL DEFAULT 'mistbell_tower'")
             self._ensure_column(conn, "adventures", "story_snapshot_json", "TEXT NOT NULL DEFAULT '{}'")
+            self._ensure_column(conn, "stories", "encounters_json", "TEXT NOT NULL DEFAULT '[]'")
+            self._ensure_column(conn, "combat_states", "action_log_json", "TEXT NOT NULL DEFAULT '[]'")
             self._ensure_column(conn, "character_creation_sessions", "revision", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "characters", "experience_points", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "adventure_characters", "state_json", "TEXT NOT NULL DEFAULT '{}'")
             self._ensure_column(
                 conn,
                 "characters",
@@ -379,8 +387,55 @@ class SQLiteStore:
                 FROM adventures
                 """
             )
+            self._backfill_adventure_character_state(conn)
 
     def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
         columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         if column not in columns:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    def _backfill_adventure_character_state(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute(
+            """
+            SELECT
+                adventure_characters.adventure_id,
+                characters.*
+            FROM adventure_characters
+            JOIN characters ON characters.id = adventure_characters.character_id
+            WHERE adventure_characters.state_json = '{}'
+                OR adventure_characters.state_json = ''
+            """
+        ).fetchall()
+        for row in rows:
+            state = {
+                "id": row["id"],
+                "name": row["name"],
+                "race": row["race"],
+                "class_name": row["class_name"],
+                "level": row["level"],
+                "experience_points": row["experience_points"],
+                "background": row["background"],
+                "alignment": row["alignment"],
+                "hp_current": row["hp_current"],
+                "hp_max": row["hp_max"],
+                "armor_class": row["armor_class"],
+                "strength": row["strength"],
+                "dexterity": row["dexterity"],
+                "constitution": row["constitution"],
+                "intelligence": row["intelligence"],
+                "wisdom": row["wisdom"],
+                "charisma": row["charisma"],
+                "skills": decode_json(row["skills_json"], {}),
+                "proficiencies": decode_json(row["proficiencies_json"], {}),
+                "inventory": decode_json(row["inventory_json"], []),
+                "spells": decode_json(row["spells_json"], []),
+                "notes": row["notes"],
+            }
+            conn.execute(
+                """
+                UPDATE adventure_characters
+                SET state_json = ?
+                WHERE adventure_id = ? AND character_id = ?
+                """,
+                (encode_json(state), row["adventure_id"], row["id"]),
+            )

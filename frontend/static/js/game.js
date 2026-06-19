@@ -2,7 +2,7 @@ import { api, readErrorMessage, readStreamingResponse } from "./api.js?v=2026061
 import { apiBase, els, state } from "./state.js?v=20260618-game-room-layout10";
 import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260618-game-room-layout10";
 import { localizedStoryText } from "./stories.js?v=20260618-game-room-layout10";
-import { emptyNode, numberOrDefault, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260618-game-room-layout10";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260618-game-room-layout10";
 
 export async function loadCharacters() {
   try {
@@ -90,9 +90,9 @@ export async function selectAdventure(id, options = {}) {
     state.selectedAdventureId = Number(id);
     state.gameMode = "room";
     state.selectedAdventure = await api(`/api/adventures/${state.selectedAdventureId}`);
-    state.selectedCharacterId = state.selectedAdventure.character_id;
     state.selectedPartyCharacterIds = [...(state.selectedAdventure.party_character_ids || [state.selectedAdventure.character_id])];
     state.combat = await loadCombatState(state.selectedAdventureId);
+    selectCurrentCombatantForRoom();
     state.combatResult = null;
     await loadMapScenes(state.selectedAdventureId);
     renderAdventureList();
@@ -147,11 +147,17 @@ export async function sendMessage() {
   setStatus(t("dmThinking"));
 
   try {
-    const response = await readStreamingResponse(state.selectedAdventureId, content, state.locale, (delta) => {
-      pendingDm.content += delta;
-      pendingDm.metadata.pending = !pendingDm.content;
-      renderMessages(optimisticMessages);
-    });
+    const response = await readStreamingResponse(
+      state.selectedAdventureId,
+      content,
+      state.locale,
+      (delta) => {
+        pendingDm.content += delta;
+        pendingDm.metadata.pending = !pendingDm.content;
+        renderMessages(optimisticMessages);
+      },
+      { characterId: getSelectedCharacter()?.id },
+    );
     els.messageInput.value = "";
     state.selectedAdventure = response.adventure;
     state.combat = response.combat_state;
@@ -175,51 +181,19 @@ export function setDmBusy(isBusy) {
   els.messageForm.classList.toggle("busy", isBusy);
 }
 
-export async function startCombat() {
-  if (!state.selectedAdventureId) {
-    setStatus(t("selectAdventureBeforeCombat"), "error");
-    return;
-  }
-
-  const enemy = {
-    name: els.enemyName.value.trim() || t("defaultEnemy"),
-    side: "enemy",
-    hp: numberOrDefault(els.enemyHp.value, 9),
-    hp_max: numberOrDefault(els.enemyHp.value, 9),
-    ac: numberOrDefault(els.enemyAc.value, 12),
-    attack_bonus: 3,
-    damage: "1d6+1",
-    kind: "npc",
-  };
-
-  try {
-    state.combatResult = null;
-    state.combat = await api(`/api/adventures/${state.selectedAdventureId}/combat/start`, {
-      method: "POST",
-      body: JSON.stringify({ enemies: [enemy] }),
-    });
-    renderCombat(state.combat);
-    await loadMapTokens();
-    setStatus(t("combatStarted"), "ok");
-    await resolveNpcTurns();
-  } catch (error) {
-    if (readErrorCode(error.payload) === "combat_already_active") {
-      state.combat = await loadCombatState(state.selectedAdventureId);
-      state.combatResult = null;
-      renderCombat(state.combat);
-      setStatus(t("combatStarted"), "ok");
-      await resolveNpcTurns();
-      return;
-    }
-    showError(error);
-  }
-}
-
 export async function loadCombatState(adventureId = state.selectedAdventureId) {
   if (!adventureId) {
     return null;
   }
   return await api(`/api/adventures/${adventureId}/combat`);
+}
+
+async function refreshSelectedAdventureState() {
+  if (!state.selectedAdventureId) {
+    return null;
+  }
+  state.selectedAdventure = await api(`/api/adventures/${state.selectedAdventureId}`);
+  return state.selectedAdventure;
 }
 
 function readErrorCode(payload) {
@@ -267,6 +241,9 @@ export async function performCombatAction(actionType) {
     });
     state.combat = result.state;
     state.combatResult = result;
+    await refreshSelectedAdventureState();
+    selectCurrentCombatantForRoom({ onlyIfMissing: true });
+    renderCharacter(getSelectedCharacter());
     renderCombat(state.combat);
     await loadMapTokens();
     setStatus(t("combatActionResolved", { action: localizeCombatAction(actionType) }), "ok");
@@ -293,6 +270,9 @@ export async function resolveNpcTurns(maxTurns = 12) {
       });
       state.combat = result.state;
       state.combatResult = result;
+      await refreshSelectedAdventureState();
+      selectCurrentCombatantForRoom({ onlyIfMissing: true });
+      renderCharacter(getSelectedCharacter());
       renderCombat(state.combat);
       await loadMapTokens();
       setStatus(t("combatNpcResolved", { name: actor?.name || "-" }), "ok");
@@ -315,6 +295,9 @@ export async function endCombat() {
   try {
     state.combat = await api(`/api/adventures/${state.selectedAdventureId}/combat/end`, { method: "POST" });
     state.combatResult = null;
+    await refreshSelectedAdventureState();
+    selectCurrentCombatantForRoom({ onlyIfMissing: true });
+    renderCharacter(getSelectedCharacter());
     renderCombat(state.combat);
     await loadMapTokens();
     setStatus(t("combatEnded"), "ok");
@@ -595,6 +578,11 @@ export function renderMessages(messages = []) {
 
 export function renderCharacter(character) {
   els.characterDetail.replaceChildren();
+  const party = roomPartyCharacters();
+  if (party.length) {
+    character = party.find((member) => member.id === state.selectedCharacterId) || character || party[0];
+    state.selectedCharacterId = character.id;
+  }
   if (!character) {
     els.characterDetail.className = "detail-empty";
     els.characterDetail.textContent = t("noCharacterSelected");
@@ -602,6 +590,7 @@ export function renderCharacter(character) {
   }
 
   els.characterDetail.className = "character-card";
+  const switcher = party.length > 1 ? characterSwitcher(party, character) : null;
   const title = document.createElement("strong");
   title.textContent = character.name;
 
@@ -615,28 +604,17 @@ export function renderCharacter(character) {
 
   const bars = document.createElement("div");
   bars.className = "bars";
+  const xpDisplay = character.next_level_experience
+    ? `${character.experience_points || 0}/${character.next_level_experience}`
+    : `${character.experience_points || 0}`;
   bars.append(
     barRow("HP", character.hp_current, character.hp_max, `${character.hp_current}/${character.hp_max}`),
+    barRow(t("xp"), Number(character.level_progress || 0), 1, xpDisplay),
     barRow("AC", character.armor_class, 20, character.armor_class),
   );
 
-  const stats = document.createElement("div");
-  stats.className = "stat-grid";
-  [
-    ["STR", character.strength],
-    ["DEX", character.dexterity],
-    ["CON", character.constitution],
-    ["INT", character.intelligence],
-    ["WIS", character.wisdom],
-    ["CHA", character.charisma],
-  ].forEach(([label, value]) => stats.append(statNode(label, value)));
-
-  const inventory = document.createElement("div");
-  inventory.className = "pill-row inventory-pills";
-  const items = character.inventory?.length ? character.inventory : [t("noInventory")];
-  items.forEach((item) => inventory.append(pillNode(inventoryEntryText(item))));
-
-  els.characterDetail.append(title, meta, bars, stats, inventory);
+  const tabs = characterStatusTabs(character);
+  els.characterDetail.append(...[switcher, title, meta, bars, tabs].filter(Boolean));
 }
 
 function barRow(label, value, max, displayValue) {
@@ -654,6 +632,186 @@ function barRow(label, value, max, displayValue) {
   valueNode.textContent = displayValue;
   row.append(labelNode, track, valueNode);
   return row;
+}
+
+function characterSwitcher(party, selectedCharacter) {
+  const switcher = document.createElement("div");
+  switcher.className = "character-switcher";
+  party.forEach((member) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `character-switch ${member.id === selectedCharacter.id ? "active" : ""}`.trim();
+    button.textContent = member.name;
+    button.setAttribute("aria-pressed", member.id === selectedCharacter.id ? "true" : "false");
+    button.addEventListener("click", () => {
+      state.selectedCharacterId = member.id;
+      renderCharacter(member);
+      renderRoomParty();
+    });
+    switcher.append(button);
+  });
+  return switcher;
+}
+
+function characterStatusTabs(character) {
+  const tabs = [
+    ["overview", t("characterTabOverview")],
+    ["attributes", t("characterTabAttributes")],
+    ["equipment", t("characterTabEquipment")],
+    ["inventory", t("characterTabInventory")],
+    ["spells", t("characterTabSpells")],
+  ];
+  if (!tabs.some(([id]) => id === state.characterDetailTab)) {
+    state.characterDetailTab = "overview";
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "character-status-tabs";
+  const nav = document.createElement("div");
+  nav.className = "character-tab-list";
+  tabs.forEach(([id, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `character-tab ${state.characterDetailTab === id ? "active" : ""}`.trim();
+    button.textContent = label;
+    button.setAttribute("aria-pressed", state.characterDetailTab === id ? "true" : "false");
+    button.addEventListener("click", () => {
+      state.characterDetailTab = id;
+      renderCharacter(character);
+    });
+    nav.append(button);
+  });
+  const panel = document.createElement("div");
+  panel.className = "character-tab-panel";
+  renderCharacterTabPanel(panel, character, state.characterDetailTab);
+  wrapper.append(nav, panel);
+  return wrapper;
+}
+
+function renderCharacterTabPanel(panel, character, tab) {
+  if (tab === "attributes") {
+    panel.append(characterStatsGrid(character), characterSkillsList(character));
+    return;
+  }
+  if (tab === "equipment") {
+    const equipment = (character.inventory || []).filter(isLikelyEquipmentEntry);
+    panel.append(characterPillSection(t("characterTabEquipment"), equipment, t("noEquipment")));
+    panel.append(characterPillSection(t("proficiencies"), proficiencyEntries(character.proficiencies), t("noProficiencies")));
+    return;
+  }
+  if (tab === "inventory") {
+    panel.append(characterPillSection(t("characterTabInventory"), character.inventory || [], t("noInventory")));
+    return;
+  }
+  if (tab === "spells") {
+    panel.append(characterPillSection(t("characterTabSpells"), character.spells || [], t("noSpells")));
+    return;
+  }
+
+  const actor = matchingCombatParticipant(character);
+  const overview = document.createElement("div");
+  overview.className = "character-overview";
+  overview.append(
+    statNode("HP", `${character.hp_current}/${character.hp_max}`),
+    statNode("AC", character.armor_class),
+    statNode(t("xp"), character.next_level_experience ? `${character.experience_points}/${character.next_level_experience}` : character.experience_points),
+  );
+  if (actor) {
+    overview.append(
+      statNode("ATK", signed(actor.attack_bonus)),
+      statNode(t("damage"), actor.damage || "-"),
+    );
+  }
+  panel.append(overview);
+  const conditions = actor?.conditions || [];
+  panel.append(characterPillSection(t("conditions"), conditions, t("noConditions")));
+}
+
+function characterStatsGrid(character) {
+  const stats = document.createElement("div");
+  stats.className = "stat-grid";
+  [
+    ["STR", character.strength],
+    ["DEX", character.dexterity],
+    ["CON", character.constitution],
+    ["INT", character.intelligence],
+    ["WIS", character.wisdom],
+    ["CHA", character.charisma],
+  ].forEach(([label, value]) => stats.append(statNode(label, value ?? "-")));
+  return stats;
+}
+
+function characterSkillsList(character) {
+  const skills = document.createElement("div");
+  skills.className = "pill-row character-skills";
+  Object.entries(character.skills || {}).forEach(([skill, value]) => {
+    skills.append(pillNode(`${skill} ${signed(value)}`));
+  });
+  if (!skills.children.length) {
+    skills.append(pillNode(t("noSkills")));
+  }
+  return skills;
+}
+
+function characterPillSection(label, values, emptyText) {
+  const section = document.createElement("div");
+  section.className = "character-section";
+  const heading = document.createElement("span");
+  heading.className = "character-section-title";
+  heading.textContent = label;
+  const pills = document.createElement("div");
+  pills.className = "pill-row";
+  const entries = values?.length ? values : [emptyText];
+  entries.forEach((entry) => pills.append(pillNode(inventoryEntryText(entry))));
+  section.append(heading, pills);
+  return section;
+}
+
+function proficiencyEntries(proficiencies = {}) {
+  return Object.entries(proficiencies).flatMap(([category, values]) =>
+    (values || []).map((value) => `${category}: ${value}`),
+  );
+}
+
+function matchingCombatParticipant(character) {
+  return (state.combat?.participants || []).find((participant) => {
+    const participantId = participant.character_id ?? participant.id ?? null;
+    return participantId != null ? participantId === character.id : participant.name === character.name;
+  }) || null;
+}
+
+function isLikelyEquipmentEntry(entry) {
+  const key = inventoryEntryKey(entry).toLowerCase();
+  return [
+    "armor",
+    "axe",
+    "bow",
+    "club",
+    "crossbow",
+    "dagger",
+    "hammer",
+    "leather",
+    "lute",
+    "mace",
+    "mail",
+    "plate",
+    "rapier",
+    "shield",
+    "spear",
+    "staff",
+    "sword",
+    "symbol",
+  ].some((term) => key.includes(term));
+}
+
+function inventoryEntryKey(entry) {
+  if (entry == null) {
+    return "";
+  }
+  if (typeof entry !== "object") {
+    return String(entry);
+  }
+  return String(entry.item_id || entry.id || entry.title || entry.name || "");
 }
 
 function boundedPercent(value, max) {
@@ -711,6 +869,34 @@ function currentCombatant(combat) {
   return participants[combat?.turn_index] || null;
 }
 
+function roomPartyCharacters() {
+  return state.selectedAdventure?.party_characters || [];
+}
+
+function selectCurrentCombatantForRoom(options = {}) {
+  const party = roomPartyCharacters();
+  if (!party.length) {
+    return;
+  }
+  if (
+    options.onlyIfMissing
+    && state.selectedCharacterId
+    && party.some((character) => character.id === state.selectedCharacterId)
+  ) {
+    return;
+  }
+  const actor = currentCombatant(state.combat);
+  const actorId = actor?.character_id ?? actor?.id ?? null;
+  let selected = null;
+  if (actorId != null) {
+    selected = party.find((character) => character.id === actorId);
+  }
+  if (!selected && actor?.name) {
+    selected = party.find((character) => character.name === actor.name);
+  }
+  state.selectedCharacterId = (selected || party[0]).id;
+}
+
 function firstHostileTarget(combat, actor) {
   return (combat?.participants || []).find(
     (participant) => participant.side !== actor.side && participant.hp > 0 && !participant.defeated,
@@ -737,6 +923,9 @@ function isPlayerCombatTurn(combat) {
 }
 
 export function renderCombat(combat) {
+  if (els.combatTriggerNote) {
+    els.combatTriggerNote.classList.toggle("hidden", Boolean(combat?.is_active));
+  }
   els.combatDetail.replaceChildren();
   if (!combat) {
     els.combatDetail.className = "detail-empty";
@@ -745,6 +934,7 @@ export function renderCombat(combat) {
       els.roomCombatMeta.textContent = t("noCombatState");
     }
     renderCombatResult(null);
+    renderCombatLog([]);
     setCombatControlsEnabled(false);
     return;
   }
@@ -803,6 +993,7 @@ export function renderCombat(combat) {
 
   els.combatDetail.append(summary, pairing, current, list);
   renderCombatResult(state.combatResult);
+  renderCombatLog(combat.action_log || []);
   setCombatControlsEnabled(Boolean(combat.is_active));
 }
 
@@ -843,6 +1034,86 @@ function combatResultText(result) {
   });
 }
 
+function renderCombatLog(entries = []) {
+  if (!els.combatLog) {
+    return;
+  }
+  els.combatLog.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "combat-log-empty";
+    empty.textContent = t("combatLogEmpty");
+    els.combatLog.append(empty);
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const item = document.createElement("article");
+    item.className = `combat-log-entry ${entry.source || "system"}`;
+    const meta = document.createElement("div");
+    meta.className = "combat-log-meta";
+    meta.textContent = t("combatLogMeta", {
+      round: entry.round_number || "-",
+      source: localizeCombatLogSource(entry.source),
+    });
+    const summary = document.createElement("strong");
+    summary.textContent = combatLogSummary(entry);
+    const effect = document.createElement("p");
+    effect.textContent = combatLogEffect(entry);
+    item.append(meta, summary, effect);
+    els.combatLog.append(item);
+  });
+  els.combatLog.scrollTop = els.combatLog.scrollHeight;
+}
+
+function combatLogSummary(entry) {
+  if (entry.action_type === "attack") {
+    return t("combatLogAttackSummary", {
+      actor: entry.actor_name || "-",
+      target: entry.target_name || "-",
+    });
+  }
+  return t("combatLogSimpleSummary", {
+    actor: entry.actor_name || "-",
+    action: localizeCombatAction(entry.action_type),
+  });
+}
+
+function combatLogEffect(entry) {
+  if (entry.action_type === "attack") {
+    const targetHp = entry.target_hp ?? "-";
+    const targetHpMax = entry.target_hp_max ?? "-";
+    if (entry.hit === false) {
+      return t("combatLogAttackMiss", {
+        roll: entry.attack_roll_total ?? "-",
+        target: entry.target_name || "-",
+      });
+    }
+    const key = entry.target_defeated ? "combatLogAttackDefeated" : "combatLogAttackHit";
+    return t(key, {
+      roll: entry.attack_roll_total ?? "-",
+      damage: entry.damage ?? 0,
+      target: entry.target_name || "-",
+      hp: targetHp,
+      hpMax: targetHpMax,
+    });
+  }
+  if (entry.action_type === "end_combat") {
+    return t("combatLogEndCombat");
+  }
+  return t("combatLogSimpleEffect", { action: localizeCombatAction(entry.action_type) });
+}
+
+function localizeCombatLogSource(source) {
+  if (source === "player") {
+    return t("combatLogSourcePlayer");
+  }
+  if (source === "npc") {
+    return t("combatLogSourceNpc");
+  }
+  return t("combatLogSourceSystem");
+}
+
 function rollTotal(roll) {
   return roll?.total ?? roll?.value ?? "-";
 }
@@ -871,9 +1142,6 @@ function setCombatControlsEnabled(isActive) {
   });
   if (els.endCombat) {
     els.endCombat.disabled = !isActive || state.combatNpcBusy;
-  }
-  if (els.startCombat) {
-    els.startCombat.disabled = isActive || state.combatNpcBusy;
   }
 }
 
@@ -1046,6 +1314,8 @@ export function renderAdventureDetail(messages, scene, combat) {
     status: localizeStatus(adventure.status),
     worldId: adventure.world_id,
   });
+  selectCurrentCombatantForRoom({ onlyIfMissing: true });
+  renderCharacter(getSelectedCharacter());
   renderMessages(messages || adventure.messages || []);
   renderScene(scene || adventure.current_scene);
   renderCombat(combat || state.combat);
@@ -1301,6 +1571,10 @@ export function renderRules(result) {
 }
 
 export function getSelectedCharacter() {
+  const party = roomPartyCharacters();
+  if (state.gameMode === "room" && party.length) {
+    return party.find((character) => character.id === state.selectedCharacterId) || party[0];
+  }
   return state.characters.find((character) => character.id === state.selectedCharacterId) || null;
 }
 
@@ -1430,7 +1704,8 @@ export function renderRoomParty() {
     return;
   }
   party.forEach((character) => {
-    const row = document.createElement("div");
+    const row = document.createElement("button");
+    row.type = "button";
     const current = isCurrentPartyMember(character);
     row.className = `party-member ${current ? "current" : ""}`.trim();
     const name = document.createElement("strong");
@@ -1438,6 +1713,11 @@ export function renderRoomParty() {
     const status = document.createElement("span");
     status.textContent = current ? t("currentPartyTurn") : t("waitingPartyTurn");
     row.append(name, status);
+    row.addEventListener("click", () => {
+      state.selectedCharacterId = character.id;
+      renderCharacter(character);
+      renderRoomParty();
+    });
     els.roomPartyList.append(row);
   });
 }

@@ -47,6 +47,60 @@ def test_streaming_message_endpoint_emits_status_delta_and_final(client):
     assert final["adventure"]["id"] == adventure["id"]
 
 
+def test_streaming_message_final_includes_dm_triggered_combat(client):
+    character = client.post(
+        "/api/characters",
+        json={"name": "Stream Blade", "race": "Human", "class_name": "Fighter"},
+    ).json()
+    story = client.post(
+        "/api/stories",
+        json={
+            "title": "Streaming Mill Fight",
+            "description": "A scripted encounter for stream verification.",
+            "world_background": "The mill is bound to a cold well.",
+            "main_quest": "Recover the silver bell.",
+            "opening_location": "Mill Road",
+            "opening_environment": "Wet footprints cross the road toward the old mill.",
+            "opening_objective": "Find the stolen bell.",
+            "important_objects": ["wet footprints"],
+            "npcs": [],
+            "encounters": [
+                {
+                    "id": "mill_guardian",
+                    "title": "Mill Guardian",
+                    "description": "A guardian rises when the old mill door opens.",
+                    "trigger_keywords": ["old mill", "door"],
+                    "enemies": [
+                        {
+                            "name": "Mill Guardian",
+                            "hp": 11,
+                            "ac": 13,
+                            "attack_bonus": 3,
+                            "damage": "1d6+1",
+                        }
+                    ],
+                }
+            ],
+        },
+    ).json()
+    adventure = client.post(
+        "/api/adventures",
+        json={"title": "Streaming Combat", "character_id": character["id"], "story_id": story["id"]},
+    ).json()
+
+    response = client.post(
+        f"/api/adventures/{adventure['id']}/messages/stream",
+        json={"content": "I reach the old mill and force the door open."},
+    )
+    events = parse_ndjson(response)
+
+    assert response.status_code == 200
+    final = events[-1]
+    assert final["type"] == "final"
+    assert final["combat_state"]["is_active"] is True
+    assert any(participant["name"] == "Mill Guardian" for participant in final["combat_state"]["participants"])
+
+
 def test_streaming_message_endpoint_rejects_second_request_while_dm_is_busy(client):
     adventure = create_adventure(client)
     locks = AdventureLockService()

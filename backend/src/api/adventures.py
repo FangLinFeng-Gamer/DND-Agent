@@ -19,9 +19,12 @@ from backend.src.schemas.combat import CombatStateOut
 from backend.src.agent.character_creation.rules.repository import PHBRuleRepository
 from backend.src.agent.dm.locks import AdventureLockService
 from backend.src.agent.dm.service import DMService
+from backend.src.agent.dm.subagents import CombatEventAgent
 from backend.src.services.adventures import AdventureService
+from backend.src.services.character_state import CharacterStateService
 from backend.src.services.characters import CharacterService
 from backend.src.services.combat import CombatService
+from backend.src.services.combat_log import append_combat_log_entry
 from backend.src.services.maps import MapAttackRangeError, MapService
 
 
@@ -49,6 +52,7 @@ def character_to_combat_participant(character) -> dict:
     damage = primary_attack.get("damage") or "1d8" + (f"{strength_mod:+d}" if strength_mod else "")
     damage_type = primary_attack.get("damage_type") or "slashing"
     return {
+        "character_id": character.id,
         "name": character.name,
         "side": "player",
         "hp": character.hp_current,
@@ -214,6 +218,8 @@ def combat_action(adventure_id: int, action: AdventureCombatActionRequest, reque
     combat = CombatService()
     action_payload = action.model_dump(exclude_none=True)
     map_range = None
+    action_round = int(state.get("round_number", 1))
+    action_turn = int(state.get("turn_index", 0))
     try:
         map_range = MapService(request.app.state.store).validate_attack_range(adventure_id, state, action_payload)
         result = combat.resolve_action(state, action_payload)
@@ -225,6 +231,15 @@ def combat_action(adventure_id: int, action: AdventureCombatActionRequest, reque
         raise api_error(400, "validation_error", str(exc)) from exc
     if map_range is not None:
         result["map_range"] = map_range
+    entry = append_combat_log_entry(
+        result["state"],
+        result,
+        source="player",
+        round_number=action_round,
+        turn_index=action_turn,
+    )
+    CombatEventAgent(request.app.state.store).record_important_events(adventure_id, result["state"], [entry])
+    CharacterStateService(request.app.state.store).sync_party_hp_from_combat_state(adventure_id, result["state"])
     service.save_combat_state(adventure_id, result["state"])
     return result
 
@@ -257,5 +272,23 @@ def end_combat(adventure_id: int, request: Request) -> dict:
     state = service.get_combat_state(adventure_id)
     if state is None or not state.get("is_active"):
         raise api_error(400, "combat_not_active", "Combat is not active.")
+    action_round = int(state.get("round_number", 1))
+    action_turn = int(state.get("turn_index", 0))
+    actor = state.get("participants", [{}])[action_turn] if state.get("participants") else {}
     state = CombatService().end_combat(state)
+    result = {
+        "action_type": "end_combat",
+        "actor": actor,
+        "state": state,
+        "ends_turn": True,
+    }
+    entry = append_combat_log_entry(
+        state,
+        result,
+        source="system",
+        round_number=action_round,
+        turn_index=action_turn,
+    )
+    CombatEventAgent(request.app.state.store).record_important_events(adventure_id, state, [entry])
+    CharacterStateService(request.app.state.store).sync_party_hp_from_combat_state(adventure_id, state)
     return service.save_combat_state(adventure_id, state)

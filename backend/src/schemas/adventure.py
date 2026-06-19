@@ -34,6 +34,7 @@ class SceneState(BaseModel):
 class MessageCreate(BaseModel):
     content: str = Field(min_length=1)
     locale: str = "en"
+    character_id: int | None = None
 
 
 class MessageOut(BaseModel):

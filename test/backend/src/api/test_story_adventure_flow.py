@@ -91,3 +91,94 @@ def test_custom_story_action_reply_uses_current_scene(client):
     reply = response.json()["dm_message"]["content"]
     assert "Fen Lantern Dock" in reply
     assert "watchtower" not in reply.lower()
+
+
+def test_story_encounter_can_trigger_combat_from_player_action(client):
+    character = client.post(
+        "/api/characters",
+        json={"name": "Lio", "race": "Human", "class_name": "Fighter"},
+    ).json()
+    story = client.post(
+        "/api/stories",
+        json={
+            "title": "Moonwell Trouble",
+            "description": "A village mystery with a scripted old mill encounter.",
+            "world_background": "Willowbrook depends on the Moonwell.",
+            "main_quest": "Recover the missing silver bell.",
+            "opening_location": "Willowbrook Square",
+            "opening_environment": "Wet footprints lead away from the cold Moonwell.",
+            "opening_objective": "Follow the footprints to learn who stole the bell.",
+            "important_objects": ["wet footprints", "silver bell"],
+            "npcs": ["Mayor Mara"],
+            "encounters": [
+                {
+                    "id": "old_mill_sprite",
+                    "title": "Old Mill Sprite",
+                    "description": "A frightened well sprite protects the stolen bell.",
+                    "trigger_keywords": ["old mill", "footprints", "open the door"],
+                    "enemies": [
+                        {
+                            "name": "Well Sprite",
+                            "hp": 9,
+                            "ac": 12,
+                            "attack_bonus": 3,
+                            "damage": "1d6+1",
+                        }
+                    ],
+                }
+            ],
+        },
+    ).json()
+    adventure = client.post(
+        "/api/adventures",
+        json={"title": "Moonwell Run", "character_id": character["id"], "story_id": story["id"]},
+    ).json()
+
+    response = client.post(
+        f"/api/adventures/{adventure['id']}/messages",
+        json={"content": "I follow the wet footprints to the old mill and open the door."},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["combat_state"]["is_active"] is True
+    assert any(participant["name"] == "Well Sprite" for participant in data["combat_state"]["participants"])
+    assert data["dm_message"]["metadata"]["combat_decision"]["source"] == "story"
+
+
+def test_dm_generates_contextual_enemy_when_no_story_encounter_exists(client):
+    character = client.post(
+        "/api/characters",
+        json={"name": "Kest", "race": "Human", "class_name": "Fighter"},
+    ).json()
+    story = client.post(
+        "/api/stories",
+        json={
+            "title": "Bare Moonwell",
+            "description": "A village mystery without scripted combat.",
+            "world_background": "Willowbrook depends on the Moonwell.",
+            "main_quest": "Recover the missing silver bell.",
+            "opening_location": "Moonwell",
+            "opening_environment": "The water throws a hostile shadow onto the stones.",
+            "opening_objective": "Decide how to handle the hostile shadow.",
+            "important_objects": ["hostile shadow"],
+            "npcs": [],
+        },
+    ).json()
+    adventure = client.post(
+        "/api/adventures",
+        json={"title": "Generated Threat", "character_id": character["id"], "story_id": story["id"]},
+    ).json()
+
+    response = client.post(
+        f"/api/adventures/{adventure['id']}/messages",
+        json={"content": "I attack the hostile shadow before it reaches the well."},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["combat_state"]["is_active"] is True
+    enemies = [participant for participant in data["combat_state"]["participants"] if participant["side"] == "enemy"]
+    assert len(enemies) == 1
+    assert enemies[0]["name"] != "Road Bandit"
+    assert data["dm_message"]["metadata"]["combat_decision"]["source"] == "dm_generated"

@@ -36,10 +36,13 @@ class ContextService:
                 "race": character.race,
                 "class_name": character.class_name,
                 "level": character.level,
+                "experience_points": character.experience_points,
+                "next_level_experience": character.next_level_experience,
                 "hp_current": character.hp_current,
                 "hp_max": character.hp_max,
                 "armor_class": character.armor_class,
                 "skills": character.skills,
+                "inventory": character.inventory,
                 "spells": character.spells,
             }
             for character in adventure.party_characters
@@ -107,6 +110,7 @@ def json_safe_party_summary(party: list[dict]) -> str:
         return ""
     return "Party: " + "; ".join(
         f"{character['name']} {character['race']} {character['class_name']} "
-        f"level {character['level']} HP {character['hp_current']}/{character['hp_max']} AC {character['armor_class']}"
+        f"level {character['level']} XP {character.get('experience_points', 0)} "
+        f"HP {character['hp_current']}/{character['hp_max']} AC {character['armor_class']}"
         for character in party
     )

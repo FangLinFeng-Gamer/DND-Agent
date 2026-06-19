@@ -2,6 +2,8 @@ import pytest
 from fastapi import HTTPException
 
 from backend.src.services.adventures import AdventureService
+from backend.src.services.character_state import CharacterStateService
+from backend.src.services.world_events import WorldEventService
 
 
 def test_playable_adventure_flow(client):
@@ -300,6 +302,145 @@ def test_combat_action_accepts_new_dodge_payload(client):
     assert response.status_code == 200
     assert response.json()["action_type"] == "dodge"
     assert "dodge" in response.json()["actor"]["conditions"]
+
+
+def test_player_combat_action_appends_log_and_combat_event(client):
+    character = client.post(
+        "/api/characters",
+        json={"name": "Log Hero", "race": "Human", "class_name": "Fighter"},
+    ).json()
+    adventure = client.post("/api/adventures", json={"title": "Logged Fight", "character_id": character["id"]}).json()
+    started = client.post(
+        f"/api/adventures/{adventure['id']}/combat/start",
+        json={
+            "enemies": [
+                {
+                    "name": "Frail Goblin",
+                    "hp": 1,
+                    "ac": 1,
+                    "attack_bonus": 1,
+                    "damage": "1d4",
+                    "initiative_bonus": -30,
+                }
+            ]
+        },
+    ).json()
+    actor = started["participants"][started["turn_index"]]
+
+    response = client.post(
+        f"/api/adventures/{adventure['id']}/combat/action",
+        json={"actor_name": actor["name"], "action_type": "attack", "target_name": "Frail Goblin"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    log = data["state"]["action_log"][-1]
+    assert log["source"] == "player"
+    assert log["actor_name"] == "Log Hero"
+    assert log["action_type"] == "attack"
+    assert log["target_name"] == "Frail Goblin"
+    assert log["damage"] >= 1
+    assert log["target_hp"] == 0
+    assert log["target_defeated"] is True
+
+    events = WorldEventService(client.app.state.store).list_for_adventure(adventure["id"], min_importance=3)
+    assert any(event.metadata.get("source") == "combat_event_agent" for event in events)
+    assert any("Frail Goblin" in event.description for event in events)
+
+
+def test_npc_combat_turn_appends_action_log(client):
+    character = client.post(
+        "/api/characters",
+        json={"name": "Target Hero", "race": "Human", "class_name": "Fighter"},
+    ).json()
+    adventure = client.post("/api/adventures", json={"title": "NPC Log Fight", "character_id": character["id"]}).json()
+    started = client.post(
+        f"/api/adventures/{adventure['id']}/combat/start",
+        json={
+            "enemies": [
+                {
+                    "name": "Logging Goblin",
+                    "hp": 7,
+                    "ac": 12,
+                    "attack_bonus": 4,
+                    "damage": "1d6+1",
+                    "initiative_bonus": 30,
+                }
+            ]
+        },
+    ).json()
+    assert started["participants"][started["turn_index"]]["name"] == "Logging Goblin"
+
+    response = client.post(f"/api/adventures/{adventure['id']}/combat/npc-turn", json={"locale": "en"})
+
+    assert response.status_code == 200
+    log = response.json()["state"]["action_log"][-1]
+    assert log["source"] == "npc"
+    assert log["actor_name"] == "Logging Goblin"
+    assert log["action_type"] in {"attack", "dodge", "dash", "disengage", "end_turn"}
+
+
+def test_npc_combat_damage_syncs_to_character_hp(client):
+    character = client.post(
+        "/api/characters",
+        json={"name": "Target Sync", "race": "Human", "class_name": "Fighter"},
+    ).json()
+    adventure = client.post("/api/adventures", json={"title": "NPC HP Sync", "character_id": character["id"]}).json()
+    started = client.post(
+        f"/api/adventures/{adventure['id']}/combat/start",
+        json={
+            "enemies": [
+                {
+                    "name": "Accurate Raider",
+                    "hp": 7,
+                    "ac": 12,
+                    "attack_bonus": 40,
+                    "damage": "1d4",
+                    "initiative_bonus": 30,
+                }
+            ]
+        },
+    ).json()
+    assert started["participants"][started["turn_index"]]["name"] == "Accurate Raider"
+
+    response = client.post(f"/api/adventures/{adventure['id']}/combat/npc-turn", json={"locale": "en"})
+
+    assert response.status_code == 200
+    target = response.json()["target"]
+    updated_adventure = client.get(f"/api/adventures/{adventure['id']}").json()
+    updated_character = next(
+        member for member in updated_adventure["party_characters"] if member["id"] == character["id"]
+    )
+    base_character = client.get(f"/api/characters/{character['id']}").json()
+    assert target["name"] == "Target Sync"
+    assert updated_character["hp_current"] == target["hp"]
+    assert updated_character["hp_current"] < character["hp_current"]
+    assert base_character["hp_current"] == character["hp_current"]
+
+
+def test_adventure_character_state_is_isolated_per_game(client):
+    character = client.post(
+        "/api/characters",
+        json={"name": "Shared Hero", "race": "Human", "class_name": "Fighter"},
+    ).json()
+    first = client.post("/api/adventures", json={"title": "First Table", "character_id": character["id"]}).json()
+    second = client.post("/api/adventures", json={"title": "Second Table", "character_id": character["id"]}).json()
+
+    CharacterStateService(client.app.state.store).apply_changes(
+        first["id"],
+        [{"character_id": character["id"], "hp_current": 0, "experience_delta": 300}],
+    )
+
+    first_state = client.get(f"/api/adventures/{first['id']}").json()["party_characters"][0]
+    second_state = client.get(f"/api/adventures/{second['id']}").json()["party_characters"][0]
+    base_state = client.get(f"/api/characters/{character['id']}").json()
+
+    assert first_state["hp_current"] == 0
+    assert first_state["level"] == 2
+    assert second_state["hp_current"] == character["hp_current"]
+    assert second_state["level"] == 1
+    assert base_state["hp_current"] == character["hp_current"]
+    assert base_state["level"] == 1
 
 
 def test_combat_end_returns_inactive_state(client):

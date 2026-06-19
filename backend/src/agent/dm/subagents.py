@@ -9,7 +9,9 @@ from backend.src.agent.dm.react import build_react_agent
 from backend.src.agent.dm.skill_registry import DMSkill, format_skill_prompt_context
 from backend.src.agent.locale import language_instruction, normalize_locale
 from backend.src.db.sqlite import SQLiteStore
+from backend.src.schemas.world_event import WorldEventCreate
 from backend.src.services.world import WorldService
+from backend.src.services.world_events import WorldEventService
 
 
 @dataclass
@@ -126,3 +128,111 @@ class NarrationAgent:
             return str(json.loads(content).get("narration") or "")
         except (json.JSONDecodeError, AttributeError):
             return str(content)
+
+
+class CombatEventAgent:
+    def __init__(self, store: SQLiteStore):
+        self.events = WorldEventService(store)
+
+    def record_important_events(
+        self,
+        adventure_id: int,
+        combat_state: dict[str, Any],
+        new_entries: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        existing = self.events.list_for_adventure(adventure_id)
+        existing_keys = {
+            (event.metadata.get("combat_log_entry_id"), event.metadata.get("event_key"))
+            for event in existing
+            if event.metadata.get("source") == "combat_event_agent"
+        }
+        previous_round = max(1, int(combat_state.get("round_number", 1)) - 1)
+        previous_round_records = [
+            entry
+            for entry in combat_state.get("action_log", [])
+            if int(entry.get("round_number", 0)) == previous_round
+        ]
+        created = []
+        for entry in new_entries:
+            for event in self._events_from_entry(entry, combat_state, previous_round_records):
+                key = (event.metadata.get("combat_log_entry_id"), event.metadata.get("event_key"))
+                if key in existing_keys:
+                    continue
+                created_event = self.events.create(adventure_id, event)
+                created.append(created_event.model_dump())
+                existing_keys.add(key)
+        return created
+
+    def _events_from_entry(
+        self,
+        entry: dict[str, Any],
+        combat_state: dict[str, Any],
+        previous_round_records: list[dict[str, Any]],
+    ) -> list[WorldEventCreate]:
+        metadata_base = {
+            "source": "combat_event_agent",
+            "agent": "combat_event_agent",
+            "combat_log_entry_id": entry.get("id"),
+            "round_number": entry.get("round_number"),
+            "previous_round_record_count": len(previous_round_records),
+        }
+        events: list[WorldEventCreate] = []
+        if entry.get("action_type") == "attack" and entry.get("target_hp") == 0:
+            target = entry.get("target_name") or "A combatant"
+            actor = entry.get("actor_name") or "A combatant"
+            target_side = entry.get("target_side")
+            target_kind = entry.get("target_kind")
+            conditions = set(entry.get("target_conditions") or [])
+            defeated = bool(entry.get("target_defeated"))
+            is_player_character = target_side == "player" or target_kind in {"character", "pc"}
+            if is_player_character and ("dead" in conditions or defeated):
+                title = f"{target} died in combat"
+                description = f"{target} died after an attack by {actor} in round {entry.get('round_number')}."
+                importance = 5
+                event_key = "character_dead"
+            elif is_player_character:
+                title = f"{target} fell in combat"
+                description = f"{target} was reduced to 0 HP by {actor} and is down in combat."
+                importance = 5
+                event_key = "character_zero_hp"
+            elif defeated:
+                title = f"{target} defeated"
+                description = f"{target} was reduced to 0 HP by {actor} and defeated."
+                importance = 3
+                event_key = "combatant_defeated"
+            else:
+                title = f"{target} fell to 0 HP"
+                description = f"{target} was reduced to 0 HP by {actor}."
+                importance = 3
+                event_key = "combatant_zero_hp"
+            events.append(
+                WorldEventCreate(
+                    event_type="combat",
+                    title=title,
+                    description=description,
+                    importance=importance,
+                    metadata={**metadata_base, "event_key": event_key},
+                )
+            )
+        if entry.get("action_type") == "death_save" and entry.get("actor_defeated"):
+            actor = entry.get("actor_name") or "A combatant"
+            events.append(
+                WorldEventCreate(
+                    event_type="combat",
+                    title=f"{actor} died in combat",
+                    description=f"{actor} failed death saves and died in combat.",
+                    importance=5,
+                    metadata={**metadata_base, "event_key": "death_save_dead"},
+                )
+            )
+        if not combat_state.get("is_active"):
+            events.append(
+                WorldEventCreate(
+                    event_type="combat",
+                    title="Combat ended",
+                    description=f"Combat ended after {entry.get('actor_name') or 'a combatant'} used {entry.get('action_type')}.",
+                    importance=4,
+                    metadata={**metadata_base, "event_key": "combat_ended"},
+                )
+            )
+        return events

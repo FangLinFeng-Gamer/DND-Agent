@@ -4,8 +4,24 @@ def test_create_character_defaults(client):
     data = response.json()
     assert data["name"] == "Aria"
     assert data["level"] == 1
+    assert data["experience_points"] == 0
+    assert data["next_level_experience"] == 300
     assert data["hp_current"] == data["hp_max"]
     assert data["armor_class"] >= 10
+
+
+def test_character_experience_points_auto_level_and_expose_progress(client):
+    created = client.post("/api/characters", json={"name": "Aria", "race": "Elf", "class_name": "Ranger"}).json()
+
+    updated = client.patch(f"/api/characters/{created['id']}", json={"experience_points": 300})
+
+    assert updated.status_code == 200
+    data = updated.json()
+    assert data["experience_points"] == 300
+    assert data["level"] == 2
+    assert data["next_level_experience"] == 900
+    assert data["experience_to_next_level"] == 600
+    assert data["level_progress"] == 0
 
 
 def test_list_update_delete_character(client):

@@ -78,6 +78,7 @@ class CombatService:
             "is_active": True,
             "round_number": 1,
             "turn_index": 0,
+            "action_log": [],
         }
         if normalized:
             self._start_turn(normalized[0])
@@ -201,6 +202,7 @@ class CombatService:
         state.setdefault("round_number", 1)
         state.setdefault("turn_index", 0)
         state.setdefault("is_active", True)
+        state.setdefault("action_log", [])
         return state
 
     def _upgrade_participant(self, participant: dict[str, Any]) -> dict[str, Any]:

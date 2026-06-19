@@ -101,8 +101,43 @@ class CombatParticipantOut(BaseModel):
     defeated: bool
 
 
+class CombatActionLogEntry(BaseModel):
+    id: int
+    round_number: int
+    turn_index: int
+    source: str
+    actor_name: str
+    actor_side: str = ""
+    actor_kind: str = ""
+    action_type: str
+    target_name: str | None = None
+    target_side: str | None = None
+    target_kind: str | None = None
+    hit: bool | None = None
+    critical: bool | None = None
+    damage: int | None = None
+    damage_type: str | None = None
+    attack_roll_total: int | None = None
+    target_hp: int | None = None
+    target_hp_max: int | None = None
+    target_defeated: bool | None = None
+    target_conditions: list[str] = Field(default_factory=list)
+    actor_hp: int | None = None
+    actor_hp_max: int | None = None
+    actor_defeated: bool | None = None
+    actor_conditions: list[str] = Field(default_factory=list)
+    ends_turn: bool = True
+    decision_source: str | None = None
+    decision_reason: str | None = None
+    map_range: dict[str, Any] | None = None
+    map_movement: dict[str, Any] | None = None
+    summary: str = ""
+    effect: str = ""
+
+
 class CombatStateOut(BaseModel):
     participants: list[CombatParticipantOut]
     is_active: bool
     round_number: int
     turn_index: int
+    action_log: list[CombatActionLogEntry] = Field(default_factory=list)

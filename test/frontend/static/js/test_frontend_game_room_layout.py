@@ -146,6 +146,8 @@ def test_game_room_matches_static_compact_play_surface():
     bottom_dock_block = css.split(".bottom-dock {", 1)[1].split("}", 1)[0]
     map_stage_block = css.split(".map-stage {", 1)[1].split("}", 1)[0]
     room_chat_block = css.split(".room-chat-panel {", 1)[1].split("}", 1)[0]
+    room_chat_messages_block = css.split(".room-chat-panel .messages {", 1)[1].split("}", 1)[0]
+    responsive_room_block = css.split("@media (max-width: 980px)", 1)[1].split("@media (max-width: 520px)", 1)[0]
     room_mode_block = css.split(".workspace.room-mode {", 1)[1].split("}", 1)[0]
     side_rail_block = css.split(".side-rail {", 1)[1].split("}", 1)[0]
 
@@ -169,7 +171,19 @@ def test_game_room_matches_static_compact_play_surface():
     assert "border: 1px solid rgba(169, 140, 84, .34)" in room_chat_block
     assert "border-radius: 10px" in room_chat_block
     assert "background:" in room_chat_block
+    assert "height: min(100%, calc(100vh - 168px))" in room_chat_block
+    assert "max-height: calc(100vh - 168px)" in room_chat_block
+    assert "overflow: hidden" in room_chat_block
+    assert "max-height: 100%" in room_chat_messages_block
+    assert "overflow-y: auto" in room_chat_messages_block
+    assert "overscroll-behavior: contain" in room_chat_messages_block
+    assert ".room-chat-panel {" in responsive_room_block
+    assert "height: min(620px, calc(100vh - 120px))" in responsive_room_block
+    assert "max-height: min(620px, calc(100vh - 120px))" in responsive_room_block
+    assert ".room-chat-panel .messages {" in responsive_room_block
+    assert "height: auto" in responsive_room_block
     assert ".room-chat-panel .chat-head" in css
-    assert ".workspace.room-mode #character-detail .pill-row" in css
-    actor_inventory_block = css.split(".workspace.room-mode #character-detail .pill-row {", 1)[1].split("}", 1)[0]
-    assert "display: none" in actor_inventory_block
+    assert ".character-tab-panel {" in css
+    character_tab_block = css.split(".character-tab-panel {", 1)[1].split("}", 1)[0]
+    assert "max-height: 220px" in character_tab_block
+    assert "overflow-y: auto" in character_tab_block

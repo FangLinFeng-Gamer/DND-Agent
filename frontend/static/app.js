@@ -19,7 +19,6 @@ import {
   searchRules,
   selectAdventure,
   sendMessage,
-  startCombat,
   performCombatAction,
   endCombat,
   loadCharacters,
@@ -175,16 +174,11 @@ function wireEvents() {
       sendMessage();
     }
   });
-  els.startCombat.addEventListener("click", startCombat);
   els.combatActionAttack.addEventListener("click", () => performCombatAction("attack"));
   els.combatActionDodge.addEventListener("click", () => performCombatAction("dodge"));
   els.combatActionDash.addEventListener("click", () => performCombatAction("dash"));
   els.combatActionDisengage.addEventListener("click", () => performCombatAction("disengage"));
   els.endCombat.addEventListener("click", endCombat);
-  els.combatForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    startCombat();
-  });
   els.rulesForm.addEventListener("submit", (event) => {
     event.preventDefault();
     searchRules();

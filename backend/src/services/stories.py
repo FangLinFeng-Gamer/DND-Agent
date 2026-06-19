@@ -30,6 +30,7 @@ DEFAULT_STORY = StoryOut(
     opening_objective="Speak with Mayor Elira Voss, inspect the tower road, and find the first trace of the missing caravan.",
     important_objects=["wet road map", "tower bell", "muddy caravan token"],
     npcs=["Mayor Elira Voss", "Tovin Reed the wayhouse keeper"],
+    encounters=[],
 )
 
 
@@ -44,12 +45,12 @@ class StoryService:
                 INSERT OR IGNORE INTO stories (
                     id, title, description, world_background, main_quest,
                     opening_location, opening_environment, opening_objective,
-                    important_objects_json, npcs_json
+                    important_objects_json, npcs_json, encounters_json
                 )
                 VALUES (
                     :id, :title, :description, :world_background, :main_quest,
                     :opening_location, :opening_environment, :opening_objective,
-                    :important_objects_json, :npcs_json
+                    :important_objects_json, :npcs_json, :encounters_json
                 )
                 """,
                 self._to_db_values(DEFAULT_STORY),
@@ -76,12 +77,12 @@ class StoryService:
                 INSERT INTO stories (
                     id, title, description, world_background, main_quest,
                     opening_location, opening_environment, opening_objective,
-                    important_objects_json, npcs_json
+                    important_objects_json, npcs_json, encounters_json
                 )
                 VALUES (
                     :id, :title, :description, :world_background, :main_quest,
                     :opening_location, :opening_environment, :opening_objective,
-                    :important_objects_json, :npcs_json
+                    :important_objects_json, :npcs_json, :encounters_json
                 )
                 """,
                 self._to_db_values(output),
@@ -119,7 +120,8 @@ class StoryService:
                     opening_environment = :opening_environment,
                     opening_objective = :opening_objective,
                     important_objects_json = :important_objects_json,
-                    npcs_json = :npcs_json
+                    npcs_json = :npcs_json,
+                    encounters_json = :encounters_json
                 WHERE id = :id
                 """,
                 self._to_db_values(output),
@@ -141,6 +143,7 @@ class StoryService:
         values = story.model_dump()
         values["important_objects_json"] = encode_json(values.pop("important_objects"))
         values["npcs_json"] = encode_json(values.pop("npcs"))
+        values["encounters_json"] = encode_json(values.pop("encounters"))
         return values
 
     def _map_row(self, row: Row) -> StoryOut:
@@ -155,4 +158,5 @@ class StoryService:
             opening_objective=row["opening_objective"],
             important_objects=decode_json(row["important_objects_json"], []),
             npcs=decode_json(row["npcs_json"], []),
+            encounters=decode_json(row["encounters_json"], []),
         )

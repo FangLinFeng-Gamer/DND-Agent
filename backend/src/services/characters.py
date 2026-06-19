@@ -11,6 +11,10 @@ from backend.src.schemas.character import (
     CharacterOut,
     CharacterUpdate,
 )
+from backend.src.services.character_progression import (
+    character_progression,
+    level_for_experience,
+)
 
 
 ABILITY_FIELDS = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
@@ -19,6 +23,7 @@ UPDATE_COLUMNS = {
     "race",
     "class_name",
     "level",
+    "experience_points",
     "background",
     "alignment",
     "hp_current",
@@ -104,6 +109,8 @@ class CharacterService:
         values = update.model_dump(exclude_unset=True)
         current = self.get(character_id)
         self._validate_update(values, current)
+        if "experience_points" in values and "level" not in values:
+            values["level"] = max(current.level, level_for_experience(values["experience_points"]))
 
         if values:
             db_values = self._to_db_values(values)
@@ -160,6 +167,7 @@ class CharacterService:
                     }
                 ),
                 "level": 1,
+                "experience_points": 0,
                 "skills_json": encode_json(character.skills),
                 "proficiencies_json": encode_json(character.proficiencies),
                 "inventory_json": encode_json(character.inventory),
@@ -171,7 +179,8 @@ class CharacterService:
                 "name": character.name,
                 "race": character.race,
                 "class_name": character.class_name,
-                "level": 1,
+                "level": level_for_experience(character.experience_points),
+                "experience_points": character.experience_points,
                 "background": character.background,
                 "alignment": character.alignment,
                 "hp_current": 10,
@@ -187,13 +196,13 @@ class CharacterService:
         cursor = conn.execute(
             """
             INSERT INTO characters (
-                name, race, class_name, level, background, alignment,
+                name, race, class_name, level, experience_points, background, alignment,
                 hp_current, hp_max, armor_class, strength, dexterity,
                 constitution, intelligence, wisdom, charisma, skills_json,
                 proficiencies_json, inventory_json, spells_json, notes
             )
             VALUES (
-                :name, :race, :class_name, :level, :background, :alignment,
+                :name, :race, :class_name, :level, :experience_points, :background, :alignment,
                 :hp_current, :hp_max, :armor_class, :strength, :dexterity,
                 :constitution, :intelligence, :wisdom, :charisma,
                 :skills_json, :proficiencies_json, :inventory_json,
@@ -227,6 +236,8 @@ class CharacterService:
 
         if "level" in values and not 1 <= values["level"] <= 20:
             raise api_error(400, "validation_error", "Level must be between 1 and 20.")
+        if "experience_points" in values and values["experience_points"] < 0:
+            raise api_error(400, "validation_error", "Experience points cannot be negative.")
         for key in ("hp_current", "hp_max"):
             if key in values and values[key] < 0:
                 raise api_error(400, "validation_error", "HP cannot be negative.")
@@ -251,12 +262,17 @@ class CharacterService:
         return db_values
 
     def _map_row(self, row: Row) -> CharacterOut:
+        progression = character_progression(row["level"], row["experience_points"])
         return CharacterOut(
             id=row["id"],
             name=row["name"],
             race=row["race"],
             class_name=row["class_name"],
             level=row["level"],
+            experience_points=row["experience_points"],
+            next_level_experience=progression["next_level_experience"],
+            experience_to_next_level=progression["experience_to_next_level"],
+            level_progress=progression["level_progress"],
             background=row["background"],
             alignment=row["alignment"],
             hp_current=row["hp_current"],

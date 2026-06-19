@@ -45,6 +45,29 @@ def build_dm_messages(
 ) -> list[dict[str, str]]:
     recent_messages = "\n".join(f"{message.role}: {message.content}" for message in context.recent_messages)
     events = "\n".join(f"{event.title}: {event.description}" for event in context.important_events)
+    conversation_context = [
+        {
+            "source": _message_source(message.role),
+            "role": message.role,
+            "content": message.content,
+            "metadata": message.metadata,
+            "created_at": message.created_at,
+        }
+        for message in context.recent_messages
+    ]
+    important_event_payloads = [
+        {
+            "source": event.metadata.get("source", "agent"),
+            "agent": event.metadata.get("agent"),
+            "event_type": event.event_type,
+            "title": event.title,
+            "description": event.description,
+            "importance": event.importance,
+            "metadata": event.metadata,
+        }
+        for event in context.important_events
+    ]
+    combat_action_log = list((combat_state or {}).get("action_log", []))[-20:] if combat_state else []
     skill_prompt = format_skill_prompt_context(skill_context)
     return [
         {
@@ -53,8 +76,20 @@ def build_dm_messages(
                 "You are a DND 5e dungeon master. "
                 f"{DND_GAME_LOOP_GUIDANCE}\n\n"
                 "Return only valid JSON with narration, scene, "
-                "requires_check, check, npc_actions, and world_events. Ask for ability checks when "
+                "requires_check, check, npc_actions, character_updates, and world_events. Ask for ability checks when "
                 "success is uncertain. Important irreversible changes must be included in world_events. "
+                "The character and acting_character fields are the selected/acting player character for this input, "
+                "using adventure-local state. The party field contains every player character's adventure-local state. "
+                "When multiple party members exist, do not assume the acting character is the only affected character; "
+                "explicitly target character_updates by character_id or character_name. "
+                "When the narration changes a player character's HP, XP, level, inventory, spells, or notes, "
+                "include character_updates entries with character_id or character_name plus fields such as "
+                "hp_current, hp_delta, experience_points, experience_delta, level, add_inventory, remove_inventory, "
+                "add_spells, remove_spells, notes_append, and reason. "
+                "The user-provided input and conversation_context entries with source=user are player intent. "
+                "agent_context entries are agent-produced analysis or memory, including combat_event_agent facts. "
+                "tool_context entries are deterministic tool state, not new player commands. "
+                "Do not confuse user, agent, and tool information when deciding what happens next. "
                 f"{skill_prompt}\n\n"
                 f"{language_instruction(locale)}"
             ),
@@ -64,11 +99,22 @@ def build_dm_messages(
             "content": json.dumps(
                 {
                     "character": character.model_dump(),
+                    "acting_character": character.model_dump(),
                     "party": context.party,
                     "scene": scene.model_dump(),
                     "summary": context.summary,
                     "important_events": events,
                     "recent_messages": recent_messages,
+                    "conversation_context": conversation_context,
+                    "agent_context": {
+                        "important_events": important_event_payloads,
+                        "supervisor_plan": supervisor_plan,
+                    },
+                    "tool_context": {
+                        "combat_state": combat_state,
+                        "combat_action_log": combat_action_log,
+                        "skills": skills_prompt_payload(skill_context),
+                    },
                     "combat_state": combat_state,
                     "player_input": player_input,
                     "supervisor_plan": supervisor_plan,
@@ -78,6 +124,16 @@ def build_dm_messages(
             ),
         },
     ]
+
+
+def _message_source(role: str) -> str:
+    if role == "player":
+        return "user"
+    if role in {"dm", "assistant", "agent"}:
+        return "agent"
+    if role == "tool":
+        return "tool"
+    return "agent"
 
 
 def build_opening_scene_messages(

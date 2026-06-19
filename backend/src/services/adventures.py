@@ -6,7 +6,9 @@ from typing import Any, List
 from backend.src.core.errors import api_error
 from backend.src.db.sqlite import SQLiteStore, decode_json, encode_json
 from backend.src.schemas.adventure import AdventureCreate, AdventureOut, MessageOut, SceneState
+from backend.src.schemas.character import CharacterOut, CharacterUpdate
 from backend.src.schemas.story import StoryOut
+from backend.src.services.character_progression import character_progression, level_for_experience
 from backend.src.services.characters import CharacterService
 
 
@@ -44,11 +46,19 @@ class AdventureService:
             conn.executemany(
                 """
                 INSERT INTO adventure_characters (
-                    adventure_id, character_id, party_order, role
+                    adventure_id, character_id, party_order, role, state_json
                 )
-                VALUES (?, ?, ?, 'player')
+                VALUES (?, ?, ?, 'player', ?)
                 """,
-                [(adventure_id, character.id, index) for index, character in enumerate(party)],
+                [
+                    (
+                        adventure_id,
+                        character.id,
+                        index,
+                        encode_json(character.model_dump(mode="json")),
+                    )
+                    for index, character in enumerate(party)
+                ],
             )
             row = conn.execute("SELECT * FROM adventures WHERE id = ?", (cursor.lastrowid,)).fetchone()
         return self._map_adventure_row(row)
@@ -138,6 +148,7 @@ class AdventureService:
             "is_active": bool(row["is_active"]),
             "round_number": row["round_number"],
             "turn_index": row["turn_index"],
+            "action_log": decode_json(row["action_log_json"], []),
         }
 
     def save_combat_state(self, adventure_id: int, state: dict[str, Any]) -> dict[str, Any]:
@@ -146,16 +157,17 @@ class AdventureService:
             conn.execute(
                 """
                 INSERT INTO combat_states (
-                    adventure_id, is_active, round_number, turn_index, participants_json
+                    adventure_id, is_active, round_number, turn_index, participants_json, action_log_json
                 )
                 VALUES (
-                    :adventure_id, :is_active, :round_number, :turn_index, :participants_json
+                    :adventure_id, :is_active, :round_number, :turn_index, :participants_json, :action_log_json
                 )
                 ON CONFLICT(adventure_id) DO UPDATE SET
                     is_active = excluded.is_active,
                     round_number = excluded.round_number,
                     turn_index = excluded.turn_index,
                     participants_json = excluded.participants_json,
+                    action_log_json = excluded.action_log_json,
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 {
@@ -164,6 +176,7 @@ class AdventureService:
                     "round_number": state.get("round_number", 1),
                     "turn_index": state.get("turn_index", 0),
                     "participants_json": encode_json(state.get("participants", [])),
+                    "action_log_json": encode_json(state.get("action_log", [])),
                 },
             )
         return state
@@ -184,6 +197,45 @@ class AdventureService:
     def get_party(self, adventure_id: int) -> list:
         row = self._get_adventure_row(adventure_id)
         return self._party_for_adventure(row["id"], row["character_id"])[1]
+
+    def update_party_character_state(
+        self,
+        adventure_id: int,
+        character_id: int,
+        update: CharacterUpdate,
+    ) -> CharacterOut:
+        party_ids, party = self._party_for_adventure(adventure_id, fallback_character_id=character_id)
+        if character_id not in party_ids:
+            raise api_error(404, "adventure_character_not_found", "Character is not in this adventure.")
+        current = next((character for character in party if character.id == character_id), None)
+        if current is None:
+            raise api_error(404, "adventure_character_not_found", "Character is not in this adventure.")
+
+        values = update.model_dump(exclude_unset=True)
+        CharacterService(self.store)._validate_update(values, current)
+        if "experience_points" in values and "level" not in values:
+            values["level"] = max(current.level, level_for_experience(values["experience_points"]))
+
+        data = current.model_dump(mode="json")
+        data.update(values)
+        data.update(character_progression(data["level"], data["experience_points"]))
+        updated = CharacterOut.model_validate(data)
+        with self.store.connect() as conn:
+            result = conn.execute(
+                """
+                UPDATE adventure_characters
+                SET state_json = :state_json
+                WHERE adventure_id = :adventure_id AND character_id = :character_id
+                """,
+                {
+                    "adventure_id": adventure_id,
+                    "character_id": character_id,
+                    "state_json": encode_json(updated.model_dump(mode="json")),
+                },
+            )
+        if result.rowcount == 0:
+            raise api_error(404, "adventure_character_not_found", "Character is not in this adventure.")
+        return updated
 
     def _get_adventure_row(self, adventure_id: int) -> Row:
         with self.store.connect() as conn:
@@ -211,7 +263,7 @@ class AdventureService:
         with self.store.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT character_id
+                SELECT character_id, state_json
                 FROM adventure_characters
                 WHERE adventure_id = ?
                 ORDER BY party_order, character_id
@@ -221,15 +273,26 @@ class AdventureService:
         party_ids = [row["character_id"] for row in rows] or [fallback_character_id]
         characters = []
         character_service = CharacterService(self.store)
+        state_by_id = {row["character_id"]: decode_json(row["state_json"], {}) for row in rows}
         for character_id in party_ids:
             try:
-                characters.append(character_service.get(character_id))
+                base = character_service.get(character_id)
+                characters.append(self._character_from_state(base, state_by_id.get(character_id, {})))
             except Exception:
                 continue
         if not characters and fallback_character_id:
             characters = [character_service.get(fallback_character_id)]
             party_ids = [fallback_character_id]
         return party_ids, characters
+
+    def _character_from_state(self, base: CharacterOut, state: dict[str, Any]) -> CharacterOut:
+        if not state:
+            return base
+        data = base.model_dump(mode="json")
+        data.update(state)
+        data["id"] = base.id
+        data.update(character_progression(data["level"], data["experience_points"]))
+        return CharacterOut.model_validate(data)
 
     def _map_message_row(self, row: Row) -> MessageOut:
         return MessageOut(

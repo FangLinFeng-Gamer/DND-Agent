@@ -20,11 +20,15 @@ export async function api(path, options = {}) {
   return payload;
 }
 
-export async function readStreamingResponse(adventureId, content, locale, onDelta) {
+export async function readStreamingResponse(adventureId, content, locale, onDelta, options = {}) {
   const response = await fetch(`${apiBase}/api/adventures/${adventureId}/messages/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
-    body: JSON.stringify({ content, locale }),
+    body: JSON.stringify({
+      content,
+      locale,
+      ...(options.characterId ? { character_id: options.characterId } : {}),
+    }),
   });
 
   if (!response.ok) {

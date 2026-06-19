@@ -7,6 +7,7 @@ class CharacterCreate(BaseModel):
     name: str = Field(min_length=1)
     race: str = "Human"
     class_name: str = "Fighter"
+    experience_points: int = Field(default=0, ge=0)
     background: str = "Adventurer"
     alignment: str = "Neutral"
     notes: str = ""
@@ -40,6 +41,7 @@ class CharacterUpdate(BaseModel):
     race: str | None = None
     class_name: str | None = None
     level: int | None = None
+    experience_points: int | None = None
     background: str | None = None
     alignment: str | None = None
     hp_current: int | None = None
@@ -63,6 +65,10 @@ class CharacterOut(BaseModel):
     race: str
     class_name: str
     level: int
+    experience_points: int = 0
+    next_level_experience: int | None = None
+    experience_to_next_level: int = 0
+    level_progress: float = 0.0
     background: str
     alignment: str
     hp_current: int

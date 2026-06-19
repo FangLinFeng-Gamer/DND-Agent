@@ -18,7 +18,7 @@ from backend.src.agent.dm.skill_registry import (
     DMSkillRegistry,
     skills_prompt_payload,
 )
-from backend.src.agent.dm.subagents import NarrationAgent
+from backend.src.agent.dm.subagents import CombatEventAgent, NarrationAgent
 from backend.src.agent.dm.workflows import DeterministicWorkflows
 from backend.src.agent.dm.tools import DMAgentTools
 from backend.src.agent.locale import normalize_locale
@@ -31,8 +31,31 @@ from backend.src.schemas.story import StoryOut
 from backend.src.schemas.world import WorldEntryOut
 from backend.src.schemas.world_event import WorldEventCreate
 from backend.src.services.combat import CombatService
+from backend.src.services.combat_log import append_combat_log_entry
+from backend.src.services.character_state import CharacterStateService
 from backend.src.services.context import ContextBundle
 from backend.src.services.maps import MapAttackRangeError, MapService
+
+
+COMBAT_INTENT_KEYWORDS = (
+    "attack",
+    "fight",
+    "combat",
+    "strike",
+    "shoot",
+    "stab",
+    "slash",
+    "charge",
+    "ambush",
+    "攻击",
+    "战斗",
+    "开打",
+    "打它",
+    "冲向",
+    "砍",
+    "射击",
+    "伏击",
+)
 
 
 class LLMProvider(Protocol):
@@ -185,6 +208,7 @@ class DMService:
         combat_service: CombatService | None = None,
         llm_client: Any | None = None,
     ):
+        self.store = store
         self.tools = DMAgentTools(store, combat_service=combat_service)
         self.memory = AgentMemoryManager(store)
         self.adventures = self.tools.adventures
@@ -272,9 +296,20 @@ class DMService:
         locale = normalize_locale(message.locale)
         skill_context = self.skill_registry.match(message.content, locale=locale)
         adventure = self.adventures.get(adventure_id, include_messages=False)
-        self.adventures.append_message(adventure_id, "player", message.content)
-
         combat_state = self.adventures.get_combat_state(adventure_id)
+        acting_character = self._resolve_acting_character(
+            adventure_id,
+            adventure,
+            message.character_id,
+            combat_state,
+        )
+        self.adventures.append_message(
+            adventure_id,
+            "player",
+            message.content,
+            self._acting_character_metadata(acting_character),
+        )
+
         active_model = self.models.get_active_record()
         if active_model:
             try:
@@ -282,8 +317,9 @@ class DMService:
                 next_scene, dm_content, dice_result = self._advance_with_model(
                     active_model,
                     context,
+                    adventure_id,
                     adventure.current_scene,
-                    adventure.character_id,
+                    acting_character,
                     message.content,
                     combat_state,
                     locale,
@@ -307,12 +343,26 @@ class DMService:
                 combat_state,
                 locale,
             )
+        combat_state, combat_decision, dm_content = self._maybe_start_combat(
+            adventure_id,
+            adventure,
+            message.content,
+            next_scene,
+            dm_content,
+            combat_state,
+            locale,
+        )
         self.workflows.commit(adventure_id, next_scene)
+        metadata = {}
+        if dice_result:
+            metadata["dice_result"] = dice_result
+        if combat_decision:
+            metadata["combat_decision"] = combat_decision
         dm_message = self.adventures.append_message(
             adventure_id,
             "dm",
             dm_content,
-            {"dice_result": dice_result} if dice_result else {},
+            metadata,
         )
         updated = self.adventures.get(adventure_id)
         return DMAdvanceResponse(
@@ -328,11 +378,22 @@ class DMService:
         locale = normalize_locale(message.locale)
         skill_context = self.skill_registry.match(message.content, locale=locale)
         adventure = self.adventures.get(adventure_id, include_messages=False)
-        player_message = self.adventures.append_message(adventure_id, "player", message.content)
+        combat_state = self.adventures.get_combat_state(adventure_id)
+        acting_character = self._resolve_acting_character(
+            adventure_id,
+            adventure,
+            message.character_id,
+            combat_state,
+        )
+        player_message = self.adventures.append_message(
+            adventure_id,
+            "player",
+            message.content,
+            self._acting_character_metadata(acting_character),
+        )
         yield {"type": "status", "message": "dm_thinking"}
         yield {"type": "player_message", "message": player_message}
 
-        combat_state = self.adventures.get_combat_state(adventure_id)
         active_model = self.models.get_active_record()
         if active_model:
             try:
@@ -340,8 +401,9 @@ class DMService:
                 model_stream = self._stream_with_model(
                     active_model,
                     context,
+                    adventure_id,
                     adventure.current_scene,
-                    adventure.character_id,
+                    acting_character,
                     message.content,
                     combat_state,
                     locale,
@@ -377,12 +439,29 @@ class DMService:
             for chunk in chunk_text(dm_content):
                 yield {"type": "delta", "content": chunk}
 
+        previous_content = dm_content
+        combat_state, combat_decision, dm_content = self._maybe_start_combat(
+            adventure_id,
+            adventure,
+            message.content,
+            next_scene,
+            dm_content,
+            combat_state,
+            locale,
+        )
+        if dm_content != previous_content:
+            yield {"type": "delta", "content": dm_content.removeprefix(previous_content)}
         self.workflows.commit(adventure_id, next_scene)
+        metadata = {}
+        if dice_result:
+            metadata["dice_result"] = dice_result
+        if combat_decision:
+            metadata["combat_decision"] = combat_decision
         dm_message = self.adventures.append_message(
             adventure_id,
             "dm",
             dm_content,
-            {"dice_result": dice_result} if dice_result else {},
+            metadata,
         )
         updated = self.adventures.get(adventure_id)
         yield {
@@ -395,6 +474,191 @@ class DMService:
             "dice_result": dice_result,
         }
 
+    def _resolve_acting_character(
+        self,
+        adventure_id: int,
+        adventure: AdventureOut,
+        requested_character_id: int | None,
+        combat_state: dict[str, Any] | None,
+    ) -> CharacterOut:
+        party = self.adventures.get_party(adventure_id)
+        if not party:
+            return self.characters.get(adventure.character_id)
+
+        if combat_state and combat_state.get("is_active"):
+            actor = self._safe_current_combat_actor(combat_state)
+            if actor and actor.get("side") == "player":
+                matched = self._match_party_character(party, actor.get("character_id"), actor.get("name"))
+                if matched is not None:
+                    return matched
+
+        if requested_character_id is not None:
+            matched = self._match_party_character(party, requested_character_id, None)
+            if matched is not None:
+                return matched
+
+        matched = self._match_party_character(party, adventure.character_id, None)
+        return matched or party[0]
+
+    def _safe_current_combat_actor(self, state: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            return self._current_combat_actor(state)
+        except ValueError:
+            return None
+
+    def _match_party_character(
+        self,
+        party: list[CharacterOut],
+        character_id: int | None,
+        name: str | None,
+    ) -> CharacterOut | None:
+        if character_id is not None:
+            try:
+                normalized_id = int(character_id)
+            except (TypeError, ValueError):
+                normalized_id = None
+            for character in party:
+                if normalized_id is not None and character.id == normalized_id:
+                    return character
+        if name:
+            normalized = name.strip().lower()
+            for character in party:
+                if character.name.strip().lower() == normalized:
+                    return character
+        return None
+
+    def _acting_character_metadata(self, character: CharacterOut) -> dict[str, Any]:
+        return {
+            "character_id": character.id,
+            "character_name": character.name,
+            "source": "user",
+        }
+
+    def _maybe_start_combat(
+        self,
+        adventure_id: int,
+        adventure: AdventureOut,
+        player_input: str,
+        scene: SceneState,
+        dm_content: str,
+        combat_state: dict[str, Any] | None,
+        locale: str,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str]:
+        if combat_state and combat_state.get("is_active"):
+            return combat_state, None, dm_content
+
+        story = self.stories.get(adventure.story_id)
+        decision = self._story_combat_decision(story, player_input)
+        if decision is None:
+            decision = self._dynamic_combat_decision(scene, player_input, locale)
+        if decision is None:
+            return combat_state, None, dm_content
+
+        participants = [
+            self._character_to_combat_participant(character)
+            for character in self.adventures.get_party(adventure_id)
+        ]
+        participants.extend(decision["enemies"])
+        state = self.combat.start_combat(participants)
+        saved_state = self.adventures.save_combat_state(adventure_id, state)
+        self.maps.ensure_combat_tokens(adventure_id, saved_state.get("participants", []))
+        return saved_state, decision, self._append_combat_narration(dm_content, decision, locale)
+
+    def _story_combat_decision(self, story: StoryOut, player_input: str) -> dict[str, Any] | None:
+        normalized = player_input.lower()
+        for encounter in story.encounters:
+            keywords = [keyword.lower() for keyword in encounter.trigger_keywords if keyword.strip()]
+            if not keywords or not any(keyword in normalized for keyword in keywords):
+                continue
+            enemies = [enemy.model_dump() for enemy in encounter.enemies]
+            if not enemies:
+                continue
+            return {
+                "start_combat": True,
+                "source": "story",
+                "encounter_id": encounter.id,
+                "encounter_title": encounter.title,
+                "reason": encounter.description or f"Triggered by player action: {player_input}",
+                "enemies": enemies,
+            }
+        return None
+
+    def _dynamic_combat_decision(self, scene: SceneState, player_input: str, locale: str) -> dict[str, Any] | None:
+        normalized = player_input.lower()
+        if not any(keyword in normalized for keyword in COMBAT_INTENT_KEYWORDS):
+            return None
+        enemy_name = self._dynamic_enemy_name(scene, player_input, locale)
+        return {
+            "start_combat": True,
+            "source": "dm_generated",
+            "encounter_id": "dm-generated-threat",
+            "encounter_title": enemy_name,
+            "reason": (
+                "The player action turns the current scene threat into a direct fight."
+                if locale != "zh-CN"
+                else "玩家行动使当前场景威胁升级为直接战斗。"
+            ),
+            "enemies": [
+                {
+                    "name": enemy_name,
+                    "side": "enemy",
+                    "hp": 9,
+                    "hp_max": 9,
+                    "ac": 12,
+                    "attack_bonus": 3,
+                    "damage": "1d6+1",
+                    "damage_type": "bludgeoning",
+                    "kind": "npc",
+                }
+            ],
+        }
+
+    def _dynamic_enemy_name(self, scene: SceneState, player_input: str, locale: str) -> str:
+        haystack = " ".join([player_input, scene.environment, *scene.important_objects, *scene.npcs]).lower()
+        if locale == "zh-CN":
+            if "影" in haystack or "shadow" in haystack:
+                return "敌意水影"
+            if scene.npcs:
+                return f"{scene.npcs[0]}的敌对化身"
+            return f"{scene.location}威胁"
+        if "shadow" in haystack:
+            return "Hostile Shadow"
+        if "sprite" in haystack or "spirit" in haystack:
+            return "Hostile Spirit"
+        if scene.npcs:
+            return f"Hostile {scene.npcs[0]}"
+        return f"{scene.location} Threat"
+
+    def _append_combat_narration(self, dm_content: str, decision: dict[str, Any], locale: str) -> str:
+        enemy_names = ", ".join(enemy["name"] for enemy in decision["enemies"])
+        if locale == "zh-CN":
+            return (
+                f"{dm_content}\n\n"
+                f"战斗触发：{decision['reason']} 敌人出现：{enemy_names}。接下来按先攻顺序行动。"
+            )
+        return (
+            f"{dm_content}\n\n"
+            f"Combat starts: {decision['reason']} Enemies: {enemy_names}. The next actions follow initiative order."
+        )
+
+    def _character_to_combat_participant(self, character: CharacterOut) -> dict[str, Any]:
+        strength_mod = (character.strength - 10) // 2
+        dexterity_mod = (character.dexterity - 10) // 2
+        return {
+            "character_id": character.id,
+            "name": character.name,
+            "side": "player",
+            "hp": character.hp_current,
+            "hp_max": character.hp_max,
+            "ac": character.armor_class,
+            "attack_bonus": max(0, strength_mod + 2),
+            "damage": "1d8" + (f"{strength_mod:+d}" if strength_mod else ""),
+            "damage_type": "slashing",
+            "initiative_bonus": dexterity_mod,
+            "speed_ft": 30,
+            "kind": "character",
+        }
+
     def resolve_npc_combat_turn(self, adventure_id: int, locale: str = "en") -> dict[str, Any]:
         locale = normalize_locale(locale)
         adventure = self.adventures.get(adventure_id, include_messages=False)
@@ -405,6 +669,8 @@ class DMService:
         actor = self._current_combat_actor(state)
         if not self._is_npc_actor(actor):
             raise ValueError("not_npc_turn")
+        action_round = int(state.get("round_number", 1))
+        action_turn = int(state.get("turn_index", 0))
 
         decision = None
         active_model = self.models.get_active_record()
@@ -417,6 +683,15 @@ class DMService:
             decision = self._fallback_npc_decision(adventure_id, state, actor)
 
         result = self._execute_npc_decision(adventure_id, state, actor, decision)
+        entry = append_combat_log_entry(
+            result["state"],
+            result,
+            source="npc",
+            round_number=action_round,
+            turn_index=action_turn,
+        )
+        CombatEventAgent(self.store).record_important_events(adventure_id, result["state"], [entry])
+        CharacterStateService(self.store).sync_party_hp_from_combat_state(adventure_id, result["state"])
         self.adventures.save_combat_state(adventure_id, result["state"])
         return result
 
@@ -481,6 +756,7 @@ class DMService:
                     self._summarize_combatant(participant)
                     for participant in state.get("participants", [])
                 ],
+                "recent_action_log": list(state.get("action_log", []))[-10:],
             },
             "nearby_allies": allies,
             "nearby_enemies": enemies,
@@ -705,14 +981,14 @@ class DMService:
         self,
         model: LLMModelRecord,
         context: ContextBundle,
+        adventure_id: int,
         scene: SceneState,
-        character_id: int,
+        character: CharacterOut,
         player_input: str,
         combat_state: dict[str, Any] | None,
         locale: str,
         skill_context: list[DMSkill] | None = None,
     ):
-        character = self.characters.get(character_id)
         react_model = self._react_model(model)
         if react_model is not None:
             result = self.graph_runner.run(
@@ -721,8 +997,9 @@ class DMService:
                     "value": self._resolve_with_model(
                         model,
                         context,
+                        adventure_id,
                         scene,
-                        character_id,
+                        character,
                         player_input,
                         combat_state,
                         plan.model_dump(),
@@ -802,6 +1079,7 @@ class DMService:
             for chunk in chunk_text(narration):
                 yield {"type": "delta", "content": chunk}
             event_payloads = payload.get("world_events") or []
+            self._apply_character_updates(adventure_id, payload)
             self._record_world_events(context, event_payloads)
             return (
                 next_scene,
@@ -827,6 +1105,7 @@ class DMService:
         if npc_actions:
             narration = f"{narration}\n\nNPC actions: " + " ".join(str(action) for action in npc_actions)
         event_payloads = payload.get("world_events") or []
+        self._apply_character_updates(adventure_id, payload)
         self._record_world_events(context, event_payloads)
         return next_scene, narration or "The scene changes, but the DM gives no further detail.", dice_result
 
@@ -834,8 +1113,9 @@ class DMService:
         self,
         model: LLMModelRecord,
         context: ContextBundle,
+        adventure_id: int,
         scene: SceneState,
-        character_id: int,
+        character: CharacterOut,
         player_input: str,
         combat_state: dict[str, Any] | None,
         locale: str,
@@ -848,8 +1128,9 @@ class DMService:
                 "value": self._resolve_with_model(
                     model,
                     context,
+                    adventure_id,
                     scene,
-                    character_id,
+                    character,
                     player_input,
                     combat_state,
                     plan.model_dump(),
@@ -869,8 +1150,9 @@ class DMService:
         self,
         model: LLMModelRecord,
         context: ContextBundle,
+        adventure_id: int,
         scene: SceneState,
-        character_id: int,
+        character: CharacterOut,
         player_input: str,
         combat_state: dict[str, Any] | None,
         supervisor_plan: dict[str, Any],
@@ -878,7 +1160,6 @@ class DMService:
         skill_context: list[DMSkill] | None = None,
         use_narration_agent: bool = True,
     ) -> tuple[SceneState, str, dict[str, Any] | None, list[dict[str, Any]]]:
-        character = self.characters.get(character_id)
         raw_response = self.llm_client.chat(
             model,
             build_dm_messages(
@@ -900,6 +1181,7 @@ class DMService:
         if npc_actions:
             narration = f"{narration}\n\nNPC actions: " + " ".join(str(action) for action in npc_actions)
         event_payloads = payload.get("world_events") or []
+        self._apply_character_updates(adventure_id, payload)
         react_model = self._react_model(model)
         if react_model is not None and use_narration_agent:
             narrated = NarrationAgent(
@@ -930,6 +1212,12 @@ class DMService:
             dice_result,
             event_payloads,
         )
+
+    def _apply_character_updates(self, adventure_id: int, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        character_updates = payload.get("character_updates") or payload.get("character_state_changes") or []
+        if not isinstance(character_updates, list):
+            return []
+        return CharacterStateService(self.store).apply_changes(adventure_id, character_updates)
 
     def _react_model(self, model: LLMModelRecord) -> OpenAICompatibleChatModel | None:
         if not hasattr(self.llm_client, "chat_message"):
