@@ -2870,8 +2870,8 @@ button.choice-card,
   grid-area: chat;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  height: min(100%, calc(100vh - 168px));
-  max-height: calc(100vh - 168px);
+  height: min(100%, calc(100vh - 134px));
+  max-height: calc(100vh - 134px);
   min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(169, 140, 84, .34);
@@ -3698,8 +3698,8 @@ button.choice-card,
   }
 
   .room-chat-panel {
-    height: min(620px, calc(100vh - 120px));
-    max-height: min(620px, calc(100vh - 120px));
+    height: min(744px, calc(100vh - 96px));
+    max-height: min(744px, calc(100vh - 96px));
   }
 
   .room-chat-panel .messages {

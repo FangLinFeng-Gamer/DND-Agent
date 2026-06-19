@@ -171,15 +171,15 @@ def test_game_room_matches_static_compact_play_surface():
     assert "border: 1px solid rgba(169, 140, 84, .34)" in room_chat_block
     assert "border-radius: 10px" in room_chat_block
     assert "background:" in room_chat_block
-    assert "height: min(100%, calc(100vh - 168px))" in room_chat_block
-    assert "max-height: calc(100vh - 168px)" in room_chat_block
+    assert "height: min(100%, calc(100vh - 134px))" in room_chat_block
+    assert "max-height: calc(100vh - 134px)" in room_chat_block
     assert "overflow: hidden" in room_chat_block
     assert "max-height: 100%" in room_chat_messages_block
     assert "overflow-y: auto" in room_chat_messages_block
     assert "overscroll-behavior: contain" in room_chat_messages_block
     assert ".room-chat-panel {" in responsive_room_block
-    assert "height: min(620px, calc(100vh - 120px))" in responsive_room_block
-    assert "max-height: min(620px, calc(100vh - 120px))" in responsive_room_block
+    assert "height: min(744px, calc(100vh - 96px))" in responsive_room_block
+    assert "max-height: min(744px, calc(100vh - 96px))" in responsive_room_block
     assert ".room-chat-panel .messages {" in responsive_room_block
     assert "height: auto" in responsive_room_block
     assert ".room-chat-panel .chat-head" in css

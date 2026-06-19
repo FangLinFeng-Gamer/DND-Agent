@@ -5,8 +5,9 @@ def test_default_story_is_seeded(client):
     stories = response.json()
     assert any(story["id"] == "mistbell_tower" for story in stories)
     default_story = next(story for story in stories if story["id"] == "mistbell_tower")
-    assert default_story["title"] == "Mistbell Tower"
-    assert "Ravenford" in default_story["world_background"]
+    assert default_story["title"] == "月井节的失窃银铃"
+    assert "柳溪村" in default_story["world_background"]
+    assert default_story["encounters"][0]["id"] == "moonwell_sprite"
 
 
 def test_create_and_get_custom_story(client):
@@ -95,7 +96,7 @@ def test_update_default_story_is_rejected(client):
     assert response.status_code == 400
     assert response.json()["detail"]["error"]["code"] == "default_story_locked"
     default_story = client.get("/api/stories/mistbell_tower")
-    assert default_story.json()["title"] == "Mistbell Tower"
+    assert default_story.json()["title"] == "月井节的失窃银铃"
 
 
 def test_delete_default_story_is_rejected(client):

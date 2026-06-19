@@ -140,8 +140,8 @@ def test_default_story_text_can_be_localized_for_story_views():
     i18n = i18n_resource_text()
     stories = read_frontend_file("js/stories.js")
 
-    assert '"defaultStoryTitle.mistbell_tower": "Mistbell Tower"' in i18n
-    assert '"defaultStoryTitle.mistbell_tower": "迷雾钟塔"' in i18n
+    assert '"defaultStoryTitle.mistbell_tower": "The Stolen Silver Bell of Moonwell Festival"' in i18n
+    assert '"defaultStoryTitle.mistbell_tower": "月井节的失窃银铃"' in i18n
     assert '"defaultStoryDescription.mistbell_tower"' in i18n
     assert '"defaultStoryBackground.mistbell_tower"' in i18n
     assert '"defaultStoryQuest.mistbell_tower"' in i18n

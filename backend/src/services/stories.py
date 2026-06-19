@@ -10,27 +10,64 @@ DEFAULT_STORY_ID = "mistbell_tower"
 
 DEFAULT_STORY = StoryOut(
     id=DEFAULT_STORY_ID,
-    title="Mistbell Tower",
-    description="An introductory mystery around a haunted border-town signal tower.",
+    title="月井节的失窃银铃",
+    description="一个适合新手开局的边境村调查冒险，包含交涉、线索追踪和一次小型遭遇战。",
     world_background=(
-        "Ravenford is a rain-soaked border town that survives on caravan trade, peat fires, "
-        "and the old signal tower on the hill. For three nights the tower bell has rung by "
-        "itself at midnight, caravans have vanished in the fog, and pale lights now move "
-        "beneath the abandoned shrine below the road."
+        "柳溪村依靠一口古老月井生存。每年月井节，村民会摇响银铃感谢井灵守护水源。"
+        "可今年银铃在仪式前夜失踪，井水开始泛出冷冷的银光，牲畜拒绝饮水，"
+        "孩子们说夜里听见井底有人唱歌。村民努力维持节庆热闹，"
+        "但湿脚印从井边一路延伸向废弃旧磨坊。"
     ),
     main_quest=(
-        "Investigate Mistbell Tower, find the missing caravan, and decide whether to restore "
-        "or break the failing ward under the hill."
+        "找回月井银铃，查清失窃原因，阻止井水诅咒扩散，并决定如何处置被封在井下的小精露米。"
     ),
-    opening_location="Ravenford Wayhouse",
+    opening_location="柳溪村广场",
     opening_environment=(
-        "Rain taps against the shutters while worried townsfolk crowd the common room. "
-        "Mayor Elira Voss waits beside a wet map, and the old tower bell sounds once from the fog."
+        "黄昏的节庆灯笼已经点亮，糖苹果、烤栗子和木笛声挤满广场。"
+        "村长玛拉把冒险者请到月井旁，压低声音说明银铃失窃。"
+        "就在她说话时，井中传来一声空洞回响，像有人在水面下轻轻敲钟。"
     ),
-    opening_objective="Speak with Mayor Elira Voss, inspect the tower road, and find the first trace of the missing caravan.",
-    important_objects=["wet road map", "tower bell", "muddy caravan token"],
-    npcs=["Mayor Elira Voss", "Tovin Reed the wayhouse keeper"],
-    encounters=[],
+    opening_objective="询问村长玛拉，检查月井边的湿脚印，并决定先调查旧磨坊、节庆摊位，还是守夜人的小屋。",
+    important_objects=["月井银铃", "湿泥脚印", "裂开的蓝玻璃珠", "旧磨坊钥匙"],
+    npcs=["村长玛拉", "守夜人布伦", "卖糖苹果的妮娅", "井下小精露米"],
+    encounters=[
+        {
+            "id": "moonwell_sprite",
+            "title": "井下银铃的守护者",
+            "description": (
+                "玩家逼近银铃、强行夺取银铃，或在旧磨坊/月井线索处让井下威胁升级时，"
+                "井水中的小精露米或被诅咒的银光会迎战。"
+            ),
+            "trigger_keywords": [
+                "旧磨坊",
+                "磨坊",
+                "井下",
+                "月井",
+                "银铃",
+                "水下",
+                "攻击",
+                "开打",
+                "夺取银铃",
+                "拿走银铃",
+                "冲向",
+                "砍",
+            ],
+            "enemies": [
+                {
+                    "name": "井水小妖露米",
+                    "side": "enemy",
+                    "hp": 9,
+                    "hp_max": 9,
+                    "ac": 12,
+                    "attack_bonus": 3,
+                    "damage": "1d6+1",
+                    "damage_type": "cold",
+                    "initiative_bonus": 2,
+                    "kind": "npc",
+                }
+            ],
+        }
+    ],
 )
 
 
@@ -42,7 +79,7 @@ class StoryService:
         with self.store.connect() as conn:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO stories (
+                INSERT INTO stories (
                     id, title, description, world_background, main_quest,
                     opening_location, opening_environment, opening_objective,
                     important_objects_json, npcs_json, encounters_json
@@ -52,6 +89,18 @@ class StoryService:
                     :opening_location, :opening_environment, :opening_objective,
                     :important_objects_json, :npcs_json, :encounters_json
                 )
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    description = excluded.description,
+                    world_background = excluded.world_background,
+                    main_quest = excluded.main_quest,
+                    opening_location = excluded.opening_location,
+                    opening_environment = excluded.opening_environment,
+                    opening_objective = excluded.opening_objective,
+                    important_objects_json = excluded.important_objects_json,
+                    npcs_json = excluded.npcs_json,
+                    encounters_json = excluded.encounters_json,
+                    updated_at = CURRENT_TIMESTAMP
                 """,
                 self._to_db_values(DEFAULT_STORY),
             )
