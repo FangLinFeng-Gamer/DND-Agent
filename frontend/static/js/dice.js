@@ -1,4 +1,4 @@
-import { t } from "./i18n.js?v=20260620-dm-streaming";
+import { t } from "./i18n.js?v=20260620-isekai-events";
 
 const MAX_HISTORY = 10;
 const ROLL_DURATION_MS = 700;

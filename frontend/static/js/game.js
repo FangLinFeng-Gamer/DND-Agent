@@ -1,9 +1,9 @@
-import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260620-dm-streaming";
-import { apiBase, els, state } from "./state.js?v=20260620-dm-streaming";
-import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260620-dm-streaming";
-import { localizedStoryText } from "./stories.js?v=20260620-dm-streaming";
-import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260620-dm-streaming";
-import { rollD20ForCheck } from "./dice.js?v=20260620-dm-streaming";
+import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260620-isekai-events";
+import { apiBase, els, state } from "./state.js?v=20260620-isekai-events";
+import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260620-isekai-events";
+import { localizedStoryText } from "./stories.js?v=20260620-isekai-events";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260620-isekai-events";
+import { rollD20ForCheck } from "./dice.js?v=20260620-isekai-events";
 
 const ISEKAI_CREATION_PROGRESS_KEYS = [
   "isekaiProgressRace",
@@ -1739,7 +1739,7 @@ function renderIsekaiAdventureDetail(adventure, messages) {
   renderIsekaiSurvival(survival);
   renderIsekaiInventory(adventure.isekai_character);
   renderIsekaiEnvironment(adventure);
-  renderIsekaiEvents(adventure.messages || []);
+  renderIsekaiEvents(adventure);
   renderMessageList(els.isekaiMessages, messages || adventure.messages || []);
 }
 
@@ -1823,7 +1823,31 @@ function renderIsekaiEnvironment(adventure) {
   target.append(inner);
 }
 
-function renderIsekaiEvents(messages) {
+export function getIsekaiKnownWorldEvents(adventure) {
+  return Array.isArray(adventure?.world_events) ? adventure.world_events : [];
+}
+
+export function summarizeIsekaiWorldEvent(event) {
+  const metadata = event?.metadata || {};
+  const scope = String(metadata.scope || "unknown");
+  const channel = String(metadata.knowledge_channel || "unknown");
+  const source = String(metadata.source || "unknown");
+  const importance = Number.isFinite(Number(event?.importance)) ? Number(event.importance) : 0;
+  return {
+    title: event?.title || t("isekaiEventUntitled"),
+    description: event?.description || "",
+    meta: [
+      t(`isekaiEventScope.${scope}`),
+      t(`isekaiEventChannel.${channel}`),
+      t(`isekaiEventSource.${source}`),
+      t("isekaiEventImportance", { importance }),
+    ],
+    affectedArea: metadata.affected_area || metadata.location || "",
+    tags: Array.isArray(metadata.preference_tags) ? metadata.preference_tags.filter(Boolean).slice(0, 4) : [],
+  };
+}
+
+function renderIsekaiEvents(adventure) {
   const target = els.isekaiEventsPanel;
   if (!target) {
     return;
@@ -1833,23 +1857,54 @@ function renderIsekaiEvents(messages) {
   heading.textContent = t("isekaiWorldEvents");
   target.append(heading);
 
-  const recent = messages.filter((message) => message.role === "dm").slice(-5);
-  if (!recent.length) {
-    target.append(emptyNode(t("noMessagesYet")));
+  const events = getIsekaiKnownWorldEvents(adventure).slice(-6).reverse();
+  if (!events.length) {
+    target.append(emptyNode(t("isekaiNoWorldEventsYet")));
     return;
   }
 
   const list = document.createElement("div");
   list.className = "isekai-event-list";
-  recent.forEach((message) => {
+  events.forEach((event) => {
+    const summary = summarizeIsekaiWorldEvent(event);
     const card = document.createElement("article");
     card.className = "isekai-event-card";
-    const source = document.createElement("span");
-    source.className = "isekai-event-source";
-    source.textContent = localizeRole(message.role);
+    const title = document.createElement("h3");
+    title.textContent = summary.title;
+    const meta = document.createElement("div");
+    meta.className = "isekai-event-meta";
+    summary.meta.forEach((item) => {
+      const chip = document.createElement("span");
+      chip.textContent = item;
+      meta.append(chip);
+    });
     const body = document.createElement("p");
-    body.textContent = message.content;
-    card.append(source, body);
+    body.textContent = summary.description;
+    card.append(title, meta, body);
+
+    if (summary.affectedArea) {
+      const affected = document.createElement("div");
+      affected.className = "isekai-event-detail";
+      affected.innerHTML = `<span></span><strong></strong>`;
+      affected.querySelector("span").textContent = t("isekaiEventAffectedArea");
+      affected.querySelector("strong").textContent = summary.affectedArea;
+      card.append(affected);
+    }
+
+    if (summary.tags.length) {
+      const tags = document.createElement("div");
+      tags.className = "isekai-event-tags";
+      const label = document.createElement("span");
+      label.textContent = t("isekaiEventTags");
+      tags.append(label);
+      summary.tags.forEach((tag) => {
+        const chip = document.createElement("strong");
+        chip.textContent = tag;
+        tags.append(chip);
+      });
+      card.append(tags);
+    }
+
     list.append(card);
   });
   target.append(list);

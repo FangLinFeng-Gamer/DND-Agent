@@ -1,7 +1,7 @@
-import { api } from "./js/api.js?v=20260620-dm-streaming";
-import { bindElements, els, state } from "./js/state.js?v=20260620-dm-streaming";
-import { applyTranslations, setLocale, t } from "./js/i18n.js?v=20260620-dm-streaming";
-import { renderCapabilities, setStatus, showError, showView, viewFromPath } from "./js/ui.js?v=20260620-dm-streaming";
+import { api } from "./js/api.js?v=20260620-isekai-events";
+import { bindElements, els, state } from "./js/state.js?v=20260620-isekai-events";
+import { applyTranslations, setLocale, t } from "./js/i18n.js?v=20260620-isekai-events";
+import { renderCapabilities, setStatus, showError, showView, viewFromPath } from "./js/ui.js?v=20260620-isekai-events";
 import {
   deleteAdventure,
   getSelectedCharacter,
@@ -32,13 +32,13 @@ import {
   uploadMapAsset,
   createMapScene,
   syncMapTokens,
-} from "./js/game.js?v=20260620-dm-streaming";
+} from "./js/game.js?v=20260620-isekai-events";
 import {
   confirmCharacterCreation,
   ensureCharacterCreationSession,
   renderCharacterCreation,
   sendCharacterCreationMessage,
-} from "./js/character-creation.js?v=20260620-dm-streaming";
+} from "./js/character-creation.js?v=20260620-isekai-events";
 import {
   createStory,
   loadStories,
@@ -47,10 +47,10 @@ import {
   renderStoryList,
   renderStorySelect,
   resetStoryForm,
-} from "./js/stories.js?v=20260620-dm-streaming";
-import { loadModels, renderModelList, resetModelForm, saveModel, testModelConnection } from "./js/models.js?v=20260620-dm-streaming";
-import { loadRaces, renderRaceDetail, renderRaceList, renderRaceOptions } from "./js/races.js?v=20260620-dm-streaming";
-import { initDiceTray, renderDiceTray } from "./js/dice.js?v=20260620-dm-streaming";
+} from "./js/stories.js?v=20260620-isekai-events";
+import { loadModels, renderModelList, resetModelForm, saveModel, testModelConnection } from "./js/models.js?v=20260620-isekai-events";
+import { loadRaces, renderRaceDetail, renderRaceList, renderRaceOptions } from "./js/races.js?v=20260620-isekai-events";
+import { initDiceTray, renderDiceTray } from "./js/dice.js?v=20260620-isekai-events";
 
 async function loadCapabilities() {
   try {

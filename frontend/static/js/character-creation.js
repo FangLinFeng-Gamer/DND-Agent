@@ -1,14 +1,14 @@
-import { api } from "./api.js?v=20260620-dm-streaming";
-import { els, state } from "./state.js?v=20260620-dm-streaming";
+import { api } from "./api.js?v=20260620-isekai-events";
+import { els, state } from "./state.js?v=20260620-isekai-events";
 import {
   localizeBackgroundName,
   localizeClassName,
   localizeEquipmentName,
   localizeRaceName,
   t,
-} from "./i18n.js?v=20260620-dm-streaming";
-import { loadCharacters } from "./game.js?v=20260620-dm-streaming";
-import { setStatus, showError, showView, typingIndicatorNode } from "./ui.js?v=20260620-dm-streaming";
+} from "./i18n.js?v=20260620-isekai-events";
+import { loadCharacters } from "./game.js?v=20260620-isekai-events";
+import { setStatus, showError, showView, typingIndicatorNode } from "./ui.js?v=20260620-isekai-events";
 
 
 const POINT_BUY_COSTS = {

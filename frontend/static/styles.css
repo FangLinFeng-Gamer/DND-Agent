@@ -2279,6 +2279,8 @@ select:focus {
 }
 
 #isekai-events-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-area: events;
   min-height: 0;
 }
@@ -2333,35 +2335,89 @@ select:focus {
 .isekai-event-list {
   display: grid;
   gap: 10px;
-  max-height: 360px;
+  align-content: start;
+  min-height: 0;
+  max-height: 420px;
   margin-top: 12px;
   overflow: auto;
-  padding-right: 2px;
+  padding-right: 4px;
 }
 
 .isekai-event-card {
   border: 1px solid rgba(169, 140, 84, .24);
   border-radius: 7px;
   background: rgba(0, 0, 0, .22);
-  padding: 10px 11px;
+  padding: 11px 12px;
 }
 
-.isekai-event-source {
-  display: block;
-  color: #bda878;
+.isekai-event-card h3 {
+  margin: 0;
+  color: #f4dd9a;
   font-family: var(--font-display);
-  font-size: 11px;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.isekai-event-meta,
+.isekai-event-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.isekai-event-meta span,
+.isekai-event-tags strong {
+  border: 1px solid rgba(169, 140, 84, .26);
+  border-radius: 999px;
+  background: rgba(49, 43, 26, .72);
+  color: #d9c48a;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  padding: 5px 7px;
 }
 
 .isekai-event-card p {
-  margin: 6px 0 0;
+  margin: 9px 0 0;
   overflow-wrap: anywhere;
   color: #f0e2bb;
   font-size: 13px;
   line-height: 1.45;
   white-space: normal;
+}
+
+.isekai-event-detail {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 10px;
+  color: rgba(240, 226, 187, .86);
+  font-size: 12px;
+}
+
+.isekai-event-detail span,
+.isekai-event-tags > span {
+  color: #bda878;
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.isekai-event-detail strong {
+  overflow-wrap: anywhere;
+  color: #f0e2bb;
+  font-weight: 600;
+}
+
+.isekai-event-tags {
+  align-items: center;
 }
 
 .screen-title {
