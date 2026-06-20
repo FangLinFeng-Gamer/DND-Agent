@@ -580,6 +580,37 @@
             </footer>
           </div>
         </section>
+        <section id="isekai-room" class="isekai-room hidden" aria-label="Isekai survival room">
+          <header class="screen-title game-screen-title">
+            <div>
+              <span class="room-kicker" data-i18n="isekaiMode">Isekai Generator</span>
+              <h1 id="isekai-room-title" data-i18n="selectAdventure">Select an adventure</h1>
+              <p id="isekai-room-subtitle" data-i18n="isekaiRoomSubtitle">Survive the generated world.</p>
+            </div>
+            <span id="isekai-route-tag" class="route-tag">/game</span>
+          </header>
+          <div class="isekai-room-layout">
+            <aside id="isekai-character-panel" class="compact-panel"></aside>
+            <section id="isekai-environment-panel" class="panel"></section>
+            <aside id="isekai-survival-panel" class="compact-panel"></aside>
+            <aside id="isekai-inventory-panel" class="compact-panel"></aside>
+            <section class="chat-panel room-chat-panel isekai-chat-panel">
+              <div class="chat-head">
+                <div>
+                  <span class="room-kicker" data-i18n="dmAgentPanel">DM Agent</span>
+                  <h2 data-i18n="askDm">Ask the DM</h2>
+                  <p data-i18n="isekaiRoomSubtitle">Survive the generated world.</p>
+                </div>
+              </div>
+              <div id="isekai-messages" class="messages" aria-live="polite"></div>
+              <form id="isekai-message-form" class="message-form">
+                <textarea id="isekai-message-input" rows="3" required data-i18n-placeholder="messagePlaceholder"></textarea>
+                <button id="isekai-message-send" type="submit" data-i18n="askDm">Ask the DM</button>
+              </form>
+            </section>
+            <aside id="isekai-events-panel" class="compact-panel"></aside>
+          </div>
+        </section>
         </div>
       </main>
     </div>

@@ -267,11 +267,83 @@ export async function sendMessage() {
   }
 }
 
+export async function sendIsekaiMessage() {
+  if (state.dmBusy) {
+    setStatus(t("dmStillResponding"), "error");
+    return;
+  }
+  const content = els.isekaiMessageInput.value.trim();
+  if (!state.selectedAdventureId) {
+    setStatus(t("selectAdventureBeforeSending"), "error");
+    return;
+  }
+  if (!content) {
+    setStatus(t("messageContentRequired"), "error");
+    return;
+  }
+
+  const currentMessages = state.selectedAdventure?.messages || [];
+  const pendingDm = {
+    id: `pending-isekai-dm-${Date.now()}`,
+    adventure_id: state.selectedAdventureId,
+    role: "dm",
+    content: "",
+    metadata: { pending: true, mode: "isekai_survival" },
+    created_at: "",
+  };
+  const optimisticMessages = [
+    ...currentMessages,
+    {
+      id: `pending-isekai-player-${Date.now()}`,
+      adventure_id: state.selectedAdventureId,
+      role: "player",
+      content,
+      metadata: { mode: "isekai_survival" },
+      created_at: "",
+    },
+    pendingDm,
+  ];
+  renderMessageList(els.isekaiMessages, optimisticMessages);
+  setDmBusy(true);
+  setStatus(t("dmThinking"));
+
+  try {
+    const response = await readStreamingResponse(
+      state.selectedAdventureId,
+      content,
+      state.locale,
+      (delta) => {
+        pendingDm.content += delta;
+        pendingDm.metadata.pending = !pendingDm.content;
+        renderMessageList(els.isekaiMessages, optimisticMessages);
+      },
+    );
+    els.isekaiMessageInput.value = "";
+    state.selectedAdventure = response.adventure;
+    renderIsekaiAdventureDetail(response.adventure, response.messages);
+    setStatus(t("messageSent"), "ok");
+  } catch (error) {
+    showError(error);
+    if (!readErrorMessage(error.payload)) {
+      setStatus(t("dmResponseFailed"), "error");
+    }
+  } finally {
+    setDmBusy(false);
+  }
+}
+
 export function setDmBusy(isBusy) {
   state.dmBusy = isBusy;
   els.messageInput.disabled = isBusy;
   els.messageSend.disabled = isBusy;
   els.messageForm.classList.toggle("busy", isBusy);
+  if (els.isekaiMessageInput) {
+    els.isekaiMessageInput.disabled = isBusy;
+  }
+  if (els.isekaiMessageSend) {
+    els.isekaiMessageSend.disabled = isBusy;
+  }
+  els.isekaiMessageForm?.classList.toggle("busy", isBusy);
 }
 
 export async function loadCombatState(adventureId = state.selectedAdventureId) {
@@ -648,9 +720,13 @@ function assetNameFromFile(filename) {
 }
 
 export function renderMessages(messages = []) {
-  els.messages.replaceChildren();
+  renderMessageList(els.messages, messages);
+}
+
+export function renderMessageList(target, messages = []) {
+  target.replaceChildren();
   if (!messages.length) {
-    els.messages.append(emptyNode(t("noMessagesYet")));
+    target.append(emptyNode(t("noMessagesYet")));
     return;
   }
 
@@ -674,9 +750,9 @@ export function renderMessages(messages = []) {
     if (pendingCheck) {
       article.append(pendingCheck);
     }
-    els.messages.append(article);
+    target.append(article);
   });
-  els.messages.scrollTop = els.messages.scrollHeight;
+  target.scrollTop = target.scrollHeight;
 }
 
 function renderPendingCheck(message) {
@@ -1547,6 +1623,11 @@ export function renderAdventureDetail(messages, scene, combat) {
     return;
   }
 
+  if (adventureMode(adventure) === "isekai_survival") {
+    renderIsekaiAdventureDetail(adventure, messages);
+    return;
+  }
+
   els.chatTitle.textContent = adventure.title;
   els.chatSubtitle.textContent = t("adventureSubtitle", {
     status: localizeStatus(adventure.status),
@@ -1562,6 +1643,119 @@ export function renderAdventureDetail(messages, scene, combat) {
   renderMapPreview(getSelectedMapScene());
   renderMapTokens();
   renderRoomHeader(adventure, scene || adventure.current_scene);
+}
+
+function renderIsekaiAdventureDetail(adventure, messages) {
+  renderGameMode();
+  const survival = adventure.survival_state || {};
+  if (els.isekaiRoomTitle) {
+    els.isekaiRoomTitle.textContent = adventure.title;
+  }
+  if (els.isekaiRoomSubtitle) {
+    els.isekaiRoomSubtitle.textContent = [
+      survival.day ? t("isekaiDay", { day: survival.day }) : "",
+      survival.time_of_day,
+      survival.location,
+    ].filter(Boolean).join(" · ") || t("isekaiRoomSubtitle");
+  }
+  if (els.isekaiRouteTag) {
+    els.isekaiRouteTag.textContent = `/game/${adventure.id}`;
+  }
+  renderIsekaiCharacter(adventure.isekai_character);
+  renderIsekaiSurvival(survival);
+  renderIsekaiInventory(adventure.isekai_character);
+  renderIsekaiEnvironment(adventure);
+  renderIsekaiEvents(adventure.messages || []);
+  renderMessageList(els.isekaiMessages, messages || adventure.messages || []);
+}
+
+function renderIsekaiPanel(target, title, rows) {
+  if (!target) {
+    return;
+  }
+  target.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = title;
+  target.append(heading);
+  if (!rows.length) {
+    target.append(emptyNode(t("notSet")));
+    return;
+  }
+  const list = document.createElement("div");
+  list.className = "isekai-stat-list";
+  rows.forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "isekai-stat-row";
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    const valueNode = document.createElement("strong");
+    valueNode.textContent = value;
+    row.append(labelNode, valueNode);
+    list.append(row);
+  });
+  target.append(list);
+}
+
+function renderIsekaiCharacter(character) {
+  renderIsekaiPanel(els.isekaiCharacterPanel, t("isekaiGeneratedCharacter"), character ? [
+    [t("name"), character.name],
+    [t("race"), character.race],
+    [t("className"), character.class_name],
+    [t("hp"), `${character.hp_current}/${character.hp_max}`],
+    [t("gold"), character.gold],
+  ] : []);
+}
+
+function renderIsekaiSurvival(survival) {
+  renderIsekaiPanel(els.isekaiSurvivalPanel, t("isekaiSurvivalState"), survival ? [
+    [t("hunger"), survival.hunger],
+    [t("thirst"), survival.thirst],
+    [t("fatigue"), survival.fatigue],
+    [t("sleepNeed"), survival.sleep_need],
+    [t("morale"), survival.morale],
+    [t("weather"), survival.weather],
+  ] : []);
+}
+
+function renderIsekaiInventory(character) {
+  const inventory = character?.inventory || [];
+  renderIsekaiPanel(
+    els.isekaiInventoryPanel,
+    t("isekaiInventory"),
+    inventory.map((item, index) => [String(index + 1), item]),
+  );
+}
+
+function renderIsekaiEnvironment(adventure) {
+  const scene = adventure.current_scene || {};
+  const target = els.isekaiEnvironmentPanel;
+  if (!target) {
+    return;
+  }
+  target.replaceChildren();
+  const inner = document.createElement("div");
+  inner.className = "panel-inner";
+  const heading = document.createElement("h2");
+  heading.textContent = t("isekaiCurrentEnvironment");
+  const location = document.createElement("strong");
+  location.className = "isekai-location";
+  location.textContent = scene.location || t("notSet");
+  const body = document.createElement("p");
+  body.textContent = scene.environment || "";
+  const objective = document.createElement("p");
+  objective.className = "field-hint";
+  objective.textContent = scene.current_objective || "";
+  inner.append(heading, location, body, objective);
+  target.append(inner);
+}
+
+function renderIsekaiEvents(messages) {
+  const recent = messages.slice(-5).filter((message) => message.role === "dm");
+  renderIsekaiPanel(
+    els.isekaiEventsPanel,
+    t("isekaiWorldEvents"),
+    recent.map((message) => [localizeRole(message.role), message.content.slice(0, 80)]),
+  );
 }
 
 export function renderMapAssets() {
@@ -1907,9 +2101,14 @@ function renderGameMode() {
   if (!gameView) {
     return;
   }
-  const roomMode = state.gameMode === "room" && Boolean(state.selectedAdventureId);
-  gameView.classList.toggle("setup-mode", !roomMode);
-  gameView.classList.toggle("room-mode", roomMode);
+  const isRoom = state.gameMode === "room" && Boolean(state.selectedAdventureId);
+  const isIsekaiRoom = isRoom && adventureMode(state.selectedAdventure) === "isekai_survival";
+  gameView.classList.toggle("setup-mode", !isRoom);
+  gameView.classList.toggle("room-mode", isRoom && !isIsekaiRoom);
+  gameView.classList.toggle("isekai-room-mode", isIsekaiRoom);
+  els.gameSetup?.classList.toggle("hidden", isRoom);
+  els.gameRoom?.classList.toggle("hidden", !isRoom || isIsekaiRoom);
+  els.isekaiRoom?.classList.toggle("hidden", !isIsekaiRoom);
 }
 
 function renderRoomHeader(adventure, scene) {

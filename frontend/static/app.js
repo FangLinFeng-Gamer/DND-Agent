@@ -21,6 +21,7 @@ import {
   searchRules,
   selectAdventure,
   setSelectedGameMode,
+  sendIsekaiMessage,
   sendMessage,
   performCombatAction,
   endCombat,
@@ -179,6 +180,10 @@ function wireEvents() {
     event.preventDefault();
     sendMessage();
   });
+  els.isekaiMessageForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    sendIsekaiMessage();
+  });
   els.messageInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -187,6 +192,16 @@ function wireEvents() {
         return;
       }
       sendMessage();
+    }
+  });
+  els.isekaiMessageInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (state.dmBusy) {
+        setStatus(t("dmStillResponding"), "error");
+        return;
+      }
+      sendIsekaiMessage();
     }
   });
   els.combatActionAttack.addEventListener("click", () => performCombatAction("attack"));

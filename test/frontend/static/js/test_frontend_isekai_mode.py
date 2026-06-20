@@ -34,3 +34,20 @@ def test_frontend_filters_adventure_list_by_selected_mode():
     assert "adventure.mode || \"dnd\"" in game_js
     assert "state.selectedGameMode" in game_js
     assert ".filter((adventure) => adventureMode(adventure) === state.selectedGameMode)" in game_js
+
+
+def test_isekai_room_is_independent_from_dnd_room():
+    html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert 'id="isekai-room"' in html
+    assert 'id="isekai-character-panel"' in html
+    assert 'id="isekai-survival-panel"' in html
+    assert 'id="isekai-inventory-panel"' in html
+    assert 'id="isekai-environment-panel"' in html
+    assert 'id="isekai-events-panel"' in html
+    assert "renderIsekaiAdventureDetail" in game_js
+    assert 'adventureMode(adventure) === "isekai_survival"' in game_js
+    assert "renderCombat(null)" not in game_js.split("function renderIsekaiAdventureDetail", 1)[1].split("function", 1)[0]
+    assert ".isekai-room-layout" in css

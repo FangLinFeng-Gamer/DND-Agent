@@ -2182,8 +2182,19 @@ select:focus {
   padding: 0;
 }
 
+.workspace.isekai-room-mode {
+  display: block;
+  min-height: calc(100vh - 128px);
+  overflow: auto;
+  padding: 0;
+}
+
 .workspace.setup-mode .game-frame > #game-room,
-.workspace.room-mode .game-frame > #game-setup {
+.workspace.setup-mode .game-frame > #isekai-room,
+.workspace.room-mode .game-frame > #game-setup,
+.workspace.room-mode .game-frame > #isekai-room,
+.workspace.isekai-room-mode .game-frame > #game-setup,
+.workspace.isekai-room-mode .game-frame > #game-room {
   display: none;
 }
 
@@ -2213,17 +2224,109 @@ select:focus {
   box-shadow: none;
 }
 
+.workspace.isekai-room-mode .game-frame {
+  max-width: none;
+  min-height: calc(100vh - 92px);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .game-setup,
-.game-room {
+.game-room,
+.isekai-room {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
   min-height: 860px;
 }
 
-.workspace.room-mode .game-room {
+.workspace.room-mode .game-room,
+.workspace.isekai-room-mode .isekai-room {
   height: 100%;
   min-height: 0;
+}
+
+.isekai-room-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(420px, 1fr) minmax(260px, 340px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "character environment survival"
+    "inventory chat events"
+    "inventory chat events";
+  gap: 14px;
+  min-height: 0;
+  padding: 18px 20px 20px;
+}
+
+#isekai-character-panel {
+  grid-area: character;
+}
+
+#isekai-survival-panel {
+  grid-area: survival;
+}
+
+#isekai-inventory-panel {
+  grid-area: inventory;
+}
+
+#isekai-environment-panel {
+  grid-area: environment;
+  min-height: 0;
+}
+
+#isekai-events-panel {
+  grid-area: events;
+}
+
+.isekai-chat-panel {
+  grid-area: chat;
+  min-height: 520px;
+}
+
+.isekai-location {
+  color: #f0e2bb;
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.isekai-stat-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.isekai-stat-row {
+  display: grid;
+  grid-template-columns: minmax(72px, .44fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(169, 140, 84, .24);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .22);
+  padding: 9px 10px;
+}
+
+.isekai-stat-row span {
+  overflow: hidden;
+  color: #bda878;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.isekai-stat-row strong {
+  overflow: hidden;
+  color: #f0e2bb;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .screen-title {
@@ -3747,6 +3850,18 @@ button.choice-card,
       "dock";
     height: auto;
     min-height: 0;
+  }
+
+  .isekai-room-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-template-areas:
+      "character"
+      "survival"
+      "environment"
+      "inventory"
+      "chat"
+      "events";
   }
 
   .room-status,
