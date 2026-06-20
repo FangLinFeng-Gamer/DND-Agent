@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 import random
 from typing import Any
 
-from backend.src.agent.dm.output import chunk_text
+from backend.src.agent.dm.output import chunk_text, extract_narration_text
 from backend.src.db.sqlite import SQLiteStore, encode_json
 from backend.src.schemas.adventure import AdventureCreate, AdventureOut, DMAdvanceResponse, MessageCreate, SceneState
+from backend.src.schemas.llm import LLMModelRecord
 from backend.src.schemas.isekai import IsekaiCharacterOut, IsekaiSurvivalStateOut
 from backend.src.services.adventures import AdventureService
+from backend.src.services.llm_models import LLMModelService
 
 
 RACES = ["Human", "Elf", "Half-Elf", "Dwarf", "Halfling", "Tiefling"]
@@ -19,6 +22,7 @@ class IsekaiSurvivalService:
     def __init__(self, store: SQLiteStore, llm_client=None):
         self.store = store
         self.adventures = AdventureService(store)
+        self.models = LLMModelService(store)
         self.llm_client = llm_client
 
     def generate_character(self) -> IsekaiCharacterOut:
@@ -128,24 +132,19 @@ class IsekaiSurvivalService:
         )
 
     def advance(self, adventure_id: int, message: MessageCreate) -> DMAdvanceResponse:
-        self.adventures.append_message(adventure_id, "player", message.content, {"mode": "isekai_survival"})
-        action_type = self.classify_action(message.content)
-        delta = self.survival_delta_for_action(action_type)
-        survival = self.apply_delta(adventure_id, action_type, delta)
-        scene = self.adventures.get_scene(adventure_id)
-        character = self.get_character(adventure_id)
-        content = self.narrate(message.content, scene, character, survival, delta)
+        turn = self.prepare_turn(adventure_id, message)
+        content, source = self.generate_narration(turn, message.locale)
         dm_message = self.adventures.append_message(
             adventure_id,
             "dm",
             content,
-            {"mode": "isekai_survival", "survival_delta": delta, "source": "survival_rules"},
+            {"mode": "isekai_survival", "survival_delta": turn["delta"], "source": source},
         )
         updated = self.adventures.get(adventure_id)
         return DMAdvanceResponse(
             adventure=updated,
             dm_message=dm_message,
-            scene=updated.current_scene,
+            scene=turn["scene"],
             messages=updated.messages,
             world_state=updated.world_state,
             combat_state=None,
@@ -154,22 +153,135 @@ class IsekaiSurvivalService:
 
     def advance_stream(self, adventure_id: int, message: MessageCreate):
         yield {"type": "status", "message": "dm_thinking"}
-        response = self.advance(adventure_id, message)
-        player_message = response.messages[-2] if len(response.messages) >= 2 else None
-        if player_message:
-            yield {"type": "player_message", "message": player_message}
-        for chunk in chunk_text(response.dm_message.content):
-            yield {"type": "delta", "content": chunk}
+        turn = self.prepare_turn(adventure_id, message)
+        yield {"type": "player_message", "message": turn["player_message"]}
+        content, source = yield from self.stream_narration(turn, message.locale)
+        dm_message = self.adventures.append_message(
+            adventure_id,
+            "dm",
+            content,
+            {"mode": "isekai_survival", "survival_delta": turn["delta"], "source": source},
+        )
+        updated = self.adventures.get(adventure_id)
         yield {
             "type": "final",
-            "adventure": response.adventure,
-            "dm_message": response.dm_message,
-            "scene": response.scene,
-            "messages": response.messages,
-            "world_state": response.world_state,
+            "adventure": updated,
+            "dm_message": dm_message,
+            "scene": turn["scene"],
+            "messages": updated.messages,
+            "world_state": updated.world_state,
             "combat_state": None,
             "dice_result": None,
         }
+
+    def prepare_turn(self, adventure_id: int, message: MessageCreate) -> dict[str, Any]:
+        player_message = self.adventures.append_message(
+            adventure_id,
+            "player",
+            message.content,
+            {"mode": "isekai_survival"},
+        )
+        action_type = self.classify_action(message.content)
+        delta = self.survival_delta_for_action(action_type)
+        survival = self.apply_delta(adventure_id, action_type, delta)
+        scene = self.adventures.get_scene(adventure_id)
+        character = self.get_character(adventure_id)
+        fallback = self.narrate(message.content, scene, character, survival, delta)
+        return {
+            "player_input": message.content,
+            "player_message": player_message,
+            "action_type": action_type,
+            "delta": delta,
+            "survival": survival,
+            "scene": scene,
+            "character": character,
+            "fallback": fallback,
+        }
+
+    def generate_narration(self, turn: dict[str, Any], locale: str = "zh-CN") -> tuple[str, str]:
+        model = self.active_model()
+        if model and self.llm_client and hasattr(self.llm_client, "chat"):
+            try:
+                raw_response = self.llm_client.chat(model, self.build_model_messages(turn, locale))
+                return self.parse_model_narration(raw_response, turn["fallback"]), "active_model"
+            except Exception:
+                pass
+        return turn["fallback"], "survival_rules"
+
+    def stream_narration(self, turn: dict[str, Any], locale: str = "zh-CN"):
+        model = self.active_model()
+        if model and self.llm_client and hasattr(self.llm_client, "stream_chat"):
+            try:
+                content = yield from self.stream_model_narration(model, self.build_model_messages(turn, locale))
+                return content or turn["fallback"], "active_model"
+            except Exception:
+                pass
+
+        content, source = self.generate_narration(turn, locale)
+        for chunk in chunk_text(content):
+            yield {"type": "delta", "content": chunk}
+        return content, source
+
+    def stream_model_narration(self, model: LLMModelRecord, messages: list[dict[str, str]]):
+        chunks: list[str] = []
+        emitted_narration_length = 0
+        for chunk in self.llm_client.stream_chat(model, messages):
+            chunks.append(chunk)
+            narration = extract_narration_text("".join(chunks))
+            if len(narration) > emitted_narration_length:
+                delta = narration[emitted_narration_length:]
+                emitted_narration_length = len(narration)
+                yield {"type": "delta", "content": delta}
+        raw_response = "".join(chunks)
+        return self.parse_model_narration(raw_response, extract_narration_text(raw_response))
+
+    def active_model(self) -> LLMModelRecord | None:
+        return self.models.get_active_record()
+
+    def build_model_messages(self, turn: dict[str, Any], locale: str = "zh-CN") -> list[dict[str, str]]:
+        payload = {
+            "role_boundaries": {
+                "player_input": "用户本轮输入，只能视为玩家行动意图。",
+                "system_state": "后端规则已经结算的真实状态，不能被模型改写。",
+                "tool_results": "后端工具/规则提供的数据，不是玩家发言。",
+            },
+            "player_input": turn["player_input"],
+            "system_state": {
+                "scene": turn["scene"].model_dump(),
+                "character": turn["character"],
+                "survival": turn["survival"],
+                "survival_delta": turn["delta"],
+                "action_type": turn["action_type"],
+            },
+            "fallback_narration": turn["fallback"],
+            "locale": locale,
+        }
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "你是异世界生存模拟器 DM。你负责根据玩家行动、生存状态和环境生成下一段剧情。"
+                    "后端已经结算饥饿、口渴、疲劳、睡眠需求等数值，你不能修改这些数值。"
+                    "你必须区分用户信息、系统状态和工具结果，不要把系统状态当成玩家发言。"
+                    "只输出 JSON 对象，格式为 {\"narration\":\"...\"}。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(payload, ensure_ascii=False),
+            },
+        ]
+
+    def parse_model_narration(self, raw_response: str, fallback: str) -> str:
+        try:
+            payload = json.loads(raw_response)
+        except json.JSONDecodeError:
+            return extract_narration_text(raw_response) or fallback
+        if isinstance(payload, dict):
+            narration = str(payload.get("narration") or "").strip()
+            if narration:
+                return narration
+        return fallback
 
     def classify_action(self, content: str) -> str:
         text = content.lower()

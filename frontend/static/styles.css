@@ -2280,6 +2280,7 @@ select:focus {
 
 #isekai-events-panel {
   grid-area: events;
+  min-height: 0;
 }
 
 .isekai-chat-panel {
@@ -2327,6 +2328,40 @@ select:focus {
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.isekai-event-list {
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  margin-top: 12px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.isekai-event-card {
+  border: 1px solid rgba(169, 140, 84, .24);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .22);
+  padding: 10px 11px;
+}
+
+.isekai-event-source {
+  display: block;
+  color: #bda878;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.isekai-event-card p {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+  color: #f0e2bb;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: normal;
 }
 
 .screen-title {

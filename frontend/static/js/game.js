@@ -1824,12 +1824,35 @@ function renderIsekaiEnvironment(adventure) {
 }
 
 function renderIsekaiEvents(messages) {
-  const recent = messages.slice(-5).filter((message) => message.role === "dm");
-  renderIsekaiPanel(
-    els.isekaiEventsPanel,
-    t("isekaiWorldEvents"),
-    recent.map((message) => [localizeRole(message.role), message.content.slice(0, 80)]),
-  );
+  const target = els.isekaiEventsPanel;
+  if (!target) {
+    return;
+  }
+  target.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = t("isekaiWorldEvents");
+  target.append(heading);
+
+  const recent = messages.filter((message) => message.role === "dm").slice(-5);
+  if (!recent.length) {
+    target.append(emptyNode(t("noMessagesYet")));
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "isekai-event-list";
+  recent.forEach((message) => {
+    const card = document.createElement("article");
+    card.className = "isekai-event-card";
+    const source = document.createElement("span");
+    source.className = "isekai-event-source";
+    source.textContent = localizeRole(message.role);
+    const body = document.createElement("p");
+    body.textContent = message.content;
+    card.append(source, body);
+    list.append(card);
+  });
+  target.append(list);
 }
 
 export function renderMapAssets() {

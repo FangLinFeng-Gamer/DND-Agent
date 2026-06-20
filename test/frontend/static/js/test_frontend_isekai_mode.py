@@ -73,3 +73,16 @@ def test_isekai_creation_shows_step_by_step_progress():
     assert '"isekaiProgressClass": "正在生成职业..."' in text
     assert '"isekaiProgressEnvironment": "正在生成初始环境..."' in text
     assert ".isekai-progress-list" in css
+
+
+def test_isekai_world_events_use_event_cards_instead_of_stat_rows():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+
+    events_block = game_js.split("function renderIsekaiEvents", 1)[1].split("export function", 1)[0]
+    assert "isekai-event-list" in events_block
+    assert "isekai-event-card" in events_block
+    assert "renderIsekaiPanel" not in events_block
+    assert ".isekai-event-list" in css
+    assert ".isekai-event-card" in css
+    assert "white-space: normal" in css
