@@ -302,6 +302,7 @@ export const zhCNTranslations = {
   "isekaiCreateAndEnter": "随机生成并进入冒险",
   "isekaiCharacterCreating": "角色正在创建中...",
   "isekaiCharacterCreated": "角色创建完成。",
+  "isekaiProgressCurrent": "当前步骤：{step}",
   "isekaiProgressRace": "正在生成种族...",
   "isekaiProgressClass": "正在生成职业...",
   "isekaiProgressSurvival": "正在配置生存数值...",

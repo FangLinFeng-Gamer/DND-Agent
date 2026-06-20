@@ -302,6 +302,7 @@ export const enTranslations = {
   "isekaiCreateAndEnter": "Generate and Enter",
   "isekaiCharacterCreating": "Character is being created...",
   "isekaiCharacterCreated": "Character created.",
+  "isekaiProgressCurrent": "{step}",
   "isekaiProgressRace": "Generating race...",
   "isekaiProgressClass": "Generating class...",
   "isekaiProgressSurvival": "Configuring survival values...",

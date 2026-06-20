@@ -62,6 +62,9 @@ def test_isekai_creation_shows_step_by_step_progress():
     assert "startIsekaiCreationProgress" in game_js
     assert "stopIsekaiCreationProgress" in game_js
     assert "renderIsekaiCreationProgress" in game_js
+    assert "currentStepKey" in game_js
+    assert '"isekaiProgressCurrent": "{step}"' in text
+    assert '"isekaiProgressCurrent": "当前步骤：{step}"' in text
     assert '"isekaiProgressRace": "Generating race..."' in text
     assert '"isekaiProgressClass": "Generating class..."' in text
     assert '"isekaiProgressSurvival": "Configuring survival values..."' in text

@@ -197,7 +197,10 @@ export function renderIsekaiCreationProgress(activeIndex = 0) {
   els.isekaiCreateStatus.replaceChildren();
   els.isekaiCreateStatus.className = "isekai-progress-panel";
   const title = document.createElement("strong");
-  title.textContent = t(activeIndex >= ISEKAI_CREATION_PROGRESS_KEYS.length ? "isekaiCharacterCreated" : "isekaiCharacterCreating");
+  const currentStepKey = ISEKAI_CREATION_PROGRESS_KEYS[Math.min(activeIndex, ISEKAI_CREATION_PROGRESS_KEYS.length - 1)];
+  title.textContent = activeIndex >= ISEKAI_CREATION_PROGRESS_KEYS.length
+    ? t("isekaiCharacterCreated")
+    : t("isekaiProgressCurrent", { step: t(currentStepKey) });
   const list = document.createElement("ol");
   list.className = "isekai-progress-list";
   ISEKAI_CREATION_PROGRESS_KEYS.forEach((key, index) => {
