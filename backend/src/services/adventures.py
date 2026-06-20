@@ -15,6 +15,7 @@ from backend.src.services.world_state import (
     normalize_world_state,
     public_world_state_view,
 )
+from backend.src.services.world_events import WorldEventService
 
 
 class AdventureService:
@@ -323,6 +324,11 @@ class AdventureService:
         party_ids, party_characters = self._party_for_adventure(row["id"], row["character_id"])
         isekai_character = self._isekai_character_for_adventure(row["id"]) if mode == "isekai_survival" else None
         survival_state = self._isekai_survival_state_for_adventure(row["id"]) if mode == "isekai_survival" else None
+        world_events = (
+            WorldEventService(self.store).list_known_for_adventure(row["id"])
+            if mode == "isekai_survival"
+            else []
+        )
         return AdventureOut(
             id=row["id"],
             title=row["title"],
@@ -340,6 +346,7 @@ class AdventureService:
             ),
             isekai_character=isekai_character,
             survival_state=survival_state,
+            world_events=world_events,
         )
 
     def _story_from_row(self, row: Row) -> StoryOut | None:

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from backend.src.schemas.character import CharacterOut
 from backend.src.schemas.combat import CombatActionRequest, CombatParticipantInput, CombatStateOut
+from backend.src.schemas.world_event import WorldEventOut
 
 
 class AdventureCreate(BaseModel):
@@ -68,6 +69,7 @@ class AdventureOut(BaseModel):
     world_state: dict[str, Any] = Field(default_factory=dict)
     isekai_character: dict[str, Any] | None = None
     survival_state: dict[str, Any] | None = None
+    world_events: list[WorldEventOut] = Field(default_factory=list)
     messages: list[MessageOut] = Field(default_factory=list)
 
 
