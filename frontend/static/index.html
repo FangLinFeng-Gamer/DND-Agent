@@ -330,73 +330,111 @@
           <header class="screen-title game-screen-title">
             <div>
               <span class="room-kicker" data-i18n="gameSetupTitle">Game Start</span>
-              <h1 data-i18n="gameSetupTitle">Game Start</h1>
+              <div class="game-setup-title-row">
+                <h1 data-i18n="gameSetupTitle">Game Start</h1>
+                <div id="game-mode-switch" class="game-mode-switch" aria-label="Game mode">
+                  <button type="button" data-game-mode="dnd" data-i18n="dndMode">DND Mode</button>
+                  <button type="button" data-game-mode="isekai_survival" data-i18n="isekaiMode">Isekai Generator</button>
+                </div>
+              </div>
               <p data-i18n="gameSetupSubtitle">Choose a story, gather the party, then enter the room.</p>
             </div>
             <span class="route-tag">/game</span>
           </header>
 
-          <div class="setup-layout">
-            <section class="panel setup-choice-panel" aria-label="Story and party choices">
+          <div id="dnd-setup-content">
+            <div class="setup-layout">
+              <section class="panel setup-choice-panel" aria-label="Story and party choices">
+                <div class="panel-inner">
+                  <div class="section-head">
+                    <div>
+                      <h2 data-i18n="selectStory">Story and Room</h2>
+                      <p class="field-hint" data-i18n="setupStepStory">Step 1 / 2</p>
+                    </div>
+                    <button id="refresh-adventures" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+                  </div>
+                  <label class="visually-hidden">
+                    <span data-i18n="story">Story</span>
+                    <select id="story-select"></select>
+                  </label>
+                  <div id="game-story-choice-list" class="choice-grid story-choice-grid" role="list"></div>
+
+                  <div class="section-head setup-party-head">
+                    <div>
+                      <h2 data-i18n="selectPartyCharacters">Party Characters</h2>
+                      <p class="field-hint" data-i18n="setupStepParty">Step 2 / 2 - choose one to six</p>
+                    </div>
+                    <button id="refresh-characters" type="button" class="secondary" data-i18n="refresh">Refresh</button>
+                  </div>
+                  <div class="setup-inline-actions">
+                    <button type="button" class="secondary" data-view-target="character-create" data-i18n="createCharacter">Create Character</button>
+                    <span class="field-hint" data-i18n="partySelectionHint">Choose 1 to 6 player characters for this adventure.</span>
+                  </div>
+                  <div id="character-list" class="choice-grid party-character-list" role="list"></div>
+                </div>
+              </section>
+
+              <aside class="setup-side" aria-label="Start room">
+                <section class="start-card">
+                  <span class="room-kicker" data-i18n="createAdventure">Create Adventure</span>
+                  <h2 data-i18n="setupStartCardTitle">Ready the Table</h2>
+                  <p data-i18n="setupStartCardBody">The selected story and party are locked into this game room after creation.</p>
+                  <form id="adventure-form" class="compact-form setup-adventure-form">
+                    <label>
+                      <span data-i18n="title">Title</span>
+                      <input id="adventure-title" name="title" value="Watchtower Road" autocomplete="off" required data-i18n-value="defaultAdventureTitle">
+                    </label>
+                    <div id="game-party-summary" class="selected-summary"></div>
+                    <div id="game-party-warning" class="map-action-message detail-empty"></div>
+                    <button type="submit" data-i18n="createAndEnterRoom">Create and Enter Room</button>
+                  </form>
+                </section>
+
+                <section class="lock-note">
+                  <strong data-i18n="lockedPartyRuleTitle">Locked after start</strong>
+                  <span data-i18n="lockedPartyRule">The party will be locked after the adventure starts.</span>
+                </section>
+
+                <section class="panel existing-adventures-panel">
+                  <div class="panel-inner">
+                    <div class="section-head">
+                      <h2 data-i18n="existingAdventures">Existing Adventures</h2>
+                    </div>
+                    <div id="adventure-list" class="adventure-list adventure-room-list" role="list"></div>
+                  </div>
+                </section>
+              </aside>
+            </div>
+          </div>
+
+          <div id="isekai-setup-content" class="isekai-setup-content hidden">
+            <section class="panel setup-choice-panel">
               <div class="panel-inner">
                 <div class="section-head">
                   <div>
-                    <h2 data-i18n="selectStory">Story and Room</h2>
-                    <p class="field-hint" data-i18n="setupStepStory">Step 1 / 2</p>
+                    <h2 data-i18n="isekaiCreateAdventure">Create Isekai Adventure</h2>
+                    <p class="field-hint" data-i18n="isekaiCreateHint">Only title is needed. Character and world are generated.</p>
                   </div>
-                  <button id="refresh-adventures" type="button" class="secondary" data-i18n="refresh">Refresh</button>
                 </div>
-                <label class="visually-hidden">
-                  <span data-i18n="story">Story</span>
-                  <select id="story-select"></select>
-                </label>
-                <div id="game-story-choice-list" class="choice-grid story-choice-grid" role="list"></div>
-
-                <div class="section-head setup-party-head">
-                  <div>
-                    <h2 data-i18n="selectPartyCharacters">Party Characters</h2>
-                    <p class="field-hint" data-i18n="setupStepParty">Step 2 / 2 - choose one to six</p>
-                  </div>
-                  <button id="refresh-characters" type="button" class="secondary" data-i18n="refresh">Refresh</button>
-                </div>
-                <div class="setup-inline-actions">
-                  <button type="button" class="secondary" data-view-target="character-create" data-i18n="createCharacter">Create Character</button>
-                  <span class="field-hint" data-i18n="partySelectionHint">Choose 1 to 6 player characters for this adventure.</span>
-                </div>
-                <div id="character-list" class="choice-grid party-character-list" role="list"></div>
-              </div>
-            </section>
-
-            <aside class="setup-side" aria-label="Start room">
-              <section class="start-card">
-                <span class="room-kicker" data-i18n="createAdventure">Create Adventure</span>
-                <h2 data-i18n="setupStartCardTitle">Ready the Table</h2>
-                <p data-i18n="setupStartCardBody">The selected story and party are locked into this game room after creation.</p>
-                <form id="adventure-form" class="compact-form setup-adventure-form">
+                <form id="isekai-adventure-form" class="compact-form setup-adventure-form">
                   <label>
                     <span data-i18n="title">Title</span>
-                    <input id="adventure-title" name="title" value="Watchtower Road" autocomplete="off" required data-i18n-value="defaultAdventureTitle">
+                    <input id="isekai-adventure-title" autocomplete="off" required>
                   </label>
-                  <div id="game-party-summary" class="selected-summary"></div>
-                  <div id="game-party-warning" class="map-action-message detail-empty"></div>
-                  <button type="submit" data-i18n="createAndEnterRoom">Create and Enter Room</button>
+                  <div id="isekai-create-status" class="map-action-message detail-empty"></div>
+                  <div id="isekai-generated-character" class="selected-summary"></div>
+                  <button id="isekai-create-button" type="submit" data-i18n="isekaiCreateAndEnter">Generate and Enter</button>
                 </form>
-              </section>
-
-              <section class="lock-note">
-                <strong data-i18n="lockedPartyRuleTitle">Locked after start</strong>
-                <span data-i18n="lockedPartyRule">The party will be locked after the adventure starts.</span>
-              </section>
-
-              <section class="panel existing-adventures-panel">
-                <div class="panel-inner">
-                  <div class="section-head">
-                    <h2 data-i18n="existingAdventures">Existing Adventures</h2>
-                  </div>
-                  <div id="adventure-list" class="adventure-list adventure-room-list" role="list"></div>
+              </div>
+            </section>
+            <section class="panel existing-adventures-panel">
+              <div class="panel-inner">
+                <div class="section-head">
+                  <h2 data-i18n="existingAdventures">Existing Adventures</h2>
                 </div>
-              </section>
-            </aside>
+                <div id="isekai-adventure-list" class="adventure-list adventure-room-list" role="list"></div>
+              </div>
+            </section>
           </div>
         </section>
 

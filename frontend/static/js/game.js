@@ -49,6 +49,29 @@ export async function loadAdventures() {
   }
 }
 
+export function adventureMode(adventure) {
+  if (!adventure) {
+    return "dnd";
+  }
+  return adventure.mode || "dnd";
+}
+
+export function setSelectedGameMode(mode) {
+  state.selectedGameMode = mode === "isekai_survival" ? "isekai_survival" : "dnd";
+  renderGameModeSetup();
+  renderAdventureList();
+  renderAdventureDetail();
+}
+
+export function renderGameModeSetup() {
+  const isIsekai = state.selectedGameMode === "isekai_survival";
+  els.dndSetupContent?.classList.toggle("hidden", isIsekai);
+  els.isekaiSetupContent?.classList.toggle("hidden", !isIsekai);
+  els.gameModeSwitch?.querySelectorAll("[data-game-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.gameMode === state.selectedGameMode);
+  });
+}
+
 export async function createAdventure() {
   const partyIds = selectedPartyCharacterIds();
   const title = els.adventureTitle.value.trim();
@@ -86,12 +109,81 @@ export async function createAdventure() {
   }
 }
 
+export async function createIsekaiAdventure() {
+  if (state.isekaiCreating) {
+    return;
+  }
+  const title = els.isekaiAdventureTitle.value.trim();
+  if (!title) {
+    setStatus(t("adventureTitleRequired"), "error");
+    return;
+  }
+
+  state.isekaiCreating = true;
+  els.isekaiCreateButton.disabled = true;
+  els.isekaiCreateStatus.textContent = t("isekaiCharacterCreating");
+  els.isekaiCreateStatus.className = "map-action-message detail-empty";
+  try {
+    const adventure = await api("/api/adventures", {
+      method: "POST",
+      body: JSON.stringify({ title, mode: "isekai_survival", locale: state.locale }),
+    });
+    renderIsekaiGeneratedCharacter(adventure.isekai_character, adventure.survival_state);
+    state.selectedGameMode = "isekai_survival";
+    state.selectedAdventureId = adventure.id;
+    state.selectedAdventure = adventure;
+    state.gameMode = "room";
+    await loadAdventures();
+    await selectAdventure(adventure.id);
+    setStatus(t("createdAdventure", { title: adventure.title }), "ok");
+  } catch (error) {
+    showError(error);
+  } finally {
+    state.isekaiCreating = false;
+    els.isekaiCreateButton.disabled = false;
+  }
+}
+
+export function renderIsekaiGeneratedCharacter(character, survival) {
+  if (!els.isekaiGeneratedCharacter) {
+    return;
+  }
+  els.isekaiGeneratedCharacter.replaceChildren();
+  if (!character) {
+    return;
+  }
+  const rows = [
+    [t("isekaiGeneratedCharacter"), character.name],
+    [t("race"), character.race],
+    [t("className"), character.class_name],
+    [t("hp"), `${character.hp_current}/${character.hp_max}`],
+    [t("gold"), character.gold],
+  ];
+  if (survival) {
+    rows.push([t("isekaiSurvival"), `${t("hunger")} ${survival.hunger} | ${t("thirst")} ${survival.thirst} | ${t("fatigue")} ${survival.fatigue}`]);
+  }
+  rows.forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "summary-row";
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    const valueNode = document.createElement("strong");
+    valueNode.textContent = value;
+    row.append(labelNode, valueNode);
+    els.isekaiGeneratedCharacter.append(row);
+  });
+}
+
 export async function selectAdventure(id, options = {}) {
   try {
     state.selectedAdventureId = Number(id);
     state.gameMode = "room";
     state.selectedAdventure = await api(`/api/adventures/${state.selectedAdventureId}`);
-    state.selectedPartyCharacterIds = [...(state.selectedAdventure.party_character_ids || [state.selectedAdventure.character_id])];
+    state.selectedGameMode = adventureMode(state.selectedAdventure);
+    const partyIds = state.selectedAdventure.party_character_ids || [];
+    state.selectedPartyCharacterIds = partyIds.length
+      ? [...partyIds]
+      : (adventureMode(state.selectedAdventure) === "dnd" ? [state.selectedAdventure.character_id] : []);
     state.combat = await loadCombatState(state.selectedAdventureId);
     selectCurrentCombatantForRoom();
     state.combatResult = null;
@@ -184,6 +276,12 @@ export function setDmBusy(isBusy) {
 
 export async function loadCombatState(adventureId = state.selectedAdventureId) {
   if (!adventureId) {
+    return null;
+  }
+  const adventure = state.selectedAdventure?.id === Number(adventureId)
+    ? state.selectedAdventure
+    : state.adventures.find((entry) => entry.id === Number(adventureId));
+  if (adventure && adventureMode(adventure) !== "dnd") {
     return null;
   }
   return await api(`/api/adventures/${adventureId}/combat`);
@@ -1366,13 +1464,19 @@ export async function deleteCharacter(id) {
 }
 
 export function renderAdventureList() {
-  els.adventureList.replaceChildren();
-  if (!state.adventures.length) {
-    els.adventureList.append(emptyNode(t("noAdventuresYet")));
+  const target = state.selectedGameMode === "isekai_survival" ? els.isekaiAdventureList : els.adventureList;
+  [els.adventureList, els.isekaiAdventureList].forEach((list) => list?.replaceChildren());
+  renderGameModeSetup();
+  if (!target) {
+    return;
+  }
+  const adventures = state.adventures.filter((adventure) => adventureMode(adventure) === state.selectedGameMode);
+  if (!adventures.length) {
+    target.append(emptyNode(t("noAdventuresYet")));
     return;
   }
 
-  state.adventures.forEach((adventure) => {
+  adventures.forEach((adventure) => {
     const item = document.createElement("div");
     item.className = `adventure-item ${adventure.id === state.selectedAdventureId ? "active" : ""}`;
     const summary = document.createElement("button");
@@ -1385,7 +1489,7 @@ export function renderAdventureList() {
       status: localizeStatus(adventure.status),
       characterId: adventure.character_id,
       party: partyNames,
-      count: adventure.party_character_ids?.length || 1,
+      count: adventureMode(adventure) === "isekai_survival" ? 1 : (adventure.party_character_ids?.length || 1),
     });
     summary.addEventListener("click", () => selectAdventure(adventure.id));
     const actions = document.createElement("div");
@@ -1397,7 +1501,7 @@ export function renderAdventureList() {
     remove.addEventListener("click", () => deleteAdventure(adventure.id));
     actions.append(remove);
     item.append(summary, actions);
-    els.adventureList.append(item);
+    target.append(item);
   });
 }
 
@@ -1424,6 +1528,7 @@ export async function deleteAdventure(id) {
 
 export function renderAdventureDetail(messages, scene, combat) {
   const adventure = state.selectedAdventure;
+  renderGameModeSetup();
   renderGameMode();
   renderPartySummary();
   renderRoomParty();
@@ -1869,6 +1974,9 @@ function isCurrentPartyMember(character) {
 }
 
 function partyNamesForAdventure(adventure) {
+  if (adventureMode(adventure) === "isekai_survival") {
+    return adventure.isekai_character?.name || t("isekaiGeneratedCharacter");
+  }
   const party = adventure.party_characters || [];
   if (party.length) {
     return party.map((character) => character.name).join(", ");

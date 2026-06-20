@@ -7,8 +7,10 @@ import {
   getSelectedCharacter,
   loadAdventures,
   createAdventure,
+  createIsekaiAdventure,
   renderAdventureDetail,
   renderAdventureList,
+  renderGameModeSetup,
   renderCharacter,
   renderCharacterList,
   renderMapAssets,
@@ -18,6 +20,7 @@ import {
   renderRules,
   searchRules,
   selectAdventure,
+  setSelectedGameMode,
   sendMessage,
   performCombatAction,
   endCombat,
@@ -71,6 +74,7 @@ function renderLocalizedViews() {
   renderCharacterList();
   renderCharacter(getSelectedCharacter());
   renderAdventureList();
+  renderGameModeSetup();
   renderAdventureDetail();
   renderMapAssets();
   renderMapScenes();
@@ -90,6 +94,7 @@ async function openView(view, options = {}) {
     state.selectedAdventure = null;
     state.routeAdventureId = null;
     state.combat = null;
+    state.selectedGameMode = "dnd";
   }
   showView(view, options);
   if (view === "character-create") {
@@ -159,6 +164,16 @@ function wireEvents() {
   els.adventureForm.addEventListener("submit", (event) => {
     event.preventDefault();
     createAdventure();
+  });
+  els.gameModeSwitch.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-game-mode]");
+    if (button) {
+      setSelectedGameMode(button.dataset.gameMode);
+    }
+  });
+  els.isekaiAdventureForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createIsekaiAdventure();
   });
   els.messageForm.addEventListener("submit", (event) => {
     event.preventDefault();
