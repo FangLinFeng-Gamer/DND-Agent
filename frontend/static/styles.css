@@ -2687,6 +2687,67 @@ button.choice-card,
   padding: 0;
 }
 
+.isekai-progress-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(240, 208, 96, .26);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .24);
+  color: #e8dcc0;
+  padding: 10px;
+}
+
+.isekai-progress-panel strong {
+  color: var(--gold-bright);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: .04em;
+}
+
+.isekai-progress-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.isekai-progress-list li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: #bda878;
+  font-size: 13px;
+}
+
+.isekai-progress-list li::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(240, 208, 96, .42);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .2);
+}
+
+.isekai-progress-list li.active {
+  color: #f0e2bb;
+}
+
+.isekai-progress-list li.active::before {
+  background: var(--gold-bright);
+  box-shadow: 0 0 10px rgba(240, 208, 96, .55);
+}
+
+.isekai-progress-list li.complete {
+  color: var(--good);
+}
+
+.isekai-progress-list li.complete::before {
+  border-color: var(--good);
+  background: var(--good);
+}
+
 .summary-row {
   display: grid;
   grid-template-columns: 86px minmax(0, 1fr);

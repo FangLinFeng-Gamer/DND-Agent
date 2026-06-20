@@ -5,6 +5,16 @@ import { localizedStoryText } from "./stories.js?v=20260620-dm-streaming";
 import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260620-dm-streaming";
 import { rollD20ForCheck } from "./dice.js?v=20260620-dm-streaming";
 
+const ISEKAI_CREATION_PROGRESS_KEYS = [
+  "isekaiProgressRace",
+  "isekaiProgressClass",
+  "isekaiProgressSurvival",
+  "isekaiProgressEnvironment",
+  "isekaiProgressSave",
+];
+let isekaiCreationProgressTimer = null;
+let isekaiCreationProgressIndex = 0;
+
 export async function loadCharacters() {
   try {
     state.characters = await api("/api/characters");
@@ -121,13 +131,16 @@ export async function createIsekaiAdventure() {
 
   state.isekaiCreating = true;
   els.isekaiCreateButton.disabled = true;
-  els.isekaiCreateStatus.textContent = t("isekaiCharacterCreating");
-  els.isekaiCreateStatus.className = "map-action-message detail-empty";
+  startIsekaiCreationProgress();
   try {
-    const adventure = await api("/api/adventures", {
-      method: "POST",
-      body: JSON.stringify({ title, mode: "isekai_survival", locale: state.locale }),
-    });
+    const [adventure] = await Promise.all([
+      api("/api/adventures", {
+        method: "POST",
+        body: JSON.stringify({ title, mode: "isekai_survival", locale: state.locale }),
+      }),
+      wait(1600),
+    ]);
+    stopIsekaiCreationProgress(true);
     renderIsekaiGeneratedCharacter(adventure.isekai_character, adventure.survival_state);
     state.selectedGameMode = "isekai_survival";
     state.selectedAdventureId = adventure.id;
@@ -137,11 +150,69 @@ export async function createIsekaiAdventure() {
     await selectAdventure(adventure.id);
     setStatus(t("createdAdventure", { title: adventure.title }), "ok");
   } catch (error) {
+    stopIsekaiCreationProgress(false);
     showError(error);
   } finally {
     state.isekaiCreating = false;
     els.isekaiCreateButton.disabled = false;
   }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+export function startIsekaiCreationProgress() {
+  stopIsekaiCreationProgress(false, { clear: true });
+  isekaiCreationProgressIndex = 0;
+  renderIsekaiCreationProgress(isekaiCreationProgressIndex);
+  isekaiCreationProgressTimer = window.setInterval(() => {
+    isekaiCreationProgressIndex = Math.min(
+      isekaiCreationProgressIndex + 1,
+      ISEKAI_CREATION_PROGRESS_KEYS.length - 1,
+    );
+    renderIsekaiCreationProgress(isekaiCreationProgressIndex);
+  }, 360);
+}
+
+export function stopIsekaiCreationProgress(completed = false, options = {}) {
+  if (isekaiCreationProgressTimer) {
+    window.clearInterval(isekaiCreationProgressTimer);
+    isekaiCreationProgressTimer = null;
+  }
+  if (completed) {
+    renderIsekaiCreationProgress(ISEKAI_CREATION_PROGRESS_KEYS.length);
+  } else if (options.clear && els.isekaiCreateStatus) {
+    els.isekaiCreateStatus.replaceChildren();
+    els.isekaiCreateStatus.className = "map-action-message detail-empty";
+  }
+}
+
+export function renderIsekaiCreationProgress(activeIndex = 0) {
+  if (!els.isekaiCreateStatus) {
+    return;
+  }
+  els.isekaiCreateStatus.replaceChildren();
+  els.isekaiCreateStatus.className = "isekai-progress-panel";
+  const title = document.createElement("strong");
+  title.textContent = t(activeIndex >= ISEKAI_CREATION_PROGRESS_KEYS.length ? "isekaiCharacterCreated" : "isekaiCharacterCreating");
+  const list = document.createElement("ol");
+  list.className = "isekai-progress-list";
+  ISEKAI_CREATION_PROGRESS_KEYS.forEach((key, index) => {
+    const item = document.createElement("li");
+    if (index < activeIndex || activeIndex >= ISEKAI_CREATION_PROGRESS_KEYS.length) {
+      item.className = "complete";
+    } else if (index === activeIndex) {
+      item.className = "active";
+    } else {
+      item.className = "pending";
+    }
+    item.textContent = t(key);
+    list.append(item);
+  });
+  els.isekaiCreateStatus.append(title, list);
 }
 
 export function renderIsekaiGeneratedCharacter(character, survival) {

@@ -51,3 +51,22 @@ def test_isekai_room_is_independent_from_dnd_room():
     assert 'adventureMode(adventure) === "isekai_survival"' in game_js
     assert "renderCombat(null)" not in game_js.split("function renderIsekaiAdventureDetail", 1)[1].split("function", 1)[0]
     assert ".isekai-room-layout" in css
+
+
+def test_isekai_creation_shows_step_by_step_progress():
+    text = frontend_text()
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "ISEKAI_CREATION_PROGRESS_KEYS" in game_js
+    assert "startIsekaiCreationProgress" in game_js
+    assert "stopIsekaiCreationProgress" in game_js
+    assert "renderIsekaiCreationProgress" in game_js
+    assert '"isekaiProgressRace": "Generating race..."' in text
+    assert '"isekaiProgressClass": "Generating class..."' in text
+    assert '"isekaiProgressSurvival": "Configuring survival values..."' in text
+    assert '"isekaiProgressEnvironment": "Generating starting environment..."' in text
+    assert '"isekaiProgressRace": "正在生成种族..."' in text
+    assert '"isekaiProgressClass": "正在生成职业..."' in text
+    assert '"isekaiProgressEnvironment": "正在生成初始环境..."' in text
+    assert ".isekai-progress-list" in css
