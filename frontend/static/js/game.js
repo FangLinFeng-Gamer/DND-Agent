@@ -1837,14 +1837,20 @@ export function summarizeIsekaiWorldEvent(event) {
     title: event?.title || t("isekaiEventUntitled"),
     description: event?.description || "",
     meta: [
-      t(`isekaiEventScope.${scope}`),
-      t(`isekaiEventChannel.${channel}`),
-      t(`isekaiEventSource.${source}`),
+      translateIsekaiEventEnum("isekaiEventScope", scope),
+      translateIsekaiEventEnum("isekaiEventChannel", channel),
+      translateIsekaiEventEnum("isekaiEventSource", source),
       t("isekaiEventImportance", { importance }),
     ],
     affectedArea: metadata.affected_area || metadata.location || "",
     tags: Array.isArray(metadata.preference_tags) ? metadata.preference_tags.filter(Boolean).slice(0, 4) : [],
   };
+}
+
+function translateIsekaiEventEnum(prefix, value) {
+  const key = `${prefix}.${value || "unknown"}`;
+  const localized = t(key);
+  return localized === key ? t(`${prefix}.unknown`) : localized;
 }
 
 function renderIsekaiEvents(adventure) {
@@ -1885,9 +1891,11 @@ function renderIsekaiEvents(adventure) {
     if (summary.affectedArea) {
       const affected = document.createElement("div");
       affected.className = "isekai-event-detail";
-      affected.innerHTML = `<span></span><strong></strong>`;
-      affected.querySelector("span").textContent = t("isekaiEventAffectedArea");
-      affected.querySelector("strong").textContent = summary.affectedArea;
+      const label = document.createElement("span");
+      label.textContent = t("isekaiEventAffectedArea");
+      const value = document.createElement("strong");
+      value.textContent = summary.affectedArea;
+      affected.append(label, value);
       card.append(affected);
     }
 

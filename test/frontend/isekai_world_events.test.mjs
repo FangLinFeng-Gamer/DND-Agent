@@ -42,3 +42,18 @@ test("summarizes known isekai world events from adventure payload", () => {
   assert.equal(summary.affectedArea, "雾林边境");
   assert.deepEqual(summary.tags, ["美食", "社交"]);
 });
+
+test("falls back to known labels for unknown event enums", () => {
+  const summary = game.summarizeIsekaiWorldEvent({
+    title: "陌生公告出现在城门口",
+    description: "公告没有署名。",
+    importance: 2,
+    metadata: {
+      scope: "planar",
+      source: "notice_board",
+      knowledge_channel: "npc_rumor",
+    },
+  });
+
+  assert.deepEqual(summary.meta, ["范围未知", "途径未知", "来源未知", "重要度 2"]);
+});
