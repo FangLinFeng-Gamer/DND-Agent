@@ -77,7 +77,7 @@ def build_dm_messages(
             "content": (
                 "You are a DND 5e dungeon master. "
                 f"{DND_GAME_LOOP_GUIDANCE}\n\n"
-                "Return only valid JSON with narration, scene, "
+                'Return only valid JSON. "narration" must be the first top-level key, followed by scene, '
                 "requires_check, check, npc_actions, character_updates, and world_events. Ask for ability checks when "
                 "success is uncertain. Important irreversible changes must be included in world_events. "
                 "The character and acting_character fields are the selected/acting player character for this input, "
@@ -91,6 +91,8 @@ def build_dm_messages(
                 "The user-provided input and conversation_context entries with source=user are player intent. "
                 "agent_context entries are agent-produced analysis or memory, including combat_event_agent facts. "
                 "tool_context entries are deterministic tool state, not new player commands. "
+                "If tool_context contains an ability_check_result, continue the prior action from that result "
+                "instead of treating it as a fresh player intent. "
                 "tool_context.world_state is the current adventure-local world pressure state. "
                 "tool_context.world_state.visible_events are facts the players can already perceive. "
                 "tool_context.world_state.pending_visible_events are consequences of this input that should be "

@@ -37,6 +37,12 @@ class MessageCreate(BaseModel):
     character_id: int | None = None
 
 
+class AbilityCheckResolveRequest(BaseModel):
+    message_id: int
+    roll: int = Field(ge=1, le=20)
+    locale: str = "en"
+
+
 class MessageOut(BaseModel):
     id: int
     adventure_id: int

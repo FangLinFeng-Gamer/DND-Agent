@@ -1,6 +1,6 @@
-import { apiBase, els, state } from "./state.js?v=20260619-world-state-progress";
-import { readErrorMessage } from "./api.js?v=20260619-world-state-progress";
-import { localizeFeature, t } from "./i18n.js?v=20260619-world-state-progress";
+import { apiBase, els, state } from "./state.js?v=20260620-dm-streaming";
+import { readErrorMessage } from "./api.js?v=20260620-dm-streaming";
+import { localizeFeature, t } from "./i18n.js?v=20260620-dm-streaming";
 
 export const VIEW_ROUTES = {
   home: "/home",

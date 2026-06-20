@@ -1,4 +1,4 @@
-import { t } from "./i18n.js?v=20260619-world-state-progress";
+import { t } from "./i18n.js?v=20260620-dm-streaming";
 
 const MAX_HISTORY = 10;
 const ROLL_DURATION_MS = 700;
@@ -11,7 +11,9 @@ let rolling = false;
 
 export function initDiceTray() {
   document.querySelectorAll("#dice-buttons .die-btn").forEach((button) => {
-    button.addEventListener("click", () => rollDie(Number(button.dataset.die)));
+    button.addEventListener("click", () => {
+      rollDie(Number(button.dataset.die)).catch(() => {});
+    });
   });
   renderDiceTray();
 }
@@ -35,32 +37,43 @@ export function renderDiceTray() {
   renderHistory();
 }
 
-function rollDie(sides) {
-  const result = document.getElementById("dice-result");
-  if (rolling || !result) {
-    return;
-  }
-  rolling = true;
-  result.className = "dice-result rolling";
-  const started = Date.now();
-  const timer = setInterval(() => {
-    result.innerHTML = faceMarkup(rollValue(sides), `d${sides}`);
-    if (Date.now() - started >= ROLL_DURATION_MS) {
-      clearInterval(timer);
-      const value = rollValue(sides);
-      history.unshift({
-        sides,
-        value,
-        crit: sides === 20 && value === 20,
-        fumble: sides === 20 && value === 1,
-      });
-      if (history.length > MAX_HISTORY) {
-        history.pop();
-      }
-      rolling = false;
-      renderDiceTray();
+export function rollDie(sides, options = {}) {
+  return new Promise((resolve, reject) => {
+    const result = document.getElementById("dice-result");
+    if (rolling || !result) {
+      reject(new Error("dice_unavailable"));
+      return;
     }
-  }, ROLL_TICK_MS);
+    rolling = true;
+    result.className = "dice-result rolling";
+    const started = Date.now();
+    const timer = setInterval(() => {
+      result.innerHTML = faceMarkup(rollValue(sides), options.label || `d${sides}`);
+      if (Date.now() - started >= ROLL_DURATION_MS) {
+        clearInterval(timer);
+        const value = rollValue(sides);
+        const entry = {
+          sides,
+          value,
+          label: options.label || "",
+          crit: sides === 20 && value === 20,
+          fumble: sides === 20 && value === 1,
+        };
+        history.unshift(entry);
+        if (history.length > MAX_HISTORY) {
+          history.pop();
+        }
+        rolling = false;
+        renderDiceTray();
+        resolve(entry);
+      }
+    }, ROLL_TICK_MS);
+  });
+}
+
+export function rollD20ForCheck(check) {
+  const ability = check?.ability ? t(`ability.${check.ability}`) : t("abilityCheck");
+  return rollDie(20, { label: ability });
 }
 
 function rollValue(sides) {
@@ -73,12 +86,12 @@ function faceMarkup(value, caption) {
 
 function captionFor(entry) {
   if (entry.crit) {
-    return `d${entry.sides} · ${t("diceCrit")}`;
+    return `d${entry.sides} · ${entry.label ? `${entry.label} · ` : ""}${t("diceCrit")}`;
   }
   if (entry.fumble) {
-    return `d${entry.sides} · ${t("diceFumble")}`;
+    return `d${entry.sides} · ${entry.label ? `${entry.label} · ` : ""}${t("diceFumble")}`;
   }
-  return `d${entry.sides}`;
+  return entry.label ? `d${entry.sides} · ${entry.label}` : `d${entry.sides}`;
 }
 
 function renderHistory() {
@@ -94,7 +107,7 @@ function renderHistory() {
     } else if (entry.fumble) {
       item.className = "fumble";
     }
-    item.textContent = `d${entry.sides} · ${entry.value}`;
+    item.textContent = `d${entry.sides} · ${entry.value}${entry.label ? ` · ${entry.label}` : ""}`;
     list.append(item);
   });
 }

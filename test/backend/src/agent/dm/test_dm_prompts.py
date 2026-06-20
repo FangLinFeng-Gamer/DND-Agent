@@ -72,6 +72,49 @@ def test_dm_system_prompt_uses_core_dnd_game_loop_guidance():
     assert DND_GAME_LOOP_GUIDANCE in messages[0]["content"]
 
 
+def test_dm_system_prompt_requires_narration_as_first_json_key_for_streaming():
+    context = ContextBundle(
+        summary="",
+        recent_messages=[],
+        important_events=[],
+        estimated_tokens=1,
+    )
+    scene = SceneState(
+        location="Gate",
+        environment="A wet stone gate.",
+        important_objects=["door"],
+        npcs=[],
+        current_objective="Enter safely.",
+        world_changes=[],
+    )
+    character = CharacterOut(
+        id=1,
+        name="Mira",
+        race="Human",
+        class_name="Fighter",
+        level=1,
+        background="Soldier",
+        alignment="Neutral",
+        hp_current=10,
+        hp_max=10,
+        armor_class=12,
+        strength=14,
+        dexterity=10,
+        constitution=10,
+        intelligence=10,
+        wisdom=10,
+        charisma=10,
+        skills={},
+        inventory=[],
+        spells=[],
+        notes="",
+    )
+
+    messages = build_dm_messages(context, scene, character, "I inspect the door.", None)
+
+    assert '"narration" must be the first top-level key' in messages[0]["content"]
+
+
 def test_dm_prompt_separates_user_agent_and_tool_context():
     context = ContextBundle(
         summary="",

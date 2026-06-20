@@ -108,6 +108,28 @@ class AdventureService:
             row = conn.execute("SELECT * FROM messages WHERE id = ?", (cursor.lastrowid,)).fetchone()
         return self._map_message_row(row)
 
+    def get_message(self, message_id: int) -> MessageOut:
+        with self.store.connect() as conn:
+            row = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+        if row is None:
+            raise api_error(404, "message_not_found", "Message not found.")
+        return self._map_message_row(row)
+
+    def update_message_metadata(self, message_id: int, metadata: dict[str, Any]) -> MessageOut:
+        with self.store.connect() as conn:
+            result = conn.execute(
+                """
+                UPDATE messages
+                SET metadata_json = :metadata_json
+                WHERE id = :message_id
+                """,
+                {"message_id": message_id, "metadata_json": encode_json(metadata)},
+            )
+            row = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+        if result.rowcount == 0 or row is None:
+            raise api_error(404, "message_not_found", "Message not found.")
+        return self._map_message_row(row)
+
     def list_messages(self, adventure_id: int) -> List[MessageOut]:
         self._get_adventure_row(adventure_id)
         with self.store.connect() as conn:

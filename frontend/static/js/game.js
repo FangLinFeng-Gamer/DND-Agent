@@ -1,8 +1,9 @@
-import { api, readErrorMessage, readStreamingResponse } from "./api.js?v=20260619-world-state-progress";
-import { apiBase, els, state } from "./state.js?v=20260619-world-state-progress";
-import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260619-world-state-progress";
-import { localizedStoryText } from "./stories.js?v=20260619-world-state-progress";
-import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260619-world-state-progress";
+import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260620-dm-streaming";
+import { apiBase, els, state } from "./state.js?v=20260620-dm-streaming";
+import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260620-dm-streaming";
+import { localizedStoryText } from "./stories.js?v=20260620-dm-streaming";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260620-dm-streaming";
+import { rollD20ForCheck } from "./dice.js?v=20260620-dm-streaming";
 
 export async function loadCharacters() {
   try {
@@ -571,9 +572,92 @@ export function renderMessages(messages = []) {
     }
 
     article.append(role, content);
+    const pendingCheck = renderPendingCheck(message);
+    if (pendingCheck) {
+      article.append(pendingCheck);
+    }
     els.messages.append(article);
   });
   els.messages.scrollTop = els.messages.scrollHeight;
+}
+
+function renderPendingCheck(message) {
+  const check = message.metadata?.pending_check;
+  if (!check) {
+    return null;
+  }
+  const result = message.metadata?.dice_result;
+  const wrap = document.createElement("div");
+  wrap.className = `message-check ${check.status === "resolved" ? "resolved" : "pending"}`;
+
+  const title = document.createElement("strong");
+  title.textContent = check.status === "resolved" ? t("resolvedCheckTitle") : t("pendingCheckTitle");
+
+  const meta = document.createElement("span");
+  meta.className = "message-check-meta";
+  meta.textContent = [
+    abilityLabel(check.ability),
+    `DC ${check.dc}`,
+    check.character_name || "",
+    check.reason || "",
+  ].filter(Boolean).join(" · ");
+  wrap.append(title, meta);
+
+  if (check.status === "resolved" && result) {
+    const outcome = document.createElement("span");
+    outcome.className = "message-check-result";
+    outcome.textContent = t(result.success ? "checkSucceeded" : "checkFailed", {
+      roll: result.kept,
+      modifier: signedNumber(result.modifier),
+      total: result.total,
+      dc: result.dc,
+    });
+    wrap.append(outcome);
+    return wrap;
+  }
+
+  if (check.status === "pending") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = t("rollCheck");
+    button.addEventListener("click", () => resolveMessageCheck(message, check, button));
+    wrap.append(button);
+  }
+  return wrap;
+}
+
+async function resolveMessageCheck(message, check, button) {
+  if (!state.selectedAdventureId || !check?.id) {
+    return;
+  }
+  button.disabled = true;
+  setStatus(t("rollingCheck"));
+  try {
+    const roll = await rollD20ForCheck(check);
+    setStatus(t("resolvingCheck"));
+    const response = await resolvePendingCheck(state.selectedAdventureId, check.id, {
+      message_id: message.id,
+      roll: roll.value,
+      locale: state.locale,
+    });
+    state.selectedAdventure = response.adventure;
+    state.combat = response.combat_state;
+    renderAdventureDetail(response.messages, response.scene, response.combat_state);
+    setStatus(t("checkResolved"), "ok");
+    await resolveNpcTurns();
+  } catch (error) {
+    showError(error);
+    button.disabled = false;
+  }
+}
+
+function abilityLabel(ability) {
+  return ability ? t(`ability.${ability}`) : t("abilityCheck");
+}
+
+function signedNumber(value) {
+  const number = Number(value || 0);
+  return number > 0 ? `+${number}` : `${number}`;
 }
 
 export function renderCharacter(character) {

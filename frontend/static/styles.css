@@ -1384,6 +1384,41 @@ select:focus {
   white-space: pre-wrap;
 }
 
+.message-check {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  border: 1px solid rgba(122, 90, 40, .28);
+  border-radius: 7px;
+  background: rgba(255, 248, 220, .38);
+  padding: 8px;
+}
+
+.message-check strong {
+  color: var(--blood);
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: .04em;
+}
+
+.message-check-meta,
+.message-check-result {
+  color: var(--ink-faded);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.message-check button {
+  width: fit-content;
+  min-height: 34px;
+  border-radius: 7px;
+  padding: 7px 11px;
+}
+
+.message-check.resolved {
+  background: rgba(233, 214, 154, .34);
+}
+
 /* illuminated drop cap on the DM's narration */
 .message.dm p::first-letter {
   float: left;

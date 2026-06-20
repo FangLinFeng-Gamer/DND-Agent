@@ -1,4 +1,4 @@
-import { apiBase } from "./state.js?v=20260619-world-state-progress";
+import { apiBase } from "./state.js?v=20260620-dm-streaming";
 
 export async function api(path, options = {}) {
   const headers = {
@@ -77,6 +77,13 @@ export async function readStreamingResponse(adventureId, content, locale, onDelt
     throw new Error("Streaming response ended without final payload.");
   }
   return finalPayload;
+}
+
+export async function resolvePendingCheck(adventureId, checkId, payload) {
+  return api(`/api/adventures/${adventureId}/checks/${encodeURIComponent(checkId)}/resolve`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function parseStreamEvent(line) {

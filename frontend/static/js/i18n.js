@@ -1,6 +1,6 @@
-import { els, state } from "./state.js?v=20260619-world-state-progress";
-import { enTranslations } from "./locales/en.js?v=20260619-world-state-progress";
-import { zhCNTranslations } from "./locales/zh-CN.js?v=20260619-world-state-progress";
+import { els, state } from "./state.js?v=20260620-dm-streaming";
+import { enTranslations } from "./locales/en.js?v=20260620-dm-streaming";
+import { zhCNTranslations } from "./locales/zh-CN.js?v=20260620-dm-streaming";
 
 export const translations = {
   en: enTranslations,

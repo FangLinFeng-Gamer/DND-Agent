@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 
 from backend.src.core.errors import api_error
 from backend.src.schemas.adventure import (
+    AbilityCheckResolveRequest,
     AdventureCombatActionRequest,
     AdventureCombatActionResponse,
     AdventureNPCCombatTurnRequest,
@@ -164,6 +165,16 @@ def append_message_stream(adventure_id: int, message: MessageCreate, request: Re
             lock_context.__exit__(None, None, None)
 
     return StreamingResponse(stream_events(), media_type="application/x-ndjson")
+
+
+@router.post("/{adventure_id}/checks/{check_id}/resolve", response_model=DMAdvanceResponse)
+def resolve_check(
+    adventure_id: int,
+    check_id: str,
+    payload: AbilityCheckResolveRequest,
+    request: Request,
+) -> DMAdvanceResponse:
+    return dm_service(request).resolve_pending_check(adventure_id, check_id, payload)
 
 
 @router.post("/{adventure_id}/combat/start", response_model=CombatStateOut)

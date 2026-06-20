@@ -23,12 +23,21 @@ from backend.src.agent.dm.tools import DMAgentTools
 from backend.src.agent.locale import normalize_locale
 from backend.src.agent.llm.client import OpenAICompatibleClient
 from backend.src.agent.llm.langchain_model import OpenAICompatibleChatModel
-from backend.src.schemas.adventure import AdventureCreate, AdventureOut, DMAdvanceResponse, MessageCreate, SceneState
+from backend.src.schemas.adventure import (
+    AbilityCheckResolveRequest,
+    AdventureCreate,
+    AdventureOut,
+    DMAdvanceResponse,
+    MessageCreate,
+    MessageOut,
+    SceneState,
+)
 from backend.src.schemas.character import CharacterOut
 from backend.src.schemas.llm import LLMModelRecord
 from backend.src.schemas.story import StoryOut
 from backend.src.schemas.world import WorldEntryOut
 from backend.src.schemas.world_event import WorldEventCreate
+from backend.src.core.errors import api_error
 from backend.src.services.combat import CombatService
 from backend.src.services.combat_log import append_combat_log_entry
 from backend.src.services.character_state import CharacterStateService
@@ -323,7 +332,7 @@ class DMService:
         if active_model:
             try:
                 context = self.workflows.run_memory(adventure_id, active_model.max_context_tokens)
-                next_scene, dm_content, dice_result = self._advance_with_model(
+                next_scene, dm_content, dice_result, pending_check = self._advance_with_model(
                     active_model,
                     context,
                     adventure_id,
@@ -338,6 +347,7 @@ class DMService:
                 )
             except Exception:
                 dice_result = self._maybe_roll(message.content)
+                pending_check = None
                 next_scene, dm_content = self.provider.advance(
                     adventure.current_scene,
                     message.content,
@@ -347,6 +357,7 @@ class DMService:
                 )
         else:
             dice_result = self._maybe_roll(message.content)
+            pending_check = None
             next_scene, dm_content = self.provider.advance(
                 adventure.current_scene,
                 message.content,
@@ -377,6 +388,8 @@ class DMService:
         }
         if dice_result:
             metadata["dice_result"] = dice_result
+        if pending_check:
+            metadata["pending_check"] = pending_check
         if combat_decision:
             metadata["combat_decision"] = combat_decision
         dm_message = self.adventures.append_message(
@@ -385,6 +398,7 @@ class DMService:
             dm_content,
             metadata,
         )
+        dm_message = self._finalize_pending_check_metadata(dm_message)
         updated = self.adventures.get(adventure_id)
         return DMAdvanceResponse(
             adventure=updated,
@@ -445,11 +459,12 @@ class DMService:
                     try:
                         event = next(model_stream)
                     except StopIteration as stop:
-                        next_scene, dm_content, dice_result = stop.value
+                        next_scene, dm_content, dice_result, pending_check = stop.value
                         break
                     yield event
             except Exception:
                 dice_result = self._maybe_roll(message.content)
+                pending_check = None
                 next_scene, dm_content = self.provider.advance(
                     adventure.current_scene,
                     message.content,
@@ -461,6 +476,7 @@ class DMService:
                     yield {"type": "delta", "content": chunk}
         else:
             dice_result = self._maybe_roll(message.content)
+            pending_check = None
             next_scene, dm_content = self.provider.advance(
                 adventure.current_scene,
                 message.content,
@@ -497,6 +513,8 @@ class DMService:
         }
         if dice_result:
             metadata["dice_result"] = dice_result
+        if pending_check:
+            metadata["pending_check"] = pending_check
         if combat_decision:
             metadata["combat_decision"] = combat_decision
         dm_message = self.adventures.append_message(
@@ -505,6 +523,7 @@ class DMService:
             dm_content,
             metadata,
         )
+        dm_message = self._finalize_pending_check_metadata(dm_message)
         updated = self.adventures.get(adventure_id)
         yield {
             "type": "final",
@@ -516,6 +535,75 @@ class DMService:
             "combat_state": combat_state,
             "dice_result": dice_result,
         }
+
+    def resolve_pending_check(
+        self,
+        adventure_id: int,
+        check_id: str,
+        request: AbilityCheckResolveRequest,
+    ) -> DMAdvanceResponse:
+        adventure = self.adventures.get(adventure_id, include_messages=False)
+        source_message = self.adventures.get_message(request.message_id)
+        if source_message.adventure_id != adventure_id:
+            raise api_error(404, "check_not_found", "Pending check not found.")
+
+        metadata = dict(source_message.metadata)
+        pending_check = dict(metadata.get("pending_check") or {})
+        if not pending_check or pending_check.get("id") != check_id:
+            raise api_error(404, "check_not_found", "Pending check not found.")
+        if pending_check.get("status") != "pending":
+            raise api_error(409, "check_already_resolved", "This check has already been resolved.")
+
+        character_id = int(pending_check.get("character_id") or 0)
+        character = next((member for member in self.adventures.get_party(adventure_id) if member.id == character_id), None)
+        if character is None:
+            raise api_error(400, "check_character_not_found", "The check character is not in this adventure.")
+
+        dice_result = self._dice_result_from_player_roll(
+            character,
+            str(pending_check.get("ability") or "strength"),
+            int(pending_check.get("dc") or 10),
+            int(request.roll),
+            str(pending_check.get("reason") or ""),
+        )
+        metadata["pending_check"] = {**pending_check, "status": "resolved"}
+        metadata["dice_result"] = dice_result
+        resolved_message = self.adventures.update_message_metadata(source_message.id, metadata)
+
+        locale = normalize_locale(request.locale)
+        combat_state = self.adventures.get_combat_state(adventure_id)
+        next_scene, dm_content = self.provider.advance(
+            adventure.current_scene,
+            self._check_result_tool_input(pending_check, dice_result, locale),
+            dice_result,
+            combat_state,
+            locale,
+        )
+        self.workflows.commit(adventure_id, next_scene)
+        dm_message = self.adventures.append_message(
+            adventure_id,
+            "dm",
+            self._check_result_narration(pending_check, dice_result, dm_content, locale),
+            {
+                "check_result": {
+                    "source": "tool",
+                    "type": "ability_check_result",
+                    "check_id": check_id,
+                    "source_message_id": resolved_message.id,
+                },
+                "dice_result": dice_result,
+            },
+        )
+        updated = self.adventures.get(adventure_id)
+        return DMAdvanceResponse(
+            adventure=updated,
+            dm_message=dm_message,
+            scene=next_scene,
+            messages=updated.messages,
+            world_state=updated.world_state,
+            combat_state=combat_state,
+            dice_result=dice_result,
+        )
 
     def _resolve_acting_character(
         self,
@@ -581,6 +669,115 @@ class DMService:
         context = self.world_state.public_view(world_state)
         context["pending_visible_events"] = list(pending_delta.get("pending_visible_events", []))
         return context
+
+    def _pending_check_from_payload(
+        self,
+        payload: dict[str, Any],
+        character: CharacterOut,
+        message_id: int | None = None,
+    ) -> dict[str, Any] | None:
+        if not payload.get("requires_check") or not payload.get("check"):
+            return None
+        check = dict(payload.get("check") or {})
+        ability = str(check.get("ability") or "strength").lower()
+        dc = int(check.get("dc") or 10)
+        reason = str(check.get("reason") or "")
+        source_id = int(message_id or 0)
+        return {
+            "id": f"check_{source_id}_{ability}_{dc}",
+            "status": "pending",
+            "ability": ability,
+            "dc": dc,
+            "reason": reason,
+            "character_id": character.id,
+            "character_name": character.name,
+            "source_message_id": source_id,
+        }
+
+    def _finalize_pending_check_metadata(self, message: MessageOut) -> MessageOut:
+        pending_check = dict(message.metadata.get("pending_check") or {})
+        if not pending_check or pending_check.get("source_message_id") == message.id:
+            return message
+        finalized = {
+            **pending_check,
+            "id": f"check_{message.id}_{pending_check.get('ability', 'strength')}_{pending_check.get('dc', 10)}",
+            "source_message_id": message.id,
+        }
+        metadata = dict(message.metadata)
+        metadata["pending_check"] = finalized
+        return self.adventures.update_message_metadata(message.id, metadata)
+
+    def _dice_result_from_player_roll(
+        self,
+        character: CharacterOut,
+        ability: str,
+        dc: int,
+        roll: int,
+        reason: str,
+    ) -> dict[str, Any]:
+        normalized_ability = ability.lower()
+        score = getattr(character, normalized_ability, 10) if normalized_ability in {
+            "strength",
+            "dexterity",
+            "constitution",
+            "intelligence",
+            "wisdom",
+            "charisma",
+        } else 10
+        modifier = (int(score) - 10) // 2
+        total = roll + modifier
+        return {
+            "rolls": [roll],
+            "kept": roll,
+            "modifier": modifier,
+            "total": total,
+            "dc": dc,
+            "success": total >= dc,
+            "mode": "normal",
+            "ability": normalized_ability,
+            "reason": reason,
+            "source": "player_dice_tray",
+        }
+
+    def _check_result_tool_input(self, pending_check: dict[str, Any], dice_result: dict[str, Any], locale: str) -> str:
+        if locale == "zh-CN":
+            return (
+                "工具返回了一次玩家能力检定结果："
+                f"{pending_check.get('ability')} DC {pending_check.get('dc')}，"
+                f"d20={dice_result['kept']}，调整值={dice_result['modifier']}，"
+                f"总值={dice_result['total']}，"
+                f"{'成功' if dice_result['success'] else '失败'}。"
+            )
+        return (
+            "Tool returned a player ability check result: "
+            f"{pending_check.get('ability')} DC {pending_check.get('dc')}, "
+            f"d20={dice_result['kept']}, modifier={dice_result['modifier']}, "
+            f"total={dice_result['total']}, "
+            f"{'success' if dice_result['success'] else 'failure'}."
+        )
+
+    def _check_result_narration(
+        self,
+        pending_check: dict[str, Any],
+        dice_result: dict[str, Any],
+        dm_content: str,
+        locale: str,
+    ) -> str:
+        if locale == "zh-CN":
+            outcome = "成功" if dice_result["success"] else "失败"
+            return (
+                f"检定结果：{pending_check.get('character_name', '角色')}进行"
+                f"{pending_check.get('ability', 'ability')}检定，"
+                f"d20 {dice_result['kept']} {dice_result['modifier']:+d} = {dice_result['total']}，"
+                f"DC {dice_result['dc']}，{outcome}。\n\n{dm_content}"
+            )
+        outcome = "success" if dice_result["success"] else "failure"
+        return (
+            f"Check result: {pending_check.get('character_name', 'The character')} makes a "
+            f"{pending_check.get('ability', 'ability')} check, "
+            f"d20 {dice_result['kept']} {dice_result['modifier']:+d} = {dice_result['total']} "
+            f"against DC {dice_result['dc']}: {outcome}.\n\n{dm_content}"
+        )
 
     def _append_world_state_narration(self, dm_content: str, pending_delta: dict[str, Any], locale: str) -> str:
         events = [str(event) for event in pending_delta.get("pending_visible_events", []) if event]
@@ -1070,7 +1267,7 @@ class DMService:
             try:
                 payload, streamed_narration = yield from self._stream_model_json_payload(model, messages)
             except Exception:
-                next_scene, narration, dice_result, event_payloads = self._resolve_with_model(
+                next_scene, narration, dice_result, event_payloads, pending_check = self._resolve_with_model(
                     model,
                     context,
                     adventure_id,
@@ -1088,7 +1285,7 @@ class DMService:
                 for chunk in chunk_text(narration):
                     yield {"type": "delta", "content": chunk}
             else:
-                next_scene, narration, dice_result, event_payloads = self._model_payload_to_response(
+                next_scene, narration, dice_result, event_payloads, pending_check = self._model_payload_to_response(
                     adventure_id,
                     scene,
                     character,
@@ -1097,7 +1294,7 @@ class DMService:
                 )
                 yield from self._reconcile_streamed_narration(streamed_narration, narration)
             self._record_world_events(context, event_payloads)
-            return next_scene, narration, dice_result
+            return next_scene, narration, dice_result, pending_check
         plan = self.graph_runner.plan(
             player_input,
             model=react_model,
@@ -1121,7 +1318,7 @@ class DMService:
                 if not hasattr(self.llm_client, "chat"):
                     raise
             else:
-                next_scene, narration, dice_result, event_payloads = self._model_payload_to_response(
+                next_scene, narration, dice_result, event_payloads, pending_check = self._model_payload_to_response(
                     adventure_id,
                     scene,
                     character,
@@ -1134,11 +1331,12 @@ class DMService:
                     next_scene,
                     narration or self._fallback_narration(locale),
                     dice_result,
+                    pending_check,
                 )
         if hasattr(self.llm_client, "chat"):
             raw_response = self.llm_client.chat(model, messages)
             payload = json.loads(raw_response)
-            next_scene, narration, dice_result, event_payloads = self._model_payload_to_response(
+            next_scene, narration, dice_result, event_payloads, pending_check = self._model_payload_to_response(
                 adventure_id,
                 scene,
                 character,
@@ -1152,6 +1350,7 @@ class DMService:
                 next_scene,
                 narration or self._fallback_narration(locale),
                 dice_result,
+                pending_check,
             )
         raise RuntimeError("LLM client does not support chat or stream_chat.")
 
@@ -1179,16 +1378,17 @@ class DMService:
         character: CharacterOut,
         payload: dict[str, Any],
         locale: str,
-    ) -> tuple[SceneState, str, dict[str, Any] | None, list[dict[str, Any]]]:
+    ) -> tuple[SceneState, str, dict[str, Any] | None, list[dict[str, Any]], dict[str, Any] | None]:
         next_scene = SceneState.model_validate(payload.get("scene") or scene.model_dump())
-        dice_result = self._roll_requested_check(payload.get("check"), character) if payload.get("requires_check") else None
+        pending_check = self._pending_check_from_payload(payload, character)
+        dice_result = None
         narration = str(payload.get("narration") or "")
         npc_actions = payload.get("npc_actions") or []
         if npc_actions:
             narration = f"{narration}\n\nNPC actions: " + " ".join(str(action) for action in npc_actions)
         event_payloads = payload.get("world_events") or []
         self._apply_character_updates(adventure_id, payload)
-        return next_scene, narration or self._fallback_narration(locale), dice_result, event_payloads
+        return next_scene, narration or self._fallback_narration(locale), dice_result, event_payloads, pending_check
 
     def _reconcile_streamed_narration(self, streamed_narration: str, final_narration: str):
         if not final_narration or final_narration == streamed_narration:
@@ -1222,7 +1422,7 @@ class DMService:
         skill_context: list[DMSkill] | None = None,
         world_state: dict[str, Any] | None = None,
         action_classification: dict[str, Any] | None = None,
-    ) -> tuple[SceneState, str, dict[str, Any] | None]:
+    ) -> tuple[SceneState, str, dict[str, Any] | None, dict[str, Any] | None]:
         react_model = self._react_model(model)
         result = self.graph_runner.run(
             player_input,
@@ -1246,9 +1446,9 @@ class DMService:
             locale=locale,
             skill_context=skill_context,
         )
-        next_scene, narration, dice_result, event_payloads = tuple(result["value"])
+        next_scene, narration, dice_result, event_payloads, pending_check = tuple(result["value"])
         self._record_world_events(context, event_payloads)
-        return next_scene, narration, dice_result
+        return next_scene, narration, dice_result, pending_check
 
     def _resolve_with_model(
         self,
@@ -1265,7 +1465,7 @@ class DMService:
         world_state: dict[str, Any] | None = None,
         action_classification: dict[str, Any] | None = None,
         use_narration_agent: bool = True,
-    ) -> tuple[SceneState, str, dict[str, Any] | None, list[dict[str, Any]]]:
+    ) -> tuple[SceneState, str, dict[str, Any] | None, list[dict[str, Any]], dict[str, Any] | None]:
         raw_response = self.llm_client.chat(
             model,
             build_dm_messages(
@@ -1282,7 +1482,7 @@ class DMService:
             ),
         )
         payload = json.loads(raw_response)
-        next_scene, narration, dice_result, event_payloads = self._model_payload_to_response(
+        next_scene, narration, dice_result, event_payloads, pending_check = self._model_payload_to_response(
             adventure_id,
             scene,
             character,
@@ -1314,6 +1514,7 @@ class DMService:
             narration or self._fallback_narration(locale),
             dice_result,
             event_payloads,
+            pending_check,
         )
 
     def _apply_character_updates(self, adventure_id: int, payload: dict[str, Any]) -> list[dict[str, Any]]:

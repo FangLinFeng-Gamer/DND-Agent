@@ -81,8 +81,11 @@ def test_dm_agent_uses_active_model_response_and_records_world_events(client):
 
     assert response.dm_message.content.startswith("The hidden latch clicks")
     assert response.scene.location == "Mistbell Tower Gate"
-    assert response.dice_result["ability"] == "wisdom"
-    assert response.dice_result["reason"] == "Finding the hidden latch quietly"
+    assert response.dice_result is None
+    pending_check = response.dm_message.metadata["pending_check"]
+    assert pending_check["ability"] == "wisdom"
+    assert pending_check["reason"] == "Finding the hidden latch quietly"
+    assert pending_check["status"] == "pending"
     assert events[0].title == "Scout warned"
     assert fake.messages
 
