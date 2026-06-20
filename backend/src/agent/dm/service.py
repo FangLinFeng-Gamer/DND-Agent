@@ -237,6 +237,11 @@ class DMService:
         self.skill_registry = DMSkillRegistry.load_builtin()
 
     def create_adventure(self, request: AdventureCreate) -> AdventureOut:
+        if request.mode == "isekai_survival":
+            from backend.src.services.isekai import IsekaiSurvivalService
+
+            return IsekaiSurvivalService(self.store, llm_client=self.llm_client).create_adventure(request)
+
         locale = normalize_locale(request.locale)
         party = self.adventures.validate_party(request.effective_party_character_ids())
         character = party[0]

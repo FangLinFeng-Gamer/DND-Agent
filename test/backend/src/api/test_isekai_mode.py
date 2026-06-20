@@ -27,3 +27,32 @@ def test_list_adventures_exposes_mode_for_frontend_filtering(client):
     assert response.status_code == 200
     listed = next(item for item in response.json() if item["id"] == created["id"])
     assert listed["mode"] == "dnd"
+
+
+def test_create_isekai_adventure_generates_independent_character_and_survival_state(client):
+    response = client.post(
+        "/api/adventures",
+        json={"title": "Fog Border", "mode": "isekai_survival", "locale": "zh-CN"},
+    )
+
+    assert response.status_code == 200
+    adventure = response.json()
+    assert adventure["mode"] == "isekai_survival"
+    assert adventure["story_id"] == "isekai_survival"
+    assert adventure["party_characters"] == []
+    assert adventure["party_character_ids"] == []
+    assert adventure["isekai_character"]["name"]
+    assert adventure["isekai_character"]["race"]
+    assert adventure["isekai_character"]["class_name"]
+    assert adventure["isekai_character"]["gold"] >= 0
+    assert adventure["survival_state"]["hunger"] >= 0
+    assert adventure["survival_state"]["thirst"] >= 0
+    assert adventure["messages"][0]["metadata"]["mode"] == "isekai_survival"
+
+
+def test_isekai_character_is_not_added_to_dnd_character_list(client):
+    client.post("/api/adventures", json={"title": "No Character Leak", "mode": "isekai_survival"}).json()
+
+    characters = client.get("/api/characters").json()
+
+    assert all(character["name"] != "No Character Leak" for character in characters)

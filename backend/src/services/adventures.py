@@ -70,6 +70,28 @@ class AdventureService:
             row = conn.execute("SELECT * FROM adventures WHERE id = ?", (cursor.lastrowid,)).fetchone()
         return self._map_adventure_row(row)
 
+    def create_isekai_shell(self, adventure: AdventureCreate, scene: SceneState) -> AdventureOut:
+        with self.store.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO adventures (
+                    title, mode, world_id, story_id, character_id, status, summary,
+                    current_scene_json, story_snapshot_json, world_state_json
+                )
+                VALUES (
+                    :title, 'isekai_survival', :world_id, 'isekai_survival', 0, 'active', '',
+                    :current_scene_json, '{}', '{}'
+                )
+                """,
+                {
+                    "title": adventure.title,
+                    "world_id": adventure.world_id,
+                    "current_scene_json": encode_json(scene.model_dump()),
+                },
+            )
+            row = conn.execute("SELECT * FROM adventures WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        return self._map_adventure_row(row)
+
     def list(self) -> list[AdventureOut]:
         with self.store.connect() as conn:
             rows = conn.execute("SELECT * FROM adventures ORDER BY id").fetchall()
@@ -297,11 +319,14 @@ class AdventureService:
         return row
 
     def _map_adventure_row(self, row: Row) -> AdventureOut:
+        mode = row["mode"] if "mode" in row.keys() else "dnd"
         party_ids, party_characters = self._party_for_adventure(row["id"], row["character_id"])
+        isekai_character = self._isekai_character_for_adventure(row["id"]) if mode == "isekai_survival" else None
+        survival_state = self._isekai_survival_state_for_adventure(row["id"]) if mode == "isekai_survival" else None
         return AdventureOut(
             id=row["id"],
             title=row["title"],
-            mode=row["mode"] if "mode" in row.keys() else "dnd",
+            mode=mode,
             world_id=row["world_id"],
             story_id=row["story_id"],
             character_id=row["character_id"],
@@ -313,8 +338,8 @@ class AdventureService:
             world_state=public_world_state_view(
                 normalize_world_state(decode_json(row["world_state_json"], {}), self._story_from_row(row))
             ),
-            isekai_character=None,
-            survival_state=None,
+            isekai_character=isekai_character,
+            survival_state=survival_state,
         )
 
     def _story_from_row(self, row: Row) -> StoryOut | None:
@@ -334,6 +359,8 @@ class AdventureService:
                 """,
                 (adventure_id,),
             ).fetchall()
+        if not rows and fallback_character_id <= 0:
+            return [], []
         party_ids = [row["character_id"] for row in rows] or [fallback_character_id]
         characters = []
         character_service = CharacterService(self.store)
@@ -348,6 +375,58 @@ class AdventureService:
             characters = [character_service.get(fallback_character_id)]
             party_ids = [fallback_character_id]
         return party_ids, characters
+
+    def _isekai_character_for_adventure(self, adventure_id: int) -> dict[str, Any] | None:
+        with self.store.connect() as conn:
+            row = conn.execute("SELECT * FROM isekai_characters WHERE adventure_id = ?", (adventure_id,)).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "adventure_id": row["adventure_id"],
+            "name": row["name"],
+            "race": row["race"],
+            "class_name": row["class_name"],
+            "background": row["background"],
+            "alignment": row["alignment"],
+            "level": row["level"],
+            "hp_current": row["hp_current"],
+            "hp_max": row["hp_max"],
+            "armor_class": row["armor_class"],
+            "strength": row["strength"],
+            "dexterity": row["dexterity"],
+            "constitution": row["constitution"],
+            "intelligence": row["intelligence"],
+            "wisdom": row["wisdom"],
+            "charisma": row["charisma"],
+            "gold": row["gold"],
+            "inventory": decode_json(row["inventory_json"], []),
+            "traits": decode_json(row["traits_json"], []),
+            "world_reaction_tags": decode_json(row["world_reaction_tags_json"], []),
+            "status_effects": decode_json(row["status_effects_json"], []),
+        }
+
+    def _isekai_survival_state_for_adventure(self, adventure_id: int) -> dict[str, Any] | None:
+        with self.store.connect() as conn:
+            row = conn.execute("SELECT * FROM isekai_survival_states WHERE adventure_id = ?", (adventure_id,)).fetchone()
+        if row is None:
+            return None
+        return {
+            "adventure_id": row["adventure_id"],
+            "day": row["day"],
+            "time_of_day": row["time_of_day"],
+            "hunger": row["hunger"],
+            "thirst": row["thirst"],
+            "fatigue": row["fatigue"],
+            "sleep_need": row["sleep_need"],
+            "temperature_risk": row["temperature_risk"],
+            "morale": row["morale"],
+            "weather": row["weather"],
+            "location": row["location"],
+            "shelter": row["shelter"],
+            "last_action_type": row["last_action_type"],
+            "state": decode_json(row["state_json"], {}),
+        }
 
     def _character_from_state(self, base: CharacterOut, state: dict[str, Any]) -> CharacterOut:
         if not state:
