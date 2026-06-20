@@ -149,6 +149,17 @@ def test_default_story_text_can_be_localized_for_story_views():
     assert "defaultStoryTitle.${story.id}" in stories
 
 
+def test_story_library_cards_can_shrink_inside_narrow_create_view():
+    css = read_frontend_file("styles.css")
+    story_list_block = css_block(css, ".story-list")
+    list_item_block = css_block(css, ".list-item")
+    summary_block = css_block(css, ".model-summary,\n.item-summary")
+
+    assert "grid-template-columns: minmax(0, 1fr)" in story_list_block
+    assert "min-width: 0" in list_item_block
+    assert "min-width: 0" in summary_block
+
+
 def test_homepage_new_copy_is_available_in_english_and_chinese():
     i18n = i18n_resource_text()
 

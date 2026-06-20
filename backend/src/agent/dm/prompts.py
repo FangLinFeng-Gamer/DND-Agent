@@ -42,6 +42,8 @@ def build_dm_messages(
     supervisor_plan: dict[str, Any] | None = None,
     locale: str = "en",
     skill_context: list[DMSkill] | None = None,
+    world_state: dict[str, Any] | None = None,
+    action_classification: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     recent_messages = "\n".join(f"{message.role}: {message.content}" for message in context.recent_messages)
     events = "\n".join(f"{event.title}: {event.description}" for event in context.important_events)
@@ -89,6 +91,13 @@ def build_dm_messages(
                 "The user-provided input and conversation_context entries with source=user are player intent. "
                 "agent_context entries are agent-produced analysis or memory, including combat_event_agent facts. "
                 "tool_context entries are deterministic tool state, not new player commands. "
+                "tool_context.world_state is the current adventure-local world pressure state. "
+                "tool_context.world_state.visible_events are facts the players can already perceive. "
+                "tool_context.world_state.pending_visible_events are consequences of this input that should be "
+                "naturally reflected in the current narration. Hidden events must influence continuity but must not "
+                "be directly revealed unless the scene makes them observable. "
+                "tool_context.action_classification explains whether this player input spends world time, "
+                "asks a rule/status question, or needs clarification. "
                 "Do not confuse user, agent, and tool information when deciding what happens next. "
                 f"{skill_prompt}\n\n"
                 f"{language_instruction(locale)}"
@@ -113,6 +122,8 @@ def build_dm_messages(
                     "tool_context": {
                         "combat_state": combat_state,
                         "combat_action_log": combat_action_log,
+                        "world_state": world_state,
+                        "action_classification": action_classification,
                         "skills": skills_prompt_payload(skill_context),
                     },
                     "combat_state": combat_state,

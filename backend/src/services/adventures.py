@@ -10,6 +10,11 @@ from backend.src.schemas.character import CharacterOut, CharacterUpdate
 from backend.src.schemas.story import StoryOut
 from backend.src.services.character_progression import character_progression, level_for_experience
 from backend.src.services.characters import CharacterService
+from backend.src.services.world_state import (
+    initial_world_state_for_story,
+    normalize_world_state,
+    public_world_state_view,
+)
 
 
 class AdventureService:
@@ -24,11 +29,11 @@ class AdventureService:
                 """
                 INSERT INTO adventures (
                     title, world_id, story_id, character_id, status, summary,
-                    current_scene_json, story_snapshot_json
+                    current_scene_json, story_snapshot_json, world_state_json
                 )
                 VALUES (
                     :title, :world_id, :story_id, :character_id, :status, :summary,
-                    :current_scene_json, :story_snapshot_json
+                    :current_scene_json, :story_snapshot_json, :world_state_json
                 )
                 """,
                 {
@@ -40,6 +45,7 @@ class AdventureService:
                     "summary": "",
                     "current_scene_json": encode_json(scene.model_dump()),
                     "story_snapshot_json": encode_json(story.model_dump() if story else {}),
+                    "world_state_json": encode_json(initial_world_state_for_story(story)),
                 },
             )
             adventure_id = cursor.lastrowid
@@ -136,6 +142,29 @@ class AdventureService:
         if result.rowcount == 0:
             raise api_error(404, "adventure_not_found", "Adventure not found.")
         return scene
+
+    def get_world_state(self, adventure_id: int) -> dict[str, Any]:
+        row = self._get_adventure_row(adventure_id)
+        story = self._story_from_row(row)
+        return normalize_world_state(decode_json(row["world_state_json"], {}), story)
+
+    def update_world_state(self, adventure_id: int, world_state: dict[str, Any]) -> dict[str, Any]:
+        normalized = normalize_world_state(world_state)
+        with self.store.connect() as conn:
+            result = conn.execute(
+                """
+                UPDATE adventures
+                SET world_state_json = :world_state_json, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :adventure_id
+                """,
+                {
+                    "adventure_id": adventure_id,
+                    "world_state_json": encode_json(normalized),
+                },
+            )
+        if result.rowcount == 0:
+            raise api_error(404, "adventure_not_found", "Adventure not found.")
+        return normalized
 
     def get_combat_state(self, adventure_id: int) -> dict[str, Any] | None:
         self.get(adventure_id, include_messages=False)
@@ -257,7 +286,16 @@ class AdventureService:
             status=row["status"],
             summary=row["summary"],
             current_scene=SceneState.model_validate(decode_json(row["current_scene_json"], {})),
+            world_state=public_world_state_view(
+                normalize_world_state(decode_json(row["world_state_json"], {}), self._story_from_row(row))
+            ),
         )
+
+    def _story_from_row(self, row: Row) -> StoryOut | None:
+        snapshot = decode_json(row["story_snapshot_json"], {})
+        if not snapshot:
+            return None
+        return StoryOut.model_validate(snapshot)
 
     def _party_for_adventure(self, adventure_id: int, fallback_character_id: int) -> tuple[list[int], list]:
         with self.store.connect() as conn:

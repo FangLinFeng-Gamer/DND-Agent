@@ -165,3 +165,70 @@ def test_dm_prompt_separates_user_agent_and_tool_context():
     assert payload["agent_context"]["important_events"][0]["agent"] == "combat_event_agent"
     assert payload["tool_context"]["combat_state"]["round_number"] == 2
     assert payload["tool_context"]["combat_action_log"][0]["actor_name"] == "Mira"
+
+
+def test_dm_prompt_includes_world_state_tool_context():
+    context = ContextBundle(
+        summary="",
+        recent_messages=[],
+        important_events=[],
+        estimated_tokens=1,
+    )
+    scene = SceneState(
+        location="柳溪村广场",
+        environment="节庆灯笼摇晃。",
+        important_objects=["月井"],
+        npcs=["村长玛拉"],
+        current_objective="调查月井。",
+        world_changes=[],
+    )
+    character = CharacterOut(
+        id=1,
+        name="Mira",
+        race="Human",
+        class_name="Fighter",
+        level=1,
+        background="Soldier",
+        alignment="Neutral",
+        hp_current=10,
+        hp_max=10,
+        armor_class=12,
+        strength=14,
+        dexterity=10,
+        constitution=10,
+        intelligence=10,
+        wisdom=10,
+        charisma=10,
+        skills={},
+        inventory=[],
+        spells=[],
+        notes="",
+    )
+    world_state = {
+        "phase": "festival_panic",
+        "phase_label": "节庆混乱",
+        "visible_events": ["广场音乐停止，村民围在月井旁争吵。"],
+        "pending_visible_events": ["守夜人布伦开始沿铁匠铺方向巡逻。"],
+    }
+    classification = {
+        "message_type": "in_world_action",
+        "advance_world": True,
+        "time_cost": 1,
+        "risk_level": "medium",
+    }
+
+    messages = build_dm_messages(
+        context,
+        scene,
+        character,
+        "我翻过后院栅栏离开",
+        None,
+        world_state=world_state,
+        action_classification=classification,
+    )
+    payload = json.loads(messages[1]["content"])
+
+    assert payload["tool_context"]["world_state"]["phase"] == "festival_panic"
+    assert payload["tool_context"]["world_state"]["pending_visible_events"][0] == "守夜人布伦开始沿铁匠铺方向巡逻。"
+    assert payload["tool_context"]["action_classification"]["message_type"] == "in_world_action"
+    assert payload["player_input"] == "我翻过后院栅栏离开"

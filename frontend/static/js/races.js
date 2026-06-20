@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=20260618-game-room-layout10";
-import { els, state } from "./state.js?v=20260618-game-room-layout10";
-import { localizeRaceMechanicLabel, localizeRaceName, localizeRaceTag, t } from "./i18n.js?v=20260618-game-room-layout10";
-import { emptyNode, pillNode, setStatus, showError } from "./ui.js?v=20260618-game-room-layout10";
+import { api } from "./api.js?v=20260619-world-state-progress";
+import { els, state } from "./state.js?v=20260619-world-state-progress";
+import { localizeRaceMechanicLabel, localizeRaceName, localizeRaceTag, t } from "./i18n.js?v=20260619-world-state-progress";
+import { emptyNode, pillNode, setStatus, showError } from "./ui.js?v=20260619-world-state-progress";
 
 export async function loadRaces() {
   try {

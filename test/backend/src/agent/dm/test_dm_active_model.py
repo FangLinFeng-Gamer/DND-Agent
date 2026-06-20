@@ -32,34 +32,31 @@ class FakeOpeningLLMClient:
         )
 
 
-class FakeNonStreamingDMClient:
+class FakeStreamingDMClient:
     def __init__(self):
         self.chat_calls = 0
         self.stream_calls = 0
 
+    def chat_message(self, model, messages, tools=None, tool_choice=None):
+        return {
+            "content": (
+                '{"intent":"exploration","steps":['
+                '{"agent":"exploration_agent","instruction":"Describe the changed scene."}]}'
+            )
+        }
+
     def chat(self, model, messages):
         self.chat_calls += 1
-        return json.dumps(
-            {
-                "scene": {
-                    "location": "Ravenford Wayhouse",
-                    "environment": "The model answers without relying on provider streaming.",
-                    "important_objects": ["wet road map", "tower bell"],
-                    "npcs": ["Mayor Elira Voss"],
-                    "current_objective": "Ask Mayor Elira Voss what changed.",
-                    "world_changes": ["The DM answered through non-streaming chat."],
-                },
-                "narration": "模型回复：钟声刚刚再次响起，镇长正等待你的决定。",
-                "requires_check": False,
-                "check": None,
-                "npc_actions": [],
-                "world_events": [],
-            }
-        )
+        raise AssertionError("streaming DM replies should not wait for chat()")
 
     def stream_chat(self, model, messages):
         self.stream_calls += 1
-        raise AssertionError("provider streaming should not be required for DM replies")
+        yield '{"narration":"模型回复：钟声'
+        yield '刚刚再次响起，镇长正等待你的决定。","scene":'
+        yield '{"location":"Ravenford Wayhouse","environment":"The model streams the answer.",'
+        yield '"important_objects":["wet road map","tower bell"],"npcs":["Mayor Elira Voss"],'
+        yield '"current_objective":"Ask Mayor Elira Voss what changed.","world_changes":[]},'
+        yield '"requires_check":false,"check":null,"npc_actions":[],"world_events":[]}'
 
 
 class FakeDMClientWithInvalidWorldEvent:
@@ -179,7 +176,7 @@ def test_create_adventure_uses_active_model_for_opening_scene(tmp_path):
     assert adventure.messages[0].content == "The active model opens the adventure with rain and agency."
 
 
-def test_advance_stream_uses_non_streaming_model_response_when_active_model_is_configured(tmp_path):
+def test_advance_stream_uses_provider_streaming_when_active_model_is_configured(tmp_path):
     store = initialized_store(tmp_path)
     character = CharacterService(store).create(CharacterCreate(name="Mira"))
     adventure = DMService(store).create_adventure(
@@ -202,7 +199,7 @@ def test_advance_stream_uses_non_streaming_model_response_when_active_model_is_c
     )
     model_service.activate(model.id)
 
-    llm_client = FakeNonStreamingDMClient()
+    llm_client = FakeStreamingDMClient()
     events = list(
         DMService(store, llm_client=llm_client).advance_stream(
             adventure.id,
@@ -211,9 +208,10 @@ def test_advance_stream_uses_non_streaming_model_response_when_active_model_is_c
     )
 
     delta_text = "".join(event.get("content", "") for event in events if event["type"] == "delta")
-    assert llm_client.chat_calls == 1
-    assert llm_client.stream_calls == 0
+    assert llm_client.chat_calls == 0
+    assert llm_client.stream_calls == 1
     assert "模型回复" in delta_text
+    assert len([event for event in events if event["type"] == "delta"]) >= 2
     assert events[-1]["type"] == "final"
     assert events[-1]["dm_message"].content == "模型回复：钟声刚刚再次响起，镇长正等待你的决定。"
 

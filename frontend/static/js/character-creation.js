@@ -1,14 +1,14 @@
-import { api } from "./api.js?v=20260618-game-room-layout10";
-import { els, state } from "./state.js?v=20260618-game-room-layout10";
+import { api } from "./api.js?v=20260619-world-state-progress";
+import { els, state } from "./state.js?v=20260619-world-state-progress";
 import {
   localizeBackgroundName,
   localizeClassName,
   localizeEquipmentName,
   localizeRaceName,
   t,
-} from "./i18n.js?v=20260618-game-room-layout10";
-import { loadCharacters } from "./game.js?v=20260618-game-room-layout10";
-import { setStatus, showError, showView, typingIndicatorNode } from "./ui.js?v=20260618-game-room-layout10";
+} from "./i18n.js?v=20260619-world-state-progress";
+import { loadCharacters } from "./game.js?v=20260619-world-state-progress";
+import { setStatus, showError, showView, typingIndicatorNode } from "./ui.js?v=20260619-world-state-progress";
 
 
 const POINT_BUY_COSTS = {

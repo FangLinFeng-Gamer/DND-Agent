@@ -1,8 +1,8 @@
-import { api, readErrorMessage, readStreamingResponse } from "./api.js?v=20260618-game-room-layout10";
-import { apiBase, els, state } from "./state.js?v=20260618-game-room-layout10";
-import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260618-game-room-layout10";
-import { localizedStoryText } from "./stories.js?v=20260618-game-room-layout10";
-import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260618-game-room-layout10";
+import { api, readErrorMessage, readStreamingResponse } from "./api.js?v=20260619-world-state-progress";
+import { apiBase, els, state } from "./state.js?v=20260619-world-state-progress";
+import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260619-world-state-progress";
+import { localizedStoryText } from "./stories.js?v=20260619-world-state-progress";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260619-world-state-progress";
 
 export async function loadCharacters() {
   try {
@@ -864,6 +864,54 @@ export function renderScene(scene) {
   els.sceneDetail.append(location, environment, objective, objects);
 }
 
+export function renderWorldState(worldState) {
+  if (!els.worldStatePhase || !els.worldStateClocks || !els.worldStateEvents) {
+    return;
+  }
+  els.worldStateClocks.replaceChildren();
+  els.worldStateEvents.replaceChildren();
+
+  const phaseLabel = worldState?.phase_label || "";
+  const clocks = [
+    ...(worldState?.threat_clocks || []),
+    ...(worldState?.pressure_clocks || []),
+  ].filter((clock) => clock && clock.visible !== false);
+  const events = worldState?.visible_events || [];
+
+  if (!worldState || (!phaseLabel && !clocks.length && !events.length)) {
+    els.worldStatePhase.className = "world-state-phase detail-empty";
+    els.worldStatePhase.textContent = t("worldSituationEmpty");
+    els.worldStateClocks.append(emptyNode(t("worldSituationEmpty")));
+    return;
+  }
+
+  els.worldStatePhase.className = "world-state-phase";
+  els.worldStatePhase.textContent = phaseLabel || t("worldSituation");
+
+  if (!clocks.length) {
+    els.worldStateClocks.append(emptyNode(t("worldSituationEmpty")));
+  } else {
+    clocks.forEach((clock) => {
+      const item = document.createElement("div");
+      item.className = `world-clock ${clock.severity ? `severity-${clock.severity}` : ""}`.trim();
+      const label = document.createElement("span");
+      label.textContent = `${clock.label || clock.id} ${Number(clock.value || 0)}/${Number(clock.max || 0)}`;
+      item.append(label);
+      els.worldStateClocks.append(item);
+    });
+  }
+
+  if (!events.length) {
+    els.worldStateEvents.append(emptyNode(t("worldSituationEmpty")));
+  } else {
+    events.slice(-3).forEach((event) => {
+      const item = document.createElement("p");
+      item.textContent = event;
+      els.worldStateEvents.append(item);
+    });
+  }
+}
+
 function currentCombatant(combat) {
   const participants = combat?.participants || [];
   return participants[combat?.turn_index] || null;
@@ -1302,6 +1350,7 @@ export function renderAdventureDetail(messages, scene, combat) {
     els.chatSubtitle.textContent = t("chooseCharacterThenAdventure");
     renderMessages([]);
     renderScene(null);
+    renderWorldState(null);
     renderCombat(null);
     renderMapScenes();
     renderMapTokens();
@@ -1318,6 +1367,7 @@ export function renderAdventureDetail(messages, scene, combat) {
   renderCharacter(getSelectedCharacter());
   renderMessages(messages || adventure.messages || []);
   renderScene(scene || adventure.current_scene);
+  renderWorldState(adventure.world_state);
   renderCombat(combat || state.combat);
   renderMapScenes();
   renderMapPreview(getSelectedMapScene());

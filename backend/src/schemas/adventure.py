@@ -57,6 +57,7 @@ class AdventureOut(BaseModel):
     status: str
     summary: str
     current_scene: SceneState
+    world_state: dict[str, Any] = Field(default_factory=dict)
     messages: list[MessageOut] = Field(default_factory=list)
 
 
@@ -65,6 +66,7 @@ class DMAdvanceResponse(BaseModel):
     dm_message: MessageOut
     scene: SceneState
     messages: list[MessageOut]
+    world_state: dict[str, Any] = Field(default_factory=dict)
     combat_state: CombatStateOut | None = None
     dice_result: dict[str, Any] | None = None
 

@@ -7,7 +7,6 @@ from backend.src.agent.dm.memory import AgentMemoryManager
 from backend.src.agent.dm.output import chunk_text, extract_narration_text
 from backend.src.agent.dm.prompts import (
     build_dm_messages,
-    build_narration_messages,
     build_npc_combat_action_messages,
     build_opening_scene_messages,
 )
@@ -35,6 +34,7 @@ from backend.src.services.combat_log import append_combat_log_entry
 from backend.src.services.character_state import CharacterStateService
 from backend.src.services.context import ContextBundle
 from backend.src.services.maps import MapAttackRangeError, MapService
+from backend.src.services.world_state import WorldStateService
 
 
 COMBAT_INTENT_KEYWORDS = (
@@ -218,6 +218,7 @@ class DMService:
         self.models = self.tools.models
         self.context = self.memory.context
         self.world_events = self.memory.world_events
+        self.world_state = WorldStateService(store)
         self.provider = provider or TemplateDMProvider()
         self.combat = self.tools.combat
         self.maps = MapService(store)
@@ -297,6 +298,14 @@ class DMService:
         skill_context = self.skill_registry.match(message.content, locale=locale)
         adventure = self.adventures.get(adventure_id, include_messages=False)
         combat_state = self.adventures.get_combat_state(adventure_id)
+        current_world_state = self.adventures.get_world_state(adventure_id)
+        action_classification = self.world_state.classify_action(message.content)
+        pending_world_delta = self.world_state.preview_advance(
+            current_world_state,
+            action_classification,
+            adventure.current_scene,
+        )
+        world_context = self._world_state_context(current_world_state, pending_world_delta)
         acting_character = self._resolve_acting_character(
             adventure_id,
             adventure,
@@ -324,6 +333,8 @@ class DMService:
                     combat_state,
                     locale,
                     skill_context,
+                    world_context,
+                    action_classification,
                 )
             except Exception:
                 dice_result = self._maybe_roll(message.content)
@@ -343,6 +354,7 @@ class DMService:
                 combat_state,
                 locale,
             )
+        dm_content = self._append_world_state_narration(dm_content, pending_world_delta, locale)
         combat_state, combat_decision, dm_content = self._maybe_start_combat(
             adventure_id,
             adventure,
@@ -352,8 +364,17 @@ class DMService:
             combat_state,
             locale,
         )
+        updated_world_state = self.world_state.commit_advance(current_world_state, pending_world_delta)
+        self.adventures.update_world_state(adventure_id, updated_world_state)
+        public_world_delta = self.world_state.public_delta_view(pending_world_delta)
+        public_updated_world_state = self.world_state.public_view(updated_world_state)
         self.workflows.commit(adventure_id, next_scene)
-        metadata = {}
+        metadata = {
+            "world_state": {
+                "classification": action_classification,
+                "pending_delta": public_world_delta,
+            }
+        }
         if dice_result:
             metadata["dice_result"] = dice_result
         if combat_decision:
@@ -370,6 +391,7 @@ class DMService:
             dm_message=dm_message,
             scene=next_scene,
             messages=updated.messages,
+            world_state=public_updated_world_state,
             combat_state=combat_state,
             dice_result=dice_result,
         )
@@ -379,6 +401,14 @@ class DMService:
         skill_context = self.skill_registry.match(message.content, locale=locale)
         adventure = self.adventures.get(adventure_id, include_messages=False)
         combat_state = self.adventures.get_combat_state(adventure_id)
+        current_world_state = self.adventures.get_world_state(adventure_id)
+        action_classification = self.world_state.classify_action(message.content)
+        pending_world_delta = self.world_state.preview_advance(
+            current_world_state,
+            action_classification,
+            adventure.current_scene,
+        )
+        world_context = self._world_state_context(current_world_state, pending_world_delta)
         acting_character = self._resolve_acting_character(
             adventure_id,
             adventure,
@@ -408,6 +438,8 @@ class DMService:
                     combat_state,
                     locale,
                     skill_context,
+                    world_context,
+                    action_classification,
                 )
                 while True:
                     try:
@@ -440,6 +472,7 @@ class DMService:
                 yield {"type": "delta", "content": chunk}
 
         previous_content = dm_content
+        dm_content = self._append_world_state_narration(dm_content, pending_world_delta, locale)
         combat_state, combat_decision, dm_content = self._maybe_start_combat(
             adventure_id,
             adventure,
@@ -451,8 +484,17 @@ class DMService:
         )
         if dm_content != previous_content:
             yield {"type": "delta", "content": dm_content.removeprefix(previous_content)}
+        updated_world_state = self.world_state.commit_advance(current_world_state, pending_world_delta)
+        self.adventures.update_world_state(adventure_id, updated_world_state)
+        public_world_delta = self.world_state.public_delta_view(pending_world_delta)
+        public_updated_world_state = self.world_state.public_view(updated_world_state)
         self.workflows.commit(adventure_id, next_scene)
-        metadata = {}
+        metadata = {
+            "world_state": {
+                "classification": action_classification,
+                "pending_delta": public_world_delta,
+            }
+        }
         if dice_result:
             metadata["dice_result"] = dice_result
         if combat_decision:
@@ -470,6 +512,7 @@ class DMService:
             "dm_message": dm_message,
             "scene": next_scene,
             "messages": updated.messages,
+            "world_state": public_updated_world_state,
             "combat_state": combat_state,
             "dice_result": dice_result,
         }
@@ -533,6 +576,19 @@ class DMService:
             "character_name": character.name,
             "source": "user",
         }
+
+    def _world_state_context(self, world_state: dict[str, Any], pending_delta: dict[str, Any]) -> dict[str, Any]:
+        context = self.world_state.public_view(world_state)
+        context["pending_visible_events"] = list(pending_delta.get("pending_visible_events", []))
+        return context
+
+    def _append_world_state_narration(self, dm_content: str, pending_delta: dict[str, Any], locale: str) -> str:
+        events = [str(event) for event in pending_delta.get("pending_visible_events", []) if event]
+        if not events:
+            return dm_content
+        if locale == "zh-CN":
+            return f"{dm_content}\n\n世界局势变化：" + " ".join(events)
+        return f"{dm_content}\n\nWorld state shifts: " + " ".join(events)
 
     def _maybe_start_combat(
         self,
@@ -988,58 +1044,58 @@ class DMService:
         combat_state: dict[str, Any] | None,
         locale: str,
         skill_context: list[DMSkill] | None = None,
+        world_state: dict[str, Any] | None = None,
+        action_classification: dict[str, Any] | None = None,
     ):
         react_model = self._react_model(model)
         if react_model is not None:
-            result = self.graph_runner.run(
+            plan = self.graph_runner.plan(
                 player_input,
-                lambda plan: {
-                    "value": self._resolve_with_model(
-                        model,
-                        context,
-                        adventure_id,
-                        scene,
-                        character,
-                        player_input,
-                        combat_state,
-                        plan.model_dump(),
-                        locale,
-                        skill_context,
-                        use_narration_agent=False,
-                    ),
-                    "plan": plan.model_dump(),
-                },
                 model=react_model,
                 locale=locale,
                 skill_context=skill_context,
             )
-            next_scene, resolved_narration, dice_result, event_payloads = tuple(result["value"])
-            narration_chunks: list[str] = []
-            emitted_length = 0
-            for chunk in self.llm_client.stream_chat(
-                model,
-                build_narration_messages(
-                    {
-                        "resolved_narration": resolved_narration,
-                        "scene": next_scene.model_dump(),
-                        "dice_result": dice_result,
-                        "supervisor_plan": result["plan"],
-                    },
-                    locale=locale,
-                    skill_context=skill_context,
-                ),
-            ):
-                narration_chunks.append(chunk)
-                narration = extract_narration_text("".join(narration_chunks))
-                if len(narration) > emitted_length:
-                    delta = narration[emitted_length:]
-                    emitted_length = len(narration)
-                    yield {"type": "delta", "content": delta}
-            raw_narration = "".join(narration_chunks)
+            messages = build_dm_messages(
+                context,
+                scene,
+                character,
+                player_input,
+                combat_state,
+                supervisor_plan=plan.model_dump(),
+                locale=locale,
+                skill_context=skill_context,
+                world_state=world_state,
+                action_classification=action_classification,
+            )
             try:
-                narration = str(json.loads(raw_narration).get("narration") or "")
-            except json.JSONDecodeError:
-                narration = extract_narration_text(raw_narration) or resolved_narration
+                payload, streamed_narration = yield from self._stream_model_json_payload(model, messages)
+            except Exception:
+                next_scene, narration, dice_result, event_payloads = self._resolve_with_model(
+                    model,
+                    context,
+                    adventure_id,
+                    scene,
+                    character,
+                    player_input,
+                    combat_state,
+                    plan.model_dump(),
+                    locale,
+                    skill_context,
+                    world_state,
+                    action_classification,
+                    use_narration_agent=False,
+                )
+                for chunk in chunk_text(narration):
+                    yield {"type": "delta", "content": chunk}
+            else:
+                next_scene, narration, dice_result, event_payloads = self._model_payload_to_response(
+                    adventure_id,
+                    scene,
+                    character,
+                    payload,
+                    locale,
+                )
+                yield from self._reconcile_streamed_narration(streamed_narration, narration)
             self._record_world_events(context, event_payloads)
             return next_scene, narration, dice_result
         plan = self.graph_runner.plan(
@@ -1058,35 +1114,52 @@ class DMService:
             locale=locale,
             skill_context=skill_context,
         )
+        if hasattr(self.llm_client, "stream_chat"):
+            try:
+                payload, streamed_narration = yield from self._stream_model_json_payload(model, messages)
+            except Exception:
+                if not hasattr(self.llm_client, "chat"):
+                    raise
+            else:
+                next_scene, narration, dice_result, event_payloads = self._model_payload_to_response(
+                    adventure_id,
+                    scene,
+                    character,
+                    payload,
+                    locale,
+                )
+                yield from self._reconcile_streamed_narration(streamed_narration, narration)
+                self._record_world_events(context, event_payloads)
+                return (
+                    next_scene,
+                    narration or self._fallback_narration(locale),
+                    dice_result,
+                )
         if hasattr(self.llm_client, "chat"):
             raw_response = self.llm_client.chat(model, messages)
             payload = json.loads(raw_response)
-            next_scene = SceneState.model_validate(
-                payload.get("scene") or scene.model_dump()
+            next_scene, narration, dice_result, event_payloads = self._model_payload_to_response(
+                adventure_id,
+                scene,
+                character,
+                payload,
+                locale,
             )
-            dice_result = (
-                self._roll_requested_check(payload.get("check"), character)
-                if payload.get("requires_check")
-                else None
-            )
-            narration = str(payload.get("narration") or raw_response)
-            npc_actions = payload.get("npc_actions") or []
-            if npc_actions:
-                narration = (
-                    f"{narration}\n\nNPC actions: "
-                    + " ".join(str(action) for action in npc_actions)
-                )
             for chunk in chunk_text(narration):
                 yield {"type": "delta", "content": chunk}
-            event_payloads = payload.get("world_events") or []
-            self._apply_character_updates(adventure_id, payload)
             self._record_world_events(context, event_payloads)
             return (
                 next_scene,
-                narration or "The scene changes, but the DM gives no further detail.",
+                narration or self._fallback_narration(locale),
                 dice_result,
             )
+        raise RuntimeError("LLM client does not support chat or stream_chat.")
 
+    def _stream_model_json_payload(
+        self,
+        model: LLMModelRecord,
+        messages: list[dict[str, str]],
+    ):
         chunks: list[str] = []
         emitted_narration_length = 0
         for chunk in self.llm_client.stream_chat(model, messages):
@@ -1096,18 +1169,45 @@ class DMService:
                 delta = narration[emitted_narration_length:]
                 emitted_narration_length = len(narration)
                 yield {"type": "delta", "content": delta}
+        raw_response = "".join(chunks)
+        return json.loads(raw_response), extract_narration_text(raw_response)
 
-        payload = json.loads("".join(chunks))
+    def _model_payload_to_response(
+        self,
+        adventure_id: int,
+        scene: SceneState,
+        character: CharacterOut,
+        payload: dict[str, Any],
+        locale: str,
+    ) -> tuple[SceneState, str, dict[str, Any] | None, list[dict[str, Any]]]:
         next_scene = SceneState.model_validate(payload.get("scene") or scene.model_dump())
         dice_result = self._roll_requested_check(payload.get("check"), character) if payload.get("requires_check") else None
-        narration = str(payload.get("narration") or "".join(chunks))
+        narration = str(payload.get("narration") or "")
         npc_actions = payload.get("npc_actions") or []
         if npc_actions:
             narration = f"{narration}\n\nNPC actions: " + " ".join(str(action) for action in npc_actions)
         event_payloads = payload.get("world_events") or []
         self._apply_character_updates(adventure_id, payload)
-        self._record_world_events(context, event_payloads)
-        return next_scene, narration or "The scene changes, but the DM gives no further detail.", dice_result
+        return next_scene, narration or self._fallback_narration(locale), dice_result, event_payloads
+
+    def _reconcile_streamed_narration(self, streamed_narration: str, final_narration: str):
+        if not final_narration or final_narration == streamed_narration:
+            return
+        if final_narration.startswith(streamed_narration):
+            delta = final_narration[len(streamed_narration) :]
+            if delta:
+                yield {"type": "delta", "content": delta}
+            return
+        if not streamed_narration:
+            for chunk in chunk_text(final_narration):
+                yield {"type": "delta", "content": chunk}
+
+    def _fallback_narration(self, locale: str) -> str:
+        return (
+            "场景发生了变化，但 DM 没有提供更多细节。"
+            if locale == "zh-CN"
+            else "The scene changes, but the DM gives no further detail."
+        )
 
     def _advance_with_model(
         self,
@@ -1120,6 +1220,8 @@ class DMService:
         combat_state: dict[str, Any] | None,
         locale: str,
         skill_context: list[DMSkill] | None = None,
+        world_state: dict[str, Any] | None = None,
+        action_classification: dict[str, Any] | None = None,
     ) -> tuple[SceneState, str, dict[str, Any] | None]:
         react_model = self._react_model(model)
         result = self.graph_runner.run(
@@ -1136,6 +1238,8 @@ class DMService:
                     plan.model_dump(),
                     locale,
                     skill_context,
+                    world_state,
+                    action_classification,
                 )
             },
             model=react_model,
@@ -1158,6 +1262,8 @@ class DMService:
         supervisor_plan: dict[str, Any],
         locale: str,
         skill_context: list[DMSkill] | None = None,
+        world_state: dict[str, Any] | None = None,
+        action_classification: dict[str, Any] | None = None,
         use_narration_agent: bool = True,
     ) -> tuple[SceneState, str, dict[str, Any] | None, list[dict[str, Any]]]:
         raw_response = self.llm_client.chat(
@@ -1171,17 +1277,19 @@ class DMService:
                 supervisor_plan=supervisor_plan,
                 locale=locale,
                 skill_context=skill_context,
+                world_state=world_state,
+                action_classification=action_classification,
             ),
         )
         payload = json.loads(raw_response)
-        next_scene = SceneState.model_validate(payload.get("scene") or scene.model_dump())
-        dice_result = self._roll_requested_check(payload.get("check"), character) if payload.get("requires_check") else None
-        narration = str(payload.get("narration") or "")
+        next_scene, narration, dice_result, event_payloads = self._model_payload_to_response(
+            adventure_id,
+            scene,
+            character,
+            payload,
+            locale,
+        )
         npc_actions = payload.get("npc_actions") or []
-        if npc_actions:
-            narration = f"{narration}\n\nNPC actions: " + " ".join(str(action) for action in npc_actions)
-        event_payloads = payload.get("world_events") or []
-        self._apply_character_updates(adventure_id, payload)
         react_model = self._react_model(model)
         if react_model is not None and use_narration_agent:
             narrated = NarrationAgent(
@@ -1203,12 +1311,7 @@ class DMService:
                 narration = narrated
         return (
             next_scene,
-            narration
-            or (
-                "场景发生了变化，但 DM 没有提供更多细节。"
-                if locale == "zh-CN"
-                else "The scene changes, but the DM gives no further detail."
-            ),
+            narration or self._fallback_narration(locale),
             dice_result,
             event_payloads,
         )

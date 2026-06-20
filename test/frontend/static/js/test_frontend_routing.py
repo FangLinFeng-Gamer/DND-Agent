@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 def test_frontend_routes_map_core_views_to_real_paths(tmp_path):
     script_path = tmp_path / "frontend-routing-test.mjs"
     ui_url = json.dumps((PROJECT_ROOT / "frontend/static/js/ui.js").as_uri())
-    state_url = json.dumps((PROJECT_ROOT / "frontend/static/js/state.js").as_uri() + "?v=20260618-game-room-layout10")
+    state_url = json.dumps((PROJECT_ROOT / "frontend/static/js/state.js").as_uri() + "?v=20260619-world-state-progress")
     script_path.write_text(
         textwrap.dedent(
             """

@@ -1155,6 +1155,7 @@ select:focus {
 
 .story-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 12px;
 }
@@ -1172,6 +1173,7 @@ select:focus {
   display: grid;
   gap: 8px;
   width: 100%;
+  min-width: 0;
   min-height: 46px;
   border: 1px solid var(--panel-edge);
   border-radius: 7px;
@@ -1220,6 +1222,7 @@ select:focus {
 .model-summary,
 .item-summary {
   width: 100%;
+  min-width: 0;
   min-height: auto;
   border: 0;
   background: transparent;
@@ -1242,6 +1245,7 @@ select:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 
 .model-actions button,
@@ -3065,7 +3069,8 @@ button.choice-card,
 }
 
 .rules-dock,
-.quest-dock {
+.quest-dock,
+.world-state-panel {
   display: grid;
   align-content: start;
   gap: 8px;
@@ -3076,9 +3081,46 @@ button.choice-card,
 }
 
 .rules-dock .rules-results,
-.quest-dock #scene-detail {
+.quest-dock #scene-detail,
+.world-state-events {
   max-height: 112px;
   overflow: auto;
+}
+
+.world-state-phase {
+  color: #f0e2bb;
+  font-weight: 700;
+}
+
+.world-state-clocks {
+  display: grid;
+  gap: 6px;
+}
+
+.world-clock {
+  border: 1px solid rgba(169, 140, 84, .28);
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: #d8c89d;
+  background: rgba(28, 19, 10, .72);
+}
+
+.world-clock.severity-danger,
+.world-clock.severity-critical {
+  border-color: rgba(205, 84, 66, .42);
+  color: #f1c2a6;
+}
+
+.world-state-events p {
+  margin: 0 0 6px;
+  color: #c8b88b;
+}
+
+.world-state-events-wrap h3 {
+  margin: 0;
+  color: #bda878;
+  font-size: 12px;
+  text-transform: uppercase;
 }
 
 .bottom-dock .rules-dock {

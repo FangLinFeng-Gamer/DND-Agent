@@ -140,6 +140,9 @@ export function bindElements() {
     "room-party-meta",
     "room-combat-meta",
     "room-party-list",
+    "world-state-phase",
+    "world-state-clocks",
+    "world-state-events",
   ].forEach((id) => {
     els[toCamel(id)] = document.getElementById(id);
   });

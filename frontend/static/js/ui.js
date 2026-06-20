@@ -1,6 +1,6 @@
-import { apiBase, els, state } from "./state.js?v=20260618-game-room-layout10";
-import { readErrorMessage } from "./api.js?v=20260618-game-room-layout10";
-import { localizeFeature, t } from "./i18n.js?v=20260618-game-room-layout10";
+import { apiBase, els, state } from "./state.js?v=20260619-world-state-progress";
+import { readErrorMessage } from "./api.js?v=20260619-world-state-progress";
+import { localizeFeature, t } from "./i18n.js?v=20260619-world-state-progress";
 
 export const VIEW_ROUTES = {
   home: "/home",

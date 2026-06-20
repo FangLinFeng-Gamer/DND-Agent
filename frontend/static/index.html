@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500;600;700;800&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/styles.css?v=20260618-game-room-layout10">
+    <link rel="stylesheet" href="/styles.css?v=20260619-world-state-progress">
   </head>
   <body>
     <div class="embers" aria-hidden="true">
@@ -479,6 +479,16 @@
                 <ol id="dice-history" class="dice-history"></ol>
               </section>
 
+              <section class="compact-panel world-state-panel">
+                <h2 data-i18n="worldSituation">World Situation</h2>
+                <div id="world-state-phase" class="world-state-phase detail-empty" data-i18n="worldSituationEmpty">No world pressure yet.</div>
+                <div id="world-state-clocks" class="world-state-clocks"></div>
+                <div class="world-state-events-wrap">
+                  <h3 data-i18n="worldRecentChanges">Recent Changes</h3>
+                  <div id="world-state-events" class="world-state-events"></div>
+                </div>
+              </section>
+
               <section class="compact-panel quest-dock">
                 <h2 data-i18n="questLog">Quest Log</h2>
                 <div id="scene-detail" class="detail-empty" data-i18n="noActiveScene">No active scene.</div>
@@ -535,6 +545,6 @@
         </div>
       </main>
     </div>
-    <script type="module" src="/app.js?v=20260618-game-room-layout10"></script>
+    <script type="module" src="/app.js?v=20260619-world-state-progress"></script>
   </body>
 </html>

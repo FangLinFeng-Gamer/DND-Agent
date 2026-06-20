@@ -73,6 +73,7 @@ SCHEMA = [
         status TEXT NOT NULL,
         summary TEXT NOT NULL,
         current_scene_json TEXT NOT NULL,
+        world_state_json TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -361,6 +362,7 @@ class SQLiteStore:
                 conn.execute(statement)
             self._ensure_column(conn, "adventures", "story_id", "TEXT NOT NULL DEFAULT 'mistbell_tower'")
             self._ensure_column(conn, "adventures", "story_snapshot_json", "TEXT NOT NULL DEFAULT '{}'")
+            self._ensure_column(conn, "adventures", "world_state_json", "TEXT NOT NULL DEFAULT '{}'")
             self._ensure_column(conn, "stories", "encounters_json", "TEXT NOT NULL DEFAULT '[]'")
             self._ensure_column(conn, "combat_states", "action_log_json", "TEXT NOT NULL DEFAULT '[]'")
             self._ensure_column(conn, "character_creation_sessions", "revision", "INTEGER NOT NULL DEFAULT 0")

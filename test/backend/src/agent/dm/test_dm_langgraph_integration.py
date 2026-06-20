@@ -49,6 +49,7 @@ class ScriptedMultiAgentClient:
         )
 
     def stream_chat(self, model, messages):
+        self.resolution_messages = messages
         yield '{"narration":"The gate'
         yield ' opens into a torchlit hall."}'
 
@@ -84,7 +85,7 @@ def test_active_model_uses_supervisor_plan_and_separate_narration_agent(client):
     assert resolution_payload["skills"][0]["name"] == "lockpicking"
 
 
-def test_active_model_streams_from_separate_narration_agent(client):
+def test_active_model_streams_structured_dm_narration(client):
     character = client.post(
         "/api/characters",
         json={"name": "Stream Graph Hero", "race": "Human", "class_name": "Fighter"},

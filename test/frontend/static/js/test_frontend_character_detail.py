@@ -287,6 +287,145 @@ def test_character_detail_localizes_inventory_item_ids(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
+def test_character_detail_localizes_custom_story_inventory_item_ids(tmp_path):
+    script_path = tmp_path / "character-detail-custom-inventory-id-test.mjs"
+    state_url = json.dumps((PROJECT_ROOT / "frontend/static/js/state.js").as_uri())
+    game_url = json.dumps((PROJECT_ROOT / "frontend/static/js/game.js").as_uri())
+    script_path.write_text(
+        textwrap.dedent(
+            """
+            import assert from "node:assert/strict";
+
+            globalThis.window = {
+              location: { pathname: "/" },
+              localStorage: { getItem() { return "zh-CN"; } },
+              history: { pushState() {}, replaceState() {} },
+            };
+
+            class FakeElement {
+              constructor(tag = "div") {
+                this.tag = tag;
+                this.children = [];
+                this.className = "";
+                this.textContent = "";
+                this.style = {};
+                this.disabled = false;
+                this.listeners = {};
+                this._query = {};
+                this.classList = {
+                  add: () => {},
+                  remove: () => {},
+                  toggle: () => {},
+                };
+              }
+
+              set innerHTML(value) {
+                this.children = [];
+                this._query = {};
+                if (value.includes("<span></span>")) {
+                  const span = new FakeElement("span");
+                  const strong = new FakeElement("strong");
+                  this.children.push(span, strong);
+                  this._query.span = span;
+                  this._query.strong = strong;
+                }
+              }
+
+              replaceChildren(...children) {
+                this.children = children;
+              }
+
+              append(...children) {
+                this.children.push(...children);
+              }
+
+              appendChild(child) {
+                this.children.push(child);
+                return child;
+              }
+
+              addEventListener(name, handler) {
+                this.listeners[name] = handler;
+              }
+
+              querySelector(selector) {
+                return this._query[selector] || new FakeElement();
+              }
+
+              setAttribute(name, value) {
+                this[name] = value;
+              }
+            }
+
+            globalThis.document = {
+              createElement(tag) {
+                return new FakeElement(tag);
+              },
+              getElementById() {
+                return new FakeElement();
+              },
+              querySelectorAll() {
+                return [];
+              },
+            };
+
+            function collectText(node) {
+              if (!node) return "";
+              const own = node.textContent || "";
+              const childText = (node.children || []).map(collectText).join(" ");
+              return `${own} ${childText}`;
+            }
+
+            const { els, state } = await import(__STATE_URL__);
+            const { renderCharacter } = await import(__GAME_URL__);
+
+            state.locale = "zh-CN";
+            state.characterDetailTab = "inventory";
+            els.characterDetail = new FakeElement();
+
+            renderCharacter({
+              name: "阿瑟",
+              level: 1,
+              race: "Human",
+              class_name: "Fighter",
+              hp_current: 12,
+              hp_max: 12,
+              armor_class: 14,
+              strength: 16,
+              dexterity: 12,
+              constitution: 14,
+              charisma: 10,
+              inventory: [
+                { item_id: "equipment.steel-longsword", quantity: 1 },
+                { item_id: "equipment.small-shield", quantity: 1 },
+                { item_id: "equipment.rusty-iron-key", quantity: 1 },
+              ],
+            });
+
+            const text = collectText(els.characterDetail);
+            assert.match(text, /钢制长剑/);
+            assert.match(text, /小圆盾/);
+            assert.match(text, /生锈铁制钥匙/);
+            assert.doesNotMatch(text, /equipment\\./);
+            """
+        )
+        .replace("__STATE_URL__", state_url)
+        .replace("__GAME_URL__", game_url),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["node", str(script_path)],
+        cwd=PROJECT_ROOT,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_room_actor_and_party_render_static_room_cards(tmp_path):
     script_path = tmp_path / "room-actor-party-static-test.mjs"
     state_url = json.dumps((PROJECT_ROOT / "frontend/static/js/state.js").as_uri())

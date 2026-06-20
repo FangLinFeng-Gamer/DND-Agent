@@ -1,4 +1,4 @@
-import { t } from "./i18n.js?v=20260618-game-room-layout10";
+import { t } from "./i18n.js?v=20260619-world-state-progress";
 
 const MAX_HISTORY = 10;
 const ROLL_DURATION_MS = 700;

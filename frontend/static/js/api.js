@@ -1,4 +1,4 @@
-import { apiBase } from "./state.js?v=20260618-game-room-layout10";
+import { apiBase } from "./state.js?v=20260619-world-state-progress";
 
 export async function api(path, options = {}) {
   const headers = {
