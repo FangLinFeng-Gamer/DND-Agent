@@ -28,16 +28,17 @@ class AdventureService:
             cursor = conn.execute(
                 """
                 INSERT INTO adventures (
-                    title, world_id, story_id, character_id, status, summary,
+                    title, mode, world_id, story_id, character_id, status, summary,
                     current_scene_json, story_snapshot_json, world_state_json
                 )
                 VALUES (
-                    :title, :world_id, :story_id, :character_id, :status, :summary,
+                    :title, :mode, :world_id, :story_id, :character_id, :status, :summary,
                     :current_scene_json, :story_snapshot_json, :world_state_json
                 )
                 """,
                 {
                     "title": adventure.title,
+                    "mode": adventure.mode or "dnd",
                     "world_id": adventure.world_id,
                     "story_id": adventure.story_id,
                     "character_id": primary_character_id,
@@ -300,6 +301,7 @@ class AdventureService:
         return AdventureOut(
             id=row["id"],
             title=row["title"],
+            mode=row["mode"] if "mode" in row.keys() else "dnd",
             world_id=row["world_id"],
             story_id=row["story_id"],
             character_id=row["character_id"],
@@ -311,6 +313,8 @@ class AdventureService:
             world_state=public_world_state_view(
                 normalize_world_state(decode_json(row["world_state_json"], {}), self._story_from_row(row))
             ),
+            isekai_character=None,
+            survival_state=None,
         )
 
     def _story_from_row(self, row: Row) -> StoryOut | None:

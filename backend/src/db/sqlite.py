@@ -68,6 +68,7 @@ SCHEMA = [
     CREATE TABLE IF NOT EXISTS adventures (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'dnd',
         world_id TEXT NOT NULL,
         character_id INTEGER NOT NULL,
         status TEXT NOT NULL,
@@ -360,6 +361,7 @@ class SQLiteStore:
         with self.connect() as conn:
             for statement in SCHEMA:
                 conn.execute(statement)
+            self._ensure_column(conn, "adventures", "mode", "TEXT NOT NULL DEFAULT 'dnd'")
             self._ensure_column(conn, "adventures", "story_id", "TEXT NOT NULL DEFAULT 'mistbell_tower'")
             self._ensure_column(conn, "adventures", "story_snapshot_json", "TEXT NOT NULL DEFAULT '{}'")
             self._ensure_column(conn, "adventures", "world_state_json", "TEXT NOT NULL DEFAULT '{}'")

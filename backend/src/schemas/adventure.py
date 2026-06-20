@@ -8,6 +8,7 @@ from backend.src.schemas.combat import CombatActionRequest, CombatParticipantInp
 
 class AdventureCreate(BaseModel):
     title: str = Field(min_length=1)
+    mode: str = "dnd"
     character_id: int | None = None
     party_character_ids: list[int] | None = None
     world_id: str = "default"
@@ -55,6 +56,7 @@ class MessageOut(BaseModel):
 class AdventureOut(BaseModel):
     id: int
     title: str
+    mode: str = "dnd"
     world_id: str
     story_id: str
     character_id: int
@@ -64,6 +66,8 @@ class AdventureOut(BaseModel):
     summary: str
     current_scene: SceneState
     world_state: dict[str, Any] = Field(default_factory=dict)
+    isekai_character: dict[str, Any] | None = None
+    survival_state: dict[str, Any] | None = None
     messages: list[MessageOut] = Field(default_factory=list)
 
 
