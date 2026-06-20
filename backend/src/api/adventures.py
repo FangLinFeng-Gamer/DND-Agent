@@ -40,6 +40,13 @@ def dm_service(request: Request) -> DMService:
     return DMService(request.app.state.store)
 
 
+def require_dnd_adventure(adventure_id: int, request: Request) -> AdventureOut:
+    adventure = adventure_service(request).get(adventure_id, include_messages=False)
+    if adventure.mode != "dnd":
+        raise api_error(400, "mode_not_supported", "This endpoint only supports DND adventures.")
+    return adventure
+
+
 def ndjson_event(event: dict) -> str:
     return json.dumps(jsonable_encoder(event), ensure_ascii=False) + "\n"
 
@@ -180,7 +187,7 @@ def resolve_check(
 @router.post("/{adventure_id}/combat/start", response_model=CombatStateOut)
 def start_combat(adventure_id: int, combat_request: AdventureCombatStartRequest, request: Request) -> dict:
     service = adventure_service(request)
-    adventure = service.get(adventure_id, include_messages=False)
+    require_dnd_adventure(adventure_id, request)
     existing_state = service.get_combat_state(adventure_id)
     if existing_state and existing_state.get("is_active"):
         raise api_error(400, "combat_already_active", "Combat is already active.")
@@ -199,6 +206,7 @@ def start_combat(adventure_id: int, combat_request: AdventureCombatStartRequest,
 
 @router.get("/{adventure_id}/combat", response_model=CombatStateOut | None)
 def get_combat_state(adventure_id: int, request: Request) -> dict | None:
+    require_dnd_adventure(adventure_id, request)
     state = adventure_service(request).get_combat_state(adventure_id)
     if state is None or not state.get("is_active"):
         return None
@@ -207,6 +215,7 @@ def get_combat_state(adventure_id: int, request: Request) -> dict | None:
 
 @router.post("/{adventure_id}/combat/action", response_model=AdventureCombatActionResponse)
 def combat_action(adventure_id: int, action: AdventureCombatActionRequest, request: Request) -> dict:
+    require_dnd_adventure(adventure_id, request)
     service = adventure_service(request)
     state = service.get_combat_state(adventure_id)
     if state is None or not state.get("is_active"):
@@ -261,6 +270,7 @@ def npc_combat_turn(
     request: Request,
     turn_request: AdventureNPCCombatTurnRequest | None = None,
 ) -> dict:
+    require_dnd_adventure(adventure_id, request)
     try:
         return dm_service(request).resolve_npc_combat_turn(
             adventure_id,
@@ -279,6 +289,7 @@ def npc_combat_turn(
 
 @router.post("/{adventure_id}/combat/end", response_model=CombatStateOut)
 def end_combat(adventure_id: int, request: Request) -> dict:
+    require_dnd_adventure(adventure_id, request)
     service = adventure_service(request)
     state = service.get_combat_state(adventure_id)
     if state is None or not state.get("is_active"):

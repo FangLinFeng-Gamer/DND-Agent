@@ -56,3 +56,33 @@ def test_isekai_character_is_not_added_to_dnd_character_list(client):
     characters = client.get("/api/characters").json()
 
     assert all(character["name"] != "No Character Leak" for character in characters)
+
+
+def test_isekai_message_updates_survival_state(client):
+    adventure = client.post(
+        "/api/adventures",
+        json={"title": "Stream Survival", "mode": "isekai_survival", "locale": "zh-CN"},
+    ).json()
+    before = adventure["survival_state"]["fatigue"]
+
+    response = client.post(
+        f"/api/adventures/{adventure['id']}/messages",
+        json={"content": "我寻找水源。", "locale": "zh-CN"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["adventure"]["survival_state"]["fatigue"] > before
+    assert data["dm_message"]["metadata"]["mode"] == "isekai_survival"
+
+
+def test_dnd_combat_api_rejects_isekai_adventure(client):
+    adventure = client.post("/api/adventures", json={"title": "No Combat", "mode": "isekai_survival"}).json()
+
+    response = client.post(
+        f"/api/adventures/{adventure['id']}/combat/start",
+        json={"enemies": [{"name": "Wolf", "hp": 8, "ac": 12, "attack_bonus": 3, "damage": "1d6"}]},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["error"]["code"] == "mode_not_supported"

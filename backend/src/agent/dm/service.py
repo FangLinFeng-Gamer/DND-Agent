@@ -311,6 +311,11 @@ class DMService:
         locale = normalize_locale(message.locale)
         skill_context = self.skill_registry.match(message.content, locale=locale)
         adventure = self.adventures.get(adventure_id, include_messages=False)
+        if adventure.mode == "isekai_survival":
+            from backend.src.services.isekai import IsekaiSurvivalService
+
+            return IsekaiSurvivalService(self.store, llm_client=self.llm_client).advance(adventure_id, message)
+
         combat_state = self.adventures.get_combat_state(adventure_id)
         current_world_state = self.adventures.get_world_state(adventure_id)
         action_classification = self.world_state.classify_action(message.content)
@@ -419,6 +424,12 @@ class DMService:
         locale = normalize_locale(message.locale)
         skill_context = self.skill_registry.match(message.content, locale=locale)
         adventure = self.adventures.get(adventure_id, include_messages=False)
+        if adventure.mode == "isekai_survival":
+            from backend.src.services.isekai import IsekaiSurvivalService
+
+            yield from IsekaiSurvivalService(self.store, llm_client=self.llm_client).advance_stream(adventure_id, message)
+            return
+
         combat_state = self.adventures.get_combat_state(adventure_id)
         current_world_state = self.adventures.get_world_state(adventure_id)
         action_classification = self.world_state.classify_action(message.content)

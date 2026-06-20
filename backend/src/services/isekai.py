@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import random
+from typing import Any
 
+from backend.src.agent.dm.output import chunk_text
 from backend.src.db.sqlite import SQLiteStore, encode_json
-from backend.src.schemas.adventure import AdventureCreate, AdventureOut, SceneState
+from backend.src.schemas.adventure import AdventureCreate, AdventureOut, DMAdvanceResponse, MessageCreate, SceneState
 from backend.src.schemas.isekai import IsekaiCharacterOut, IsekaiSurvivalStateOut
 from backend.src.services.adventures import AdventureService
 
@@ -123,4 +125,124 @@ class IsekaiSurvivalService:
             f"{character.name}，{character.race} {character.class_name}，在{scene.location}醒来。"
             f"{scene.environment} 当前目标：{scene.current_objective}"
             f" 你的金币为 {character.gold}，饥饿 {survival.hunger}，口渴 {survival.thirst}，疲劳 {survival.fatigue}。"
+        )
+
+    def advance(self, adventure_id: int, message: MessageCreate) -> DMAdvanceResponse:
+        self.adventures.append_message(adventure_id, "player", message.content, {"mode": "isekai_survival"})
+        action_type = self.classify_action(message.content)
+        delta = self.survival_delta_for_action(action_type)
+        survival = self.apply_delta(adventure_id, action_type, delta)
+        scene = self.adventures.get_scene(adventure_id)
+        character = self.get_character(adventure_id)
+        content = self.narrate(message.content, scene, character, survival, delta)
+        dm_message = self.adventures.append_message(
+            adventure_id,
+            "dm",
+            content,
+            {"mode": "isekai_survival", "survival_delta": delta, "source": "survival_rules"},
+        )
+        updated = self.adventures.get(adventure_id)
+        return DMAdvanceResponse(
+            adventure=updated,
+            dm_message=dm_message,
+            scene=updated.current_scene,
+            messages=updated.messages,
+            world_state=updated.world_state,
+            combat_state=None,
+            dice_result=None,
+        )
+
+    def advance_stream(self, adventure_id: int, message: MessageCreate):
+        yield {"type": "status", "message": "dm_thinking"}
+        response = self.advance(adventure_id, message)
+        player_message = response.messages[-2] if len(response.messages) >= 2 else None
+        if player_message:
+            yield {"type": "player_message", "message": player_message}
+        for chunk in chunk_text(response.dm_message.content):
+            yield {"type": "delta", "content": chunk}
+        yield {
+            "type": "final",
+            "adventure": response.adventure,
+            "dm_message": response.dm_message,
+            "scene": response.scene,
+            "messages": response.messages,
+            "world_state": response.world_state,
+            "combat_state": None,
+            "dice_result": None,
+        }
+
+    def classify_action(self, content: str) -> str:
+        text = content.lower()
+        if any(word in text for word in ["休息", "睡", "camp", "rest"]):
+            return "rest"
+        if any(word in text for word in ["吃", "喝", "食物", "水", "food", "water"]):
+            return "forage"
+        if any(word in text for word in ["探索", "走", "寻找", "inspect", "explore", "move"]):
+            return "explore"
+        return "talk"
+
+    def survival_delta_for_action(self, action_type: str) -> dict[str, Any]:
+        if action_type == "rest":
+            return {
+                "hunger": 2,
+                "thirst": 2,
+                "fatigue": -12,
+                "sleep_need": -18,
+                "visible_events": ["你短暂休整，疲劳有所缓解。"],
+            }
+        if action_type == "forage":
+            return {
+                "hunger": 1,
+                "thirst": 2,
+                "fatigue": 6,
+                "sleep_need": 3,
+                "visible_events": ["寻找资源消耗了体力。"],
+            }
+        if action_type == "explore":
+            return {
+                "hunger": 3,
+                "thirst": 4,
+                "fatigue": 8,
+                "sleep_need": 4,
+                "visible_events": ["探索让你更加疲惫和口渴。"],
+            }
+        return {"hunger": 0, "thirst": 1, "fatigue": 1, "sleep_need": 0, "visible_events": []}
+
+    def apply_delta(self, adventure_id: int, action_type: str, delta: dict[str, Any]) -> dict[str, Any]:
+        current = self.adventures.get(adventure_id, include_messages=False).survival_state or {}
+        updated = dict(current)
+        for key in ["hunger", "thirst", "fatigue", "sleep_need", "temperature_risk", "morale"]:
+            updated[key] = max(0, min(100, int(updated.get(key, 0)) + int(delta.get(key, 0))))
+        updated["last_action_type"] = action_type
+        with self.store.connect() as conn:
+            conn.execute(
+                """
+                UPDATE isekai_survival_states
+                SET hunger = :hunger, thirst = :thirst, fatigue = :fatigue, sleep_need = :sleep_need,
+                    temperature_risk = :temperature_risk, morale = :morale,
+                    last_action_type = :last_action_type, updated_at = CURRENT_TIMESTAMP
+                WHERE adventure_id = :adventure_id
+                """,
+                {**updated, "adventure_id": adventure_id},
+            )
+        return updated
+
+    def get_character(self, adventure_id: int) -> dict[str, Any]:
+        adventure = self.adventures.get(adventure_id, include_messages=False)
+        return adventure.isekai_character or {}
+
+    def narrate(
+        self,
+        player_input: str,
+        scene: SceneState,
+        character: dict[str, Any],
+        survival: dict[str, Any],
+        delta: dict[str, Any],
+    ) -> str:
+        name = character.get("name") or "你"
+        event_text = " ".join(delta.get("visible_events") or [])
+        return (
+            f"{name}继续在{scene.location}行动：{player_input}"
+            f"{event_text} 当前饥饿 {survival['hunger']}，口渴 {survival['thirst']}，"
+            f"疲劳 {survival['fatigue']}，睡眠需求 {survival['sleep_need']}。"
         )
