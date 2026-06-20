@@ -100,3 +100,28 @@ def test_isekai_stream_uses_active_model_streaming(store):
     assert "模型流式异世界回复" in delta_text
     assert events[-1]["type"] == "final"
     assert events[-1]["dm_message"].metadata["source"] == "active_model"
+
+
+def test_isekai_turn_records_known_world_events(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Event Turn", mode="isekai_survival"))
+
+    response = service.advance(adventure.id, MessageCreate(content="我给路边营地的人做一锅热汤。", locale="zh-CN"))
+
+    events = response.adventure.world_events
+    assert events
+    assert events[-1].metadata["source"] == "player_triggered"
+    assert events[-1].metadata["known_to_character"] is True
+    assert events[-1].metadata["triggering_action"] == "我给路边营地的人做一锅热汤。"
+
+
+def test_isekai_turn_count_is_adventure_local(store):
+    service = IsekaiSurvivalService(store)
+    first = service.create_adventure(AdventureCreate(title="First Counter", mode="isekai_survival"))
+    second = service.create_adventure(AdventureCreate(title="Second Counter", mode="isekai_survival"))
+
+    first_response = service.advance(first.id, MessageCreate(content="我沿着旧猎径探索。", locale="zh-CN"))
+    fresh_second = service.adventures.get(second.id)
+
+    assert first_response.adventure.world_state["turn_count"] == 1
+    assert fresh_second.world_state["turn_count"] == 0

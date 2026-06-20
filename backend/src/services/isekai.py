@@ -10,6 +10,8 @@ from backend.src.schemas.adventure import AdventureCreate, AdventureOut, DMAdvan
 from backend.src.schemas.llm import LLMModelRecord
 from backend.src.schemas.isekai import IsekaiCharacterOut, IsekaiSurvivalStateOut
 from backend.src.services.adventures import AdventureService
+from backend.src.services.isekai_events import IsekaiWorldEventDirector
+from backend.src.services.isekai_preferences import IsekaiPreferenceLearner
 from backend.src.services.llm_models import LLMModelService
 
 
@@ -24,6 +26,8 @@ class IsekaiSurvivalService:
         self.adventures = AdventureService(store)
         self.models = LLMModelService(store)
         self.llm_client = llm_client
+        self.event_director = IsekaiWorldEventDirector(store)
+        self.preference_learner = IsekaiPreferenceLearner(llm_client=llm_client)
 
     def generate_character(self) -> IsekaiCharacterOut:
         race = random.choice(RACES)
@@ -187,7 +191,7 @@ class IsekaiSurvivalService:
         scene = self.adventures.get_scene(adventure_id)
         character = self.get_character(adventure_id)
         fallback = self.narrate(message.content, scene, character, survival, delta)
-        return {
+        turn = {
             "player_input": message.content,
             "player_message": player_message,
             "action_type": action_type,
@@ -197,6 +201,20 @@ class IsekaiSurvivalService:
             "character": character,
             "fallback": fallback,
         }
+        turn["world_state"] = self.advance_world_context(adventure_id, turn)
+        return turn
+
+    def advance_world_context(self, adventure_id: int, turn: dict[str, Any]) -> dict[str, Any]:
+        world_state = self.adventures.get_world_state(adventure_id)
+        world_state["turn_count"] = int(world_state.get("turn_count", 0)) + 1
+        messages = [
+            {"role": message.role, "content": message.content}
+            for message in self.adventures.list_messages(adventure_id)
+        ]
+        world_state = self.preference_learner.maybe_update(world_state, messages, self.active_model())
+        self.adventures.update_world_state(adventure_id, world_state)
+        self.event_director.evaluate_turn(adventure_id, turn, world_state)
+        return world_state
 
     def generate_narration(self, turn: dict[str, Any], locale: str = "zh-CN") -> tuple[str, str]:
         model = self.active_model()
