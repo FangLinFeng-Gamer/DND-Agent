@@ -30,6 +30,28 @@ class FakeStreamingIsekaiLLMClient:
         yield '树影中出现了陌生路标。"}'
 
 
+class TimelineStreamingPreferenceClient:
+    def __init__(self):
+        self.timeline = []
+
+    def chat(self, model, messages):
+        self.timeline.append("chat")
+        return json.dumps(
+            {
+                "themes": ["美食"],
+                "playstyle": ["经营"],
+                "goals": ["开餐厅"],
+                "confidence": 0.8,
+            }
+        )
+
+    def stream_chat(self, model, messages):
+        self.timeline.append("stream_start")
+        yield '{"narration":"第五回合流式回复：'
+        self.timeline.append("stream_chunk")
+        yield '你闻到远处营火上的炖汤香气。"}'
+
+
 def activate_test_model(store):
     model_service = LLMModelService(store)
     model = model_service.create(
@@ -100,6 +122,25 @@ def test_isekai_stream_uses_active_model_streaming(store):
     assert "模型流式异世界回复" in delta_text
     assert events[-1]["type"] == "final"
     assert events[-1]["dm_message"].metadata["source"] == "active_model"
+
+
+def test_isekai_stream_defers_preference_learning_until_after_narration(store):
+    llm_client = TimelineStreamingPreferenceClient()
+    service = IsekaiSurvivalService(store, llm_client=llm_client)
+    adventure = service.create_adventure(AdventureCreate(title="Stream Preference Wilds", mode="isekai_survival"))
+
+    for index in range(4):
+        service.advance(adventure.id, MessageCreate(content=f"我沿着旧猎径探索第{index + 1}段。", locale="zh-CN"))
+
+    activate_test_model(store)
+
+    events = list(service.advance_stream(adventure.id, MessageCreate(content="我继续寻找适合做汤的食材。", locale="zh-CN")))
+
+    delta_text = "".join(event.get("content", "") for event in events if event["type"] == "delta")
+    assert "第五回合流式回复" in delta_text
+    assert llm_client.timeline.index("stream_start") < llm_client.timeline.index("chat")
+    assert llm_client.timeline.index("stream_chunk") < llm_client.timeline.index("chat")
+    assert service.adventures.get_world_state(adventure.id)["player_preferences"]["themes"] == ["美食"]
 
 
 def test_isekai_turn_records_known_world_events(store):

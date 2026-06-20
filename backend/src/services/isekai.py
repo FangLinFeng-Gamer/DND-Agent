@@ -157,7 +157,7 @@ class IsekaiSurvivalService:
 
     def advance_stream(self, adventure_id: int, message: MessageCreate):
         yield {"type": "status", "message": "dm_thinking"}
-        turn = self.prepare_turn(adventure_id, message)
+        turn = self.prepare_turn(adventure_id, message, learn_preferences=False)
         yield {"type": "player_message", "message": turn["player_message"]}
         content, source = yield from self.stream_narration(turn, message.locale)
         dm_message = self.adventures.append_message(
@@ -166,6 +166,7 @@ class IsekaiSurvivalService:
             content,
             {"mode": "isekai_survival", "survival_delta": turn["delta"], "source": source},
         )
+        turn["world_state"] = self.learn_preferences_for_current_turn(adventure_id)
         updated = self.adventures.get(adventure_id)
         yield {
             "type": "final",
@@ -178,7 +179,12 @@ class IsekaiSurvivalService:
             "dice_result": None,
         }
 
-    def prepare_turn(self, adventure_id: int, message: MessageCreate) -> dict[str, Any]:
+    def prepare_turn(
+        self,
+        adventure_id: int,
+        message: MessageCreate,
+        learn_preferences: bool = True,
+    ) -> dict[str, Any]:
         player_message = self.adventures.append_message(
             adventure_id,
             "player",
@@ -201,20 +207,37 @@ class IsekaiSurvivalService:
             "character": character,
             "fallback": fallback,
         }
-        turn["world_state"] = self.advance_world_context(adventure_id, turn)
+        turn["world_state"] = self.advance_world_context(adventure_id, turn, learn_preferences=learn_preferences)
         return turn
 
-    def advance_world_context(self, adventure_id: int, turn: dict[str, Any]) -> dict[str, Any]:
+    def advance_world_context(
+        self,
+        adventure_id: int,
+        turn: dict[str, Any],
+        learn_preferences: bool = True,
+    ) -> dict[str, Any]:
         world_state = self.adventures.get_world_state(adventure_id)
         world_state["turn_count"] = int(world_state.get("turn_count", 0)) + 1
+        if learn_preferences:
+            world_state = self.learn_preferences_for_current_turn(adventure_id, world_state)
+        else:
+            self.adventures.update_world_state(adventure_id, world_state)
+        self.event_director.evaluate_turn(adventure_id, turn, world_state)
+        return world_state
+
+    def learn_preferences_for_current_turn(
+        self,
+        adventure_id: int,
+        world_state: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        current = dict(world_state or self.adventures.get_world_state(adventure_id))
         messages = [
             {"role": message.role, "content": message.content}
             for message in self.adventures.list_messages(adventure_id)
         ]
-        world_state = self.preference_learner.maybe_update(world_state, messages, self.active_model())
-        self.adventures.update_world_state(adventure_id, world_state)
-        self.event_director.evaluate_turn(adventure_id, turn, world_state)
-        return world_state
+        updated = self.preference_learner.maybe_update(current, messages, self.active_model())
+        self.adventures.update_world_state(adventure_id, updated)
+        return updated
 
     def generate_narration(self, turn: dict[str, Any], locale: str = "zh-CN") -> tuple[str, str]:
         model = self.active_model()
