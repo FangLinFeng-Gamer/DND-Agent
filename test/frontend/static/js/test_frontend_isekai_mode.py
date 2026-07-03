@@ -100,4 +100,5 @@ def test_isekai_survival_panel_renders_time_fields():
     assert "last_time_delta_minutes" in survival_block
     assert "survival.shelter" in survival_block
     assert '"lastTimeCost"' in i18n
+    assert '"hoursMinutesShort"' in i18n
     assert '"shelter"' in i18n

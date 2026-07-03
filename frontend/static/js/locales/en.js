@@ -340,6 +340,7 @@ export const enTranslations = {
   "noTimeCost": "No time advanced",
   "minutesShort": "{minutes} min",
   "hoursShort": "{hours} hr",
+  "hoursMinutesShort": "{hours} hr {minutes} min",
   "gold": "Gold",
   "hunger": "Hunger",
   "thirst": "Thirst",

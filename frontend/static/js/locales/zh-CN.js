@@ -340,6 +340,7 @@ export const zhCNTranslations = {
   "noTimeCost": "未推进时间",
   "minutesShort": "{minutes} 分钟",
   "hoursShort": "{hours} 小时",
+  "hoursMinutesShort": "{hours} 小时 {minutes} 分钟",
   "gold": "金币",
   "hunger": "饥饿",
   "thirst": "口渴",

@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=20260620-isekai-events";
-import { els, state } from "./state.js?v=20260620-isekai-events";
-import { localizeRaceMechanicLabel, localizeRaceName, localizeRaceTag, t } from "./i18n.js?v=20260620-isekai-events";
-import { emptyNode, pillNode, setStatus, showError } from "./ui.js?v=20260620-isekai-events";
+import { api } from "./api.js?v=20260703-isekai-time";
+import { els, state } from "./state.js?v=20260703-isekai-time";
+import { localizeRaceMechanicLabel, localizeRaceName, localizeRaceTag, t } from "./i18n.js?v=20260703-isekai-time";
+import { emptyNode, pillNode, setStatus, showError } from "./ui.js?v=20260703-isekai-time";
 
 export async function loadRaces() {
   try {

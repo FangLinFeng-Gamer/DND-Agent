@@ -1,9 +1,9 @@
-import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260620-isekai-events";
-import { apiBase, els, state } from "./state.js?v=20260620-isekai-events";
-import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260620-isekai-events";
-import { localizedStoryText } from "./stories.js?v=20260620-isekai-events";
-import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260620-isekai-events";
-import { rollD20ForCheck } from "./dice.js?v=20260620-isekai-events";
+import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260703-isekai-time";
+import { apiBase, els, state } from "./state.js?v=20260703-isekai-time";
+import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260703-isekai-time";
+import { localizedStoryText } from "./stories.js?v=20260703-isekai-time";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260703-isekai-time";
+import { rollD20ForCheck } from "./dice.js?v=20260703-isekai-time";
 
 const ISEKAI_CREATION_PROGRESS_KEYS = [
   "isekaiProgressRace",
@@ -1787,6 +1787,9 @@ function formatIsekaiTimeCost(minutes) {
   }
   if (value >= 60 && value % 60 === 0) {
     return t("hoursShort", { hours: value / 60 });
+  }
+  if (value >= 60) {
+    return t("hoursMinutesShort", { hours: Math.floor(value / 60), minutes: value % 60 });
   }
   return t("minutesShort", { minutes: value });
 }
