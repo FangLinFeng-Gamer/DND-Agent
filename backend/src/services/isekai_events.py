@@ -25,6 +25,9 @@ class IsekaiWorldEventDirector:
         turn: dict[str, Any],
         world_state: dict[str, Any],
     ) -> list[WorldEventOut]:
+        time_context = turn.get("time") or {}
+        if time_context.get("advances_time") is False:
+            return []
         candidate = self._player_triggered_candidate(turn)
         if candidate is None:
             candidate = self._preference_candidate(turn, world_state)

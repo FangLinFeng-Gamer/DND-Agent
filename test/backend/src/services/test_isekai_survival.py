@@ -184,6 +184,7 @@ def test_isekai_status_question_does_not_advance_time_or_pressure(store):
     assert after["sleep_need"] == before["sleep_need"]
     assert after["state"]["last_time_delta_minutes"] == 0
     assert response.dm_message.metadata["time"]["advances_time"] is False
+    assert response.adventure.world_events == []
 
 
 def test_isekai_exploration_advances_time_and_pressure(store):

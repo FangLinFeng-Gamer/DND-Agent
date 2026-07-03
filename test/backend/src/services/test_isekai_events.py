@@ -131,3 +131,30 @@ def test_preference_weighted_event_uses_merchant_channel_when_channel_exists(sto
     assert events[0].metadata["source"] == "preference_weighted"
     assert events[0].metadata["knowledge_channel"] == "merchant_news"
     assert "美食" in events[0].metadata["preference_tags"]
+
+
+def test_table_talk_does_not_generate_random_world_event(store):
+    adventure = create_isekai_adventure(store)
+    director = IsekaiWorldEventDirector(store)
+    turn = {
+        "player_input": "我现在的状态怎么样？",
+        "action_type": "status_check",
+        "time": {"advances_time": False, "time_cost_minutes": 0},
+        "scene": adventure.current_scene,
+        "character": adventure.isekai_character,
+        "survival": adventure.survival_state,
+        "delta": {"visible_events": []},
+    }
+
+    events = director.evaluate_turn(
+        adventure.id,
+        turn,
+        {
+            "turn_count": 3,
+            "player_preferences": {},
+            "force_event_scope": "local",
+        },
+    )
+
+    assert events == []
+    assert WorldEventService(store).list_known_for_adventure(adventure.id) == []
