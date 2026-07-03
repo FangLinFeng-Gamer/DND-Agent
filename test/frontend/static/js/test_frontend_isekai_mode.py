@@ -86,3 +86,18 @@ def test_isekai_world_events_use_event_cards_instead_of_stat_rows():
     assert ".isekai-event-list" in css
     assert ".isekai-event-card" in css
     assert "white-space: normal" in css
+
+
+def test_isekai_survival_panel_renders_time_fields():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    survival_block = game_js.split("function renderIsekaiSurvival", 1)[1].split("function", 1)[0]
+    assert "survival.day" in survival_block
+    assert "survival.time_of_day" in survival_block
+    assert "last_time_delta_minutes" in survival_block
+    assert "survival.shelter" in survival_block
+    assert '"lastTimeCost"' in i18n
+    assert '"shelter"' in i18n

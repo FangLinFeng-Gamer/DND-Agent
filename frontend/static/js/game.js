@@ -1780,14 +1780,35 @@ function renderIsekaiCharacter(character) {
   ] : []);
 }
 
+function formatIsekaiTimeCost(minutes) {
+  const value = Number(minutes || 0);
+  if (!value) {
+    return t("noTimeCost");
+  }
+  if (value >= 60 && value % 60 === 0) {
+    return t("hoursShort", { hours: value / 60 });
+  }
+  return t("minutesShort", { minutes: value });
+}
+
+function localizeShelter(value) {
+  const key = `shelter.${value || "none"}`;
+  const localized = t(key);
+  return localized === key ? String(value || t("notSet")) : localized;
+}
+
 function renderIsekaiSurvival(survival) {
+  const stateData = survival?.state || {};
   renderIsekaiPanel(els.isekaiSurvivalPanel, t("isekaiSurvivalState"), survival ? [
+    [t("isekaiDay", { day: survival.day || 1 }), survival.time_of_day || t("notSet")],
+    [t("lastTimeCost"), formatIsekaiTimeCost(stateData.last_time_delta_minutes)],
     [t("hunger"), survival.hunger],
     [t("thirst"), survival.thirst],
     [t("fatigue"), survival.fatigue],
     [t("sleepNeed"), survival.sleep_need],
     [t("morale"), survival.morale],
     [t("weather"), survival.weather],
+    [t("shelter"), localizeShelter(survival.shelter)],
   ] : []);
 }
 
