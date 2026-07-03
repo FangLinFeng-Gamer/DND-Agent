@@ -12,6 +12,7 @@ from backend.src.schemas.isekai import IsekaiCharacterOut, IsekaiSurvivalStateOu
 from backend.src.services.adventures import AdventureService
 from backend.src.services.isekai_events import IsekaiWorldEventDirector
 from backend.src.services.isekai_preferences import IsekaiPreferenceLearner
+from backend.src.services.isekai_time import IsekaiActionResolution, IsekaiTimeService
 from backend.src.services.llm_models import LLMModelService
 
 
@@ -28,6 +29,7 @@ class IsekaiSurvivalService:
         self.llm_client = llm_client
         self.event_director = IsekaiWorldEventDirector(store)
         self.preference_learner = IsekaiPreferenceLearner(llm_client=llm_client)
+        self.time = IsekaiTimeService()
 
     def generate_character(self) -> IsekaiCharacterOut:
         race = random.choice(RACES)
@@ -142,7 +144,12 @@ class IsekaiSurvivalService:
             adventure_id,
             "dm",
             content,
-            {"mode": "isekai_survival", "survival_delta": turn["delta"], "source": source},
+            {
+                "mode": "isekai_survival",
+                "survival_delta": turn["delta"],
+                "time": turn["time"],
+                "source": source,
+            },
         )
         updated = self.adventures.get(adventure_id)
         return DMAdvanceResponse(
@@ -164,7 +171,12 @@ class IsekaiSurvivalService:
             adventure_id,
             "dm",
             content,
-            {"mode": "isekai_survival", "survival_delta": turn["delta"], "source": source},
+            {
+                "mode": "isekai_survival",
+                "survival_delta": turn["delta"],
+                "time": turn["time"],
+                "source": source,
+            },
         )
         turn["world_state"] = self.learn_preferences_for_current_turn(adventure_id)
         updated = self.adventures.get(adventure_id)
@@ -191,16 +203,22 @@ class IsekaiSurvivalService:
             message.content,
             {"mode": "isekai_survival"},
         )
-        action_type = self.classify_action(message.content)
-        delta = self.survival_delta_for_action(action_type)
-        survival = self.apply_delta(adventure_id, action_type, delta)
+        action = self.time.classify_action(message.content)
+        delta, survival = self.apply_delta(adventure_id, action)
         scene = self.adventures.get_scene(adventure_id)
         character = self.get_character(adventure_id)
         fallback = self.narrate(message.content, scene, character, survival, delta)
         turn = {
             "player_input": message.content,
             "player_message": player_message,
-            "action_type": action_type,
+            "action_type": action.action_type,
+            "action": action,
+            "time": {
+                "time_cost_minutes": delta["time_cost_minutes"],
+                "advances_time": delta["advances_time"],
+                "survival_intent": action.survival_intent,
+                "reason": action.reason,
+            },
             "delta": delta,
             "survival": survival,
             "scene": scene,
@@ -293,6 +311,10 @@ class IsekaiSurvivalService:
                 "survival": turn["survival"],
                 "survival_delta": turn["delta"],
                 "action_type": turn["action_type"],
+                "time": turn.get("time", {}),
+                "day": turn["survival"].get("day"),
+                "time_of_day": turn["survival"].get("time_of_day"),
+                "survival_state_json": turn["survival"].get("state", {}),
             },
             "fallback_narration": turn["fallback"],
             "locale": locale,
@@ -302,7 +324,7 @@ class IsekaiSurvivalService:
                 "role": "system",
                 "content": (
                     "你是异世界生存模拟器 DM。你负责根据玩家行动、生存状态和环境生成下一段剧情。"
-                    "后端已经结算饥饿、口渴、疲劳、睡眠需求等数值，你不能修改这些数值。"
+                    "后端已经结算时间、饥饿、口渴、疲劳、睡眠需求等数值，你不能修改这些数值。"
                     "你必须区分用户信息、系统状态和工具结果，不要把系统状态当成玩家发言。"
                     "只输出 JSON 对象，格式为 {\"narration\":\"...\"}。"
                 ),
@@ -324,61 +346,24 @@ class IsekaiSurvivalService:
                 return narration
         return fallback
 
-    def classify_action(self, content: str) -> str:
-        text = content.lower()
-        if any(word in text for word in ["休息", "睡", "camp", "rest"]):
-            return "rest"
-        if any(word in text for word in ["吃", "喝", "食物", "水", "food", "water"]):
-            return "forage"
-        if any(word in text for word in ["探索", "走", "寻找", "inspect", "explore", "move"]):
-            return "explore"
-        return "talk"
-
-    def survival_delta_for_action(self, action_type: str) -> dict[str, Any]:
-        if action_type == "rest":
-            return {
-                "hunger": 2,
-                "thirst": 2,
-                "fatigue": -12,
-                "sleep_need": -18,
-                "visible_events": ["你短暂休整，疲劳有所缓解。"],
-            }
-        if action_type == "forage":
-            return {
-                "hunger": 1,
-                "thirst": 2,
-                "fatigue": 6,
-                "sleep_need": 3,
-                "visible_events": ["寻找资源消耗了体力。"],
-            }
-        if action_type == "explore":
-            return {
-                "hunger": 3,
-                "thirst": 4,
-                "fatigue": 8,
-                "sleep_need": 4,
-                "visible_events": ["探索让你更加疲惫和口渴。"],
-            }
-        return {"hunger": 0, "thirst": 1, "fatigue": 1, "sleep_need": 0, "visible_events": []}
-
-    def apply_delta(self, adventure_id: int, action_type: str, delta: dict[str, Any]) -> dict[str, Any]:
+    def apply_delta(self, adventure_id: int, action: IsekaiActionResolution) -> tuple[dict[str, Any], dict[str, Any]]:
         current = self.adventures.get(adventure_id, include_messages=False).survival_state or {}
-        updated = dict(current)
-        for key in ["hunger", "thirst", "fatigue", "sleep_need", "temperature_risk", "morale"]:
-            updated[key] = max(0, min(100, int(updated.get(key, 0)) + int(delta.get(key, 0))))
-        updated["last_action_type"] = action_type
+        updated, delta = self.time.apply_time_and_survival(current, action)
         with self.store.connect() as conn:
             conn.execute(
                 """
                 UPDATE isekai_survival_states
-                SET hunger = :hunger, thirst = :thirst, fatigue = :fatigue, sleep_need = :sleep_need,
+                SET day = :day, time_of_day = :time_of_day,
+                    hunger = :hunger, thirst = :thirst, fatigue = :fatigue, sleep_need = :sleep_need,
                     temperature_risk = :temperature_risk, morale = :morale,
-                    last_action_type = :last_action_type, updated_at = CURRENT_TIMESTAMP
+                    weather = :weather, location = :location, shelter = :shelter,
+                    last_action_type = :last_action_type, state_json = :state_json,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE adventure_id = :adventure_id
                 """,
-                {**updated, "adventure_id": adventure_id},
+                {**updated, "adventure_id": adventure_id, "state_json": encode_json(updated.get("state") or {})},
             )
-        return updated
+        return delta, updated
 
     def get_character(self, adventure_id: int) -> dict[str, Any]:
         adventure = self.adventures.get(adventure_id, include_messages=False)
@@ -396,6 +381,7 @@ class IsekaiSurvivalService:
         event_text = " ".join(delta.get("visible_events") or [])
         return (
             f"{name}继续在{scene.location}行动：{player_input}"
-            f"{event_text} 当前饥饿 {survival['hunger']}，口渴 {survival['thirst']}，"
+            f"{event_text} 当前是第 {survival['day']} 天{survival['time_of_day']}。"
+            f" 当前饥饿 {survival['hunger']}，口渴 {survival['thirst']}，"
             f"疲劳 {survival['fatigue']}，睡眠需求 {survival['sleep_need']}。"
         )

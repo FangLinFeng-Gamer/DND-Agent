@@ -28,6 +28,7 @@ def test_time_label_for_minutes():
     assert service.time_label(5 * 60) == "清晨"
     assert service.time_label(12 * 60) == "正午"
     assert service.time_label(17 * 60) == "黄昏"
+    assert service.time_label(18 * 60 + 30) == "夜晚"
     assert service.time_label(22 * 60) == "夜晚"
     assert service.time_label(23 * 60) == "深夜"
     assert service.time_label(3 * 60) == "深夜"

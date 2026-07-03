@@ -35,7 +35,10 @@ class IsekaiTimeService:
             return IsekaiActionResolution("cook", 60, True, "cook", "角色花时间准备食物。")
         if any(word in text for word in ["寻找食物", "寻找水", "找水", "觅食", "采集", "打猎", "forage"]):
             return IsekaiActionResolution("forage", 120, True, "forage", "角色搜寻食物或水源。")
-        if any(word in text for word in ["前往", "赶路", "走到", "移动到", "去往", "travel", "move"]):
+        if any(
+            word in text
+            for word in ["前往", "赶路", "走到", "移动到", "去往", "探索", "前进", "沿着", "走", "travel", "move"]
+        ):
             return IsekaiActionResolution("travel", 90, True, "travel", "角色移动到新的地点。")
         if any(word in text for word in ["搜索", "搜寻", "调查", "仔细找", "寻找", "search"]):
             return IsekaiActionResolution("search", 45, True, "search", "角色仔细搜索附近区域。")
@@ -55,9 +58,9 @@ class IsekaiTimeService:
             return "正午"
         if 14 * 60 <= minute < 17 * 60:
             return "下午"
-        if 17 * 60 <= minute < 19 * 60:
+        if 17 * 60 <= minute < 18 * 60 + 30:
             return "黄昏"
-        if 19 * 60 <= minute < 23 * 60:
+        if 18 * 60 + 30 <= minute < 23 * 60:
             return "夜晚"
         return "深夜"
 
@@ -95,7 +98,9 @@ class IsekaiTimeService:
             "last_action_type": action.action_type,
         }
         state["elapsed_minutes"] = elapsed
-        state["total_elapsed_minutes"] = int(state.get("total_elapsed_minutes", (before_day - 1) * MINUTES_PER_DAY + before_elapsed)) + minutes
+        state["total_elapsed_minutes"] = (
+            int(state.get("total_elapsed_minutes", (before_day - 1) * MINUTES_PER_DAY + before_elapsed)) + minutes
+        )
         state["last_time_delta_minutes"] = minutes
         state["last_time_reason"] = action.survival_intent
         updated["state"] = state

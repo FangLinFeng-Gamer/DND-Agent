@@ -166,3 +166,48 @@ def test_isekai_turn_count_is_adventure_local(store):
 
     assert first_response.adventure.world_state["turn_count"] == 1
     assert fresh_second.world_state["turn_count"] == 0
+
+
+def test_isekai_status_question_does_not_advance_time_or_pressure(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Clock Status", mode="isekai_survival"))
+    before = adventure.survival_state
+
+    response = service.advance(adventure.id, MessageCreate(content="我现在的状态怎么样？", locale="zh-CN"))
+
+    after = response.adventure.survival_state
+    assert after["day"] == before["day"]
+    assert after["time_of_day"] == before["time_of_day"]
+    assert after["hunger"] == before["hunger"]
+    assert after["thirst"] == before["thirst"]
+    assert after["fatigue"] == before["fatigue"]
+    assert after["sleep_need"] == before["sleep_need"]
+    assert after["state"]["last_time_delta_minutes"] == 0
+    assert response.dm_message.metadata["time"]["advances_time"] is False
+
+
+def test_isekai_exploration_advances_time_and_pressure(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Clock Road", mode="isekai_survival"))
+
+    response = service.advance(adventure.id, MessageCreate(content="我前往远处火光所在的营地。", locale="zh-CN"))
+
+    survival = response.adventure.survival_state
+    assert survival["state"]["last_time_delta_minutes"] == 90
+    assert survival["time_of_day"] == "夜晚"
+    assert survival["thirst"] > adventure.survival_state["thirst"]
+    assert survival["fatigue"] > adventure.survival_state["fatigue"]
+    assert "时间推进了约" in response.dm_message.content
+
+
+def test_isekai_sleep_rolls_to_next_day(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Clock Sleep", mode="isekai_survival"))
+
+    response = service.advance(adventure.id, MessageCreate(content="我睡觉过夜。", locale="zh-CN"))
+
+    survival = response.adventure.survival_state
+    assert survival["day"] == 2
+    assert survival["time_of_day"] == "清晨"
+    assert survival["fatigue"] < adventure.survival_state["fatigue"]
+    assert survival["sleep_need"] < adventure.survival_state["sleep_need"]
