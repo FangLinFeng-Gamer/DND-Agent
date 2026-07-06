@@ -113,6 +113,7 @@ def normalize_world_state(state: dict[str, Any] | None, story: StoryOut | None =
     normalized.setdefault("npc_states", {})
     normalized.setdefault("location_states", {})
     normalized.setdefault("location_history", [])
+    normalized.setdefault("event_impacts", [])
     normalized.setdefault("visible_events", [])
     normalized.setdefault("hidden_events", [])
     normalized.setdefault(
@@ -139,6 +140,7 @@ def public_world_state_view(world_state: dict[str, Any]) -> dict[str, Any]:
         "location_states": state.get("location_states", {}),
         "confirmed_location": state.get("confirmed_location"),
         "location_history": list(state.get("location_history", []))[-20:],
+        "event_impacts": list(state.get("event_impacts", []))[-12:],
         "last_advance": state.get("last_advance", {}),
     }
 

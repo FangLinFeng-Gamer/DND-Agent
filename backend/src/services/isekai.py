@@ -11,6 +11,7 @@ from backend.src.schemas.llm import LLMModelRecord
 from backend.src.schemas.isekai import IsekaiCharacterOut, IsekaiSurvivalStateOut
 from backend.src.services.adventures import AdventureService
 from backend.src.services.isekai_events import IsekaiWorldEventDirector
+from backend.src.services.isekai_opening import IsekaiOpeningGenerator
 from backend.src.services.isekai_preferences import IsekaiPreferenceLearner
 from backend.src.services.isekai_resources import IsekaiResourceService
 from backend.src.services.isekai_time import IsekaiActionResolution, IsekaiTimeService
@@ -30,6 +31,7 @@ class IsekaiSurvivalService:
         self.llm_client = llm_client
         self.model_gateway = ModelGateway(store, llm_client=llm_client)
         self.worldview = IsekaiWorldviewNormalizer()
+        self.openings = IsekaiOpeningGenerator(self.model_gateway, self.worldview)
         self.event_director = IsekaiWorldEventDirector(store)
         self.preference_learner = IsekaiPreferenceLearner(llm_client=llm_client)
         self.time = IsekaiTimeService()
@@ -55,20 +57,14 @@ class IsekaiSurvivalService:
             world_reaction_tags=[race.lower(), class_name.lower(), "outsider"],
         )
 
-    def initial_survival_state(self, scene: SceneState) -> IsekaiSurvivalStateOut:
-        return IsekaiSurvivalStateOut(location=scene.location, weather="薄雾")
+    def initial_survival_state(self, scene: SceneState, weather: str = "薄雾") -> IsekaiSurvivalStateOut:
+        return IsekaiSurvivalStateOut(location=scene.location, weather=weather)
 
     def create_adventure(self, request: AdventureCreate) -> AdventureOut:
         character = self.generate_character()
-        scene = SceneState(
-            location="雾林边境",
-            environment="你在一片潮湿针叶林边缘醒来，远处有微弱火光，脚下泥土留下陌生车辙。",
-            important_objects=["潮湿脚印", "微弱火光", "旧猎径"],
-            npcs=[],
-            current_objective="找到夜间避难处，并确认附近是否有水源或食物。",
-            world_changes=[],
-        )
-        survival = self.initial_survival_state(scene)
+        opening = self.openings.generate(request, character, self.active_model())
+        scene = opening.scene
+        survival = self.initial_survival_state(scene, opening.weather)
         adventure = self.adventures.create_isekai_shell(request, scene)
         self.initialize_scene_facts(adventure.id, scene)
         self.save_character(adventure.id, character)
@@ -76,8 +72,8 @@ class IsekaiSurvivalService:
         self.adventures.append_message(
             adventure.id,
             "dm",
-            self.opening_text(character, scene, survival),
-            {"kind": "opening", "mode": "isekai_survival"},
+            self.opening_text(character, scene, survival, opening.narration),
+            {"kind": "opening", "mode": "isekai_survival", "opening_source": opening.source},
         )
         return self.adventures.get(adventure.id)
 
@@ -141,10 +137,11 @@ class IsekaiSurvivalService:
         character: IsekaiCharacterOut,
         scene: SceneState,
         survival: IsekaiSurvivalStateOut,
+        narration: str | None = None,
     ) -> str:
+        opening = narration or f"{character.name}，{character.race} {character.class_name}，在{scene.location}醒来。{scene.environment}"
         return self.worldview.normalize_text(
-            f"{character.name}，{character.race} {character.class_name}，在{scene.location}醒来。"
-            f"{scene.environment} 当前目标：{scene.current_objective}"
+            f"{opening} 当前目标：{scene.current_objective}"
             f" 你的金币为 {character.gold}，饥饿 {survival.hunger}，口渴 {survival.thirst}，疲劳 {survival.fatigue}。"
         )
 
@@ -257,6 +254,7 @@ class IsekaiSurvivalService:
         else:
             self.adventures.update_world_state(adventure_id, world_state)
         self.event_director.evaluate_turn(adventure_id, turn, world_state)
+        self.adventures.update_world_state(adventure_id, world_state)
         return world_state
 
     def message_metadata(

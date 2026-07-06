@@ -99,6 +99,48 @@ def test_random_event_does_not_generate_at_turn_zero_without_forced_scope(store)
     assert WorldEventService(store).list_known_for_adventure(adventure.id) == []
 
 
+def test_random_event_uses_specific_catalog_entry(store):
+    adventure = create_isekai_adventure(store)
+    director = IsekaiWorldEventDirector(store)
+    turn = {
+        "player_input": "我沿着猎径继续前进。",
+        "action_type": "travel",
+        "scene": adventure.current_scene,
+        "character": adventure.isekai_character,
+        "survival": adventure.survival_state,
+        "delta": {"visible_events": []},
+    }
+
+    events = director.evaluate_turn(adventure.id, turn, {"turn_count": 3, "player_preferences": {}})
+
+    assert events
+    event = events[0]
+    assert event.metadata["source"] == "random_world"
+    assert event.title != "附近环境出现变化"
+    assert "变化" not in event.title
+    assert event.description != "你注意到附近的风向、足迹和生物活动发生了变化。"
+
+
+def test_known_event_records_impact_metadata(store):
+    adventure = create_isekai_adventure(store)
+    director = IsekaiWorldEventDirector(store)
+    turn = {
+        "player_input": "我沿着猎径继续前进。",
+        "action_type": "travel",
+        "scene": adventure.current_scene,
+        "character": adventure.isekai_character,
+        "survival": adventure.survival_state,
+        "delta": {"visible_events": []},
+    }
+
+    events = director.evaluate_turn(adventure.id, turn, {"turn_count": 3, "player_preferences": {}})
+
+    impact = events[0].metadata["impact"]
+    assert impact["dm_context"]
+    assert impact["tags"]
+    assert impact["affected_area"] == events[0].metadata["affected_area"]
+
+
 def test_preference_weighted_event_uses_merchant_channel_when_channel_exists(store):
     adventure = create_isekai_adventure(store)
     director = IsekaiWorldEventDirector(store)

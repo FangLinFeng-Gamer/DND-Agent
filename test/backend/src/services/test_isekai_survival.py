@@ -7,17 +7,53 @@ from backend.src.services.llm_models import LLMModelService
 from backend.src.services.isekai import IsekaiSurvivalService
 
 
+def is_opening_prompt(messages):
+    return "异世界开局生成器" in messages[0]["content"]
+
+
 class FakeIsekaiLLMClient:
     def __init__(self):
         self.chat_calls = []
 
     def chat(self, model, messages):
         self.chat_calls.append({"model": model, "messages": messages})
+        if is_opening_prompt(messages):
+            return "{invalid opening payload"
         return json.dumps({"narration": "模型异世界回复：雾中的猎径传来铃声。"})
+
+
+class OpeningIsekaiLLMClient:
+    def __init__(self):
+        self.chat_calls = []
+
+    def chat(self, model, messages):
+        self.chat_calls.append({"model": model, "messages": messages})
+        if is_opening_prompt(messages):
+            return json.dumps(
+                {
+                    "location": "灰桥镇废弃马厩",
+                    "environment": "冷雨敲打着塌了一角的马厩屋顶，泥地上有新鲜车辙和散落燕麦。",
+                    "important_objects": ["破马灯", "新鲜车辙", "散落燕麦"],
+                    "current_objective": "弄清是谁刚刚离开马厩，并找到可以过夜的干燥角落。",
+                    "weather": "冷雨",
+                    "opening_narration": "你在灰桥镇废弃马厩醒来，雨水顺着木梁滴落，远处传来马车轮声。",
+                },
+                ensure_ascii=False,
+            )
+        return json.dumps({"narration": "模型异世界回复：雨声遮住了远处脚步。"}, ensure_ascii=False)
+
+
+class InvalidOpeningIsekaiLLMClient:
+    def chat(self, model, messages):
+        if is_opening_prompt(messages):
+            return "{not-json"
+        return json.dumps({"narration": "模型异世界回复：你继续前进。"}, ensure_ascii=False)
 
 
 class OutOfSettingIsekaiLLMClient:
     def chat(self, model, messages):
+        if is_opening_prompt(messages):
+            return "{invalid opening payload"
         return json.dumps(
             {
                 "narration": "你来到商业街，看见一家烤饼铺子正在卖早餐套餐。",
@@ -34,6 +70,8 @@ class OutOfSettingIsekaiLLMClient:
 
 class ContradictoryLocationLLMClient:
     def chat(self, model, messages):
+        if is_opening_prompt(messages):
+            return "{invalid opening payload"
         return json.dumps(
             {"narration": "你并未抵达任何村落，仍在雾林边境。"},
             ensure_ascii=False,
@@ -42,6 +80,8 @@ class ContradictoryLocationLLMClient:
 
 class NonActionSceneMoveLLMClient:
     def chat(self, model, messages):
+        if is_opening_prompt(messages):
+            return "{invalid opening payload"
         return json.dumps(
             {
                 "narration": "你查看状态时，周围景象又变回了雾林边境。",
@@ -57,10 +97,14 @@ class NonActionSceneMoveLLMClient:
 class SceneUpdateIsekaiLLMClient:
     def __init__(self):
         self.chat_calls = []
+        self.advance_calls = 0
 
     def chat(self, model, messages):
         self.chat_calls.append({"model": model, "messages": messages})
-        if len(self.chat_calls) == 1:
+        if is_opening_prompt(messages):
+            return "{invalid opening payload"
+        self.advance_calls += 1
+        if self.advance_calls == 1:
             return json.dumps(
                 {
                     "narration": "你沿着旧猎径前进，抵达白石镇外的木质哨站。",
@@ -88,6 +132,8 @@ class FakeStreamingIsekaiLLMClient:
 
     def chat(self, model, messages):
         self.chat_calls += 1
+        if is_opening_prompt(messages):
+            return "{invalid opening payload"
         raise AssertionError("streaming isekai replies should not wait for chat()")
 
     def stream_chat(self, model, messages):
@@ -192,6 +238,37 @@ def test_random_isekai_character_has_survival_inventory_and_world_reaction_tags(
     assert character.world_reaction_tags
 
 
+def test_isekai_create_uses_active_model_for_opening_scene(store):
+    activate_test_model(store)
+    llm_client = OpeningIsekaiLLMClient()
+    service = IsekaiSurvivalService(store, llm_client=llm_client)
+
+    adventure = service.create_adventure(AdventureCreate(title="Opening Road", mode="isekai_survival", locale="zh-CN"))
+
+    assert llm_client.chat_calls[0]["model"].model_name == "isekai-dm-model"
+    assert adventure.current_scene.location == "灰桥镇废弃马厩"
+    assert adventure.current_scene.important_objects == ["破马灯", "新鲜车辙", "散落燕麦"]
+    assert adventure.current_scene.current_objective == "弄清是谁刚刚离开马厩，并找到可以过夜的干燥角落。"
+    assert adventure.survival_state["location"] == "灰桥镇废弃马厩"
+    assert adventure.survival_state["weather"] == "冷雨"
+    assert adventure.world_state["confirmed_location"] == "灰桥镇废弃马厩"
+    assert "灰桥镇废弃马厩" in adventure.messages[0].content
+    assert adventure.messages[0].metadata["opening_source"] == "active_model"
+
+
+def test_isekai_opening_falls_back_when_model_payload_is_invalid(store):
+    activate_test_model(store)
+    service = IsekaiSurvivalService(store, llm_client=InvalidOpeningIsekaiLLMClient())
+
+    adventure = service.create_adventure(AdventureCreate(title="Fallback Opening", mode="isekai_survival", locale="zh-CN"))
+
+    assert adventure.current_scene.location
+    assert adventure.current_scene.location != "雾林边境"
+    assert adventure.survival_state["location"] == adventure.current_scene.location
+    assert adventure.survival_state["weather"]
+    assert adventure.messages[0].metadata["opening_source"] == "fallback_template"
+
+
 def test_isekai_eat_drink_consumes_inventory_and_records_resource_changes(store):
     service = IsekaiSurvivalService(store)
     adventure = service.create_adventure(AdventureCreate(title="Resource Road", mode="isekai_survival"))
@@ -262,8 +339,8 @@ def test_isekai_advance_uses_active_model_for_narration(store):
 
     response = service.advance(adventure.id, MessageCreate(content="我观察雾气。", locale="zh-CN"))
 
-    assert len(llm_client.chat_calls) == 1
-    assert llm_client.chat_calls[0]["model"].model_name == "isekai-dm-model"
+    assert len(llm_client.chat_calls) == 2
+    assert llm_client.chat_calls[-1]["model"].model_name == "isekai-dm-model"
     assert response.dm_message.content == "模型异世界回复：雾中的猎径传来铃声。"
     assert response.dm_message.metadata["source"] == "active_model"
 
@@ -332,12 +409,13 @@ def test_isekai_model_scene_update_persists_location_and_history(store):
     llm_client = SceneUpdateIsekaiLLMClient()
     service = IsekaiSurvivalService(store, llm_client=llm_client)
     adventure = service.create_adventure(AdventureCreate(title="Memory Road", mode="isekai_survival"))
+    starting_location = adventure.current_scene.location
 
     first = service.advance(adventure.id, MessageCreate(content="去白石镇", locale="zh-CN"))
 
     assert first.adventure.current_scene.location == "白石镇外木质哨站"
     assert first.adventure.survival_state["location"] == "白石镇外木质哨站"
-    assert first.adventure.world_state["location_history"][-1]["from"] == "雾林边境"
+    assert first.adventure.world_state["location_history"][-1]["from"] == starting_location
     assert first.adventure.world_state["location_history"][-1]["to"] == "白石镇外木质哨站"
     assert first.adventure.world_state["location_history"][-1]["triggering_action"] == "去白石镇"
 
@@ -428,12 +506,13 @@ def test_isekai_stream_uses_active_model_streaming(store):
     llm_client = FakeStreamingIsekaiLLMClient()
     service = IsekaiSurvivalService(store, llm_client=llm_client)
     adventure = service.create_adventure(AdventureCreate(title="Stream Wilds", mode="isekai_survival"))
+    opening_chat_calls = llm_client.chat_calls
 
     events = list(service.advance_stream(adventure.id, MessageCreate(content="我继续前进。", locale="zh-CN")))
 
     delta_text = "".join(event.get("content", "") for event in events if event["type"] == "delta")
     assert llm_client.stream_calls == 1
-    assert llm_client.chat_calls == 0
+    assert llm_client.chat_calls == opening_chat_calls
     assert "模型流式异世界回复" in delta_text
     assert events[-1]["type"] == "final"
     assert events[-1]["dm_message"].metadata["source"] == "active_model"
@@ -483,6 +562,23 @@ def test_isekai_turn_records_known_world_events(store):
     assert events[-1].metadata["source"] == "player_triggered"
     assert events[-1].metadata["known_to_character"] is True
     assert events[-1].metadata["triggering_action"] == "我给路边营地的人做一锅热汤。"
+
+
+def test_isekai_event_impacts_are_persisted_and_sent_to_model_context(store):
+    activate_test_model(store)
+    llm_client = FakeIsekaiLLMClient()
+    service = IsekaiSurvivalService(store, llm_client=llm_client)
+    adventure = service.create_adventure(AdventureCreate(title="Impact Road", mode="isekai_survival"))
+
+    for index in range(3):
+        response = service.advance(adventure.id, MessageCreate(content=f"我沿着猎径继续前进第{index + 1}段。", locale="zh-CN"))
+
+    impacts = response.adventure.world_state["event_impacts"]
+    assert impacts
+    assert impacts[-1]["dm_context"]
+    payload = json.loads(llm_client.chat_calls[-1]["messages"][-1]["content"])
+    context_impacts = payload["system_state"]["world_state"]["event_impacts"]
+    assert context_impacts[-1]["dm_context"] == impacts[-1]["dm_context"]
 
 
 def test_isekai_turn_count_is_adventure_local(store):
