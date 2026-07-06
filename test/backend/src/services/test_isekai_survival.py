@@ -15,6 +15,22 @@ class FakeIsekaiLLMClient:
         return json.dumps({"narration": "模型异世界回复：雾中的猎径传来铃声。"})
 
 
+class OutOfSettingIsekaiLLMClient:
+    def chat(self, model, messages):
+        return json.dumps(
+            {
+                "narration": "你来到商业街，看见一家烤饼铺子正在卖早餐套餐。",
+                "scene_update": {
+                    "location": "商业街",
+                    "environment": "烤饼铺子旁边有便利店。",
+                    "important_objects": ["广告牌", "热销菜单"],
+                    "current_objective": "询问烤饼铺子老板。",
+                },
+            },
+            ensure_ascii=False,
+        )
+
+
 class SceneUpdateIsekaiLLMClient:
     def __init__(self):
         self.chat_calls = []
@@ -165,6 +181,35 @@ def test_isekai_model_context_uses_active_model_context_window(store):
     recent_messages = payload["recent_messages"]
     assert len(recent_messages) > 12
     assert recent_messages[-1]["content"] == "现在根据完整历史继续。"
+
+
+def test_isekai_model_output_is_normalized_to_fantasy_world_terms(store):
+    activate_test_model(store)
+    service = IsekaiSurvivalService(store, llm_client=OutOfSettingIsekaiLLMClient())
+    adventure = service.create_adventure(AdventureCreate(title="Worldview Road", mode="isekai_survival"))
+
+    response = service.advance(adventure.id, MessageCreate(content="我去镇上找食物。", locale="zh-CN"))
+
+    assert "烤饼铺子" not in response.dm_message.content
+    assert "早餐套餐" not in response.dm_message.content
+    assert "炉饼摊" in response.dm_message.content
+    assert response.adventure.current_scene.location == "集市街"
+    assert response.adventure.current_scene.environment == "炉饼摊旁边有杂货铺。"
+    assert response.adventure.current_scene.important_objects == ["告示牌", "招牌菜单"]
+
+
+def test_isekai_prompt_includes_worldview_style_guidance(store):
+    activate_test_model(store)
+    llm_client = FakeIsekaiLLMClient()
+    service = IsekaiSurvivalService(store, llm_client=llm_client)
+    adventure = service.create_adventure(AdventureCreate(title="Prompt Road", mode="isekai_survival"))
+
+    service.advance(adventure.id, MessageCreate(content="我寻找食物。", locale="zh-CN"))
+
+    system_prompt = llm_client.chat_calls[-1]["messages"][0]["content"]
+    assert "DND 风格奇幻世界" in system_prompt
+    assert "烤饼铺子" not in system_prompt
+    assert "炉饼摊" in system_prompt
 
 
 def test_isekai_active_model_failure_records_fallback_reason(store):

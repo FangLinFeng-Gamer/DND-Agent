@@ -13,6 +13,7 @@ from backend.src.services.adventures import AdventureService
 from backend.src.services.isekai_events import IsekaiWorldEventDirector
 from backend.src.services.isekai_preferences import IsekaiPreferenceLearner
 from backend.src.services.isekai_time import IsekaiActionResolution, IsekaiTimeService
+from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
 from backend.src.services.model_gateway import ModelGateway
 
 
@@ -27,6 +28,7 @@ class IsekaiSurvivalService:
         self.adventures = AdventureService(store)
         self.llm_client = llm_client
         self.model_gateway = ModelGateway(store, llm_client=llm_client)
+        self.worldview = IsekaiWorldviewNormalizer()
         self.event_director = IsekaiWorldEventDirector(store)
         self.preference_learner = IsekaiPreferenceLearner(llm_client=llm_client)
         self.time = IsekaiTimeService()
@@ -46,7 +48,7 @@ class IsekaiSurvivalService:
             race=race,
             class_name=class_name,
             gold=random.randint(8, 24),
-            inventory=inventory,
+            inventory=self.worldview.normalize_list(inventory),
             traits=[race, class_name],
             world_reaction_tags=[race.lower(), class_name.lower(), "outsider"],
         )
@@ -131,7 +133,7 @@ class IsekaiSurvivalService:
         scene: SceneState,
         survival: IsekaiSurvivalStateOut,
     ) -> str:
-        return (
+        return self.worldview.normalize_text(
             f"{character.name}，{character.race} {character.class_name}，在{scene.location}醒来。"
             f"{scene.environment} 当前目标：{scene.current_objective}"
             f" 你的金币为 {character.gold}，饥饿 {survival.hunger}，口渴 {survival.thirst}，疲劳 {survival.fatigue}。"
@@ -350,6 +352,7 @@ class IsekaiSurvivalService:
                 "role": "system",
                 "content": (
                     "你是异世界生存模拟器 DM。你负责根据玩家行动、生存状态和环境生成下一段剧情。"
+                    f"{self.worldview.STYLE_GUIDANCE}"
                     "后端已经结算时间、饥饿、口渴、疲劳、睡眠需求等数值，你不能修改这些数值。"
                     "你必须区分用户信息、系统状态和工具结果，不要把系统状态当成玩家发言。"
                     "recent_messages 是本局真实对话历史，必须用于保持地点、NPC、目标和剧情连续性。"
@@ -368,15 +371,15 @@ class IsekaiSurvivalService:
         try:
             payload = json.loads(raw_response)
         except json.JSONDecodeError:
-            return {"narration": extract_narration_text(raw_response) or fallback}
+            return {"narration": self.worldview.normalize_text(extract_narration_text(raw_response) or fallback)}
         if isinstance(payload, dict):
-            narration = str(payload.get("narration") or "").strip()
+            narration = self.worldview.normalize_text(payload.get("narration")).strip()
             scene_update = payload.get("scene_update")
-            result: dict[str, Any] = {"narration": narration or fallback}
+            result: dict[str, Any] = {"narration": narration or self.worldview.normalize_text(fallback)}
             if isinstance(scene_update, dict):
-                result["scene_update"] = scene_update
+                result["scene_update"] = self.worldview.normalize_scene_update(scene_update)
             return result
-        return {"narration": fallback}
+        return {"narration": self.worldview.normalize_text(fallback)}
 
     def parse_model_narration(self, raw_response: str, fallback: str) -> str:
         return self.parse_model_payload(raw_response, fallback)["narration"]
@@ -436,16 +439,17 @@ class IsekaiSurvivalService:
     def clean_scene_update(self, scene_update: dict[str, Any] | None) -> dict[str, Any]:
         if not isinstance(scene_update, dict):
             return {}
+        scene_update = self.worldview.normalize_scene_update(scene_update)
         patch: dict[str, Any] = {}
         for key in ["location", "environment", "current_objective"]:
-            value = str(scene_update.get(key) or "").strip()
+            value = self.worldview.normalize_text(scene_update.get(key)).strip()
             if value:
                 patch[key] = value
         objects = scene_update.get("important_objects")
         if isinstance(objects, list):
-            cleaned = [str(item).strip() for item in objects if str(item).strip()]
+            cleaned = self.worldview.normalize_list(objects, limit=8)
             if cleaned:
-                patch["important_objects"] = cleaned[:8]
+                patch["important_objects"] = cleaned
         return patch
 
     def infer_location_from_turn(self, turn: dict[str, Any], narration: str) -> str:
@@ -478,7 +482,7 @@ class IsekaiSurvivalService:
                 candidate = candidate.split(stop, 1)[0]
             candidate = candidate.strip()
             if candidate:
-                return candidate[:20]
+                return self.worldview.normalize_text(candidate[:20])
         return ""
 
     def location_history_entry(
@@ -489,12 +493,12 @@ class IsekaiSurvivalService:
         narration: str,
     ) -> dict[str, Any]:
         return {
-            "from": old_location,
-            "to": new_location,
+            "from": self.worldview.normalize_text(old_location),
+            "to": self.worldview.normalize_text(new_location),
             "triggering_action": turn.get("player_input", ""),
             "day": turn.get("survival", {}).get("day"),
             "time_of_day": turn.get("survival", {}).get("time_of_day"),
-            "summary": narration[:160],
+            "summary": self.worldview.normalize_text(narration[:160]),
         }
 
     def update_survival_location(
@@ -562,7 +566,7 @@ class IsekaiSurvivalService:
     ) -> str:
         name = character.get("name") or "你"
         event_text = " ".join(delta.get("visible_events") or [])
-        return (
+        return self.worldview.normalize_text(
             f"{name}继续在{scene.location}行动：{player_input}"
             f"{event_text} 当前是第 {survival['day']} 天{survival['time_of_day']}。"
             f" 当前饥饿 {survival['hunger']}，口渴 {survival['thirst']}，"

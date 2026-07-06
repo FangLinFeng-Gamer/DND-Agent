@@ -158,3 +158,27 @@ def test_table_talk_does_not_generate_random_world_event(store):
 
     assert events == []
     assert WorldEventService(store).list_known_for_adventure(adventure.id) == []
+
+
+def test_world_event_text_is_normalized_to_fantasy_world_terms(store):
+    adventure = create_isekai_adventure(store)
+    director = IsekaiWorldEventDirector(store)
+    scene = adventure.current_scene.model_copy(update={"location": "商业街", "environment": "镇上的商业街挤满商人。"})
+    turn = {
+        "player_input": "我在烤饼铺子做早餐套餐。",
+        "action_type": "talk",
+        "time": {"advances_time": True, "time_cost_minutes": 30},
+        "scene": scene,
+        "character": adventure.isekai_character,
+        "survival": adventure.survival_state,
+        "delta": {"visible_events": []},
+    }
+
+    events = director.evaluate_turn(adventure.id, turn, {"turn_count": 1, "player_preferences": {}})
+
+    assert events
+    event = events[0]
+    assert event.metadata["affected_area"] == "集市街"
+    assert "烤饼铺子" not in event.metadata["triggering_action"]
+    assert "早餐套餐" not in event.metadata["triggering_action"]
+    assert "炉饼摊" in event.metadata["triggering_action"]

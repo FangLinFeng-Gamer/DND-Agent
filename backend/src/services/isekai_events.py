@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from backend.src.schemas.world_event import WorldEventCreate, WorldEventOut
+from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
 from backend.src.services.world_events import WorldEventService
 
 
@@ -18,6 +19,7 @@ SCOPE_IMPORTANCE = {
 class IsekaiWorldEventDirector:
     def __init__(self, store):
         self.events = WorldEventService(store)
+        self.worldview = IsekaiWorldviewNormalizer()
 
     def evaluate_turn(
         self,
@@ -128,8 +130,8 @@ class IsekaiWorldEventDirector:
         scope = candidate["scope"]
         return WorldEventCreate(
             event_type=candidate["event_type"],
-            title=candidate["title"],
-            description=candidate["description"],
+            title=self.worldview.normalize_text(candidate["title"]),
+            description=self.worldview.normalize_text(candidate["description"]),
             importance=SCOPE_IMPORTANCE[scope],
             metadata={
                 "mode": "isekai_survival",
@@ -138,12 +140,12 @@ class IsekaiWorldEventDirector:
                 "knowledge_channel": candidate["knowledge_channel"],
                 "known_to_character": candidate["known_to_character"],
                 "location": self._location(turn),
-                "affected_area": candidate["affected_area"],
-                "preference_tags": candidate["preference_tags"],
-                "triggering_action": candidate["triggering_action"],
+                "affected_area": self.worldview.normalize_text(candidate["affected_area"]),
+                "preference_tags": self.worldview.normalize_list(candidate["preference_tags"]),
+                "triggering_action": self.worldview.normalize_text(candidate["triggering_action"]),
             },
         )
 
     def _location(self, turn: dict[str, Any]) -> str:
         scene = turn.get("scene")
-        return str(getattr(scene, "location", "") or "未知地点")
+        return self.worldview.normalize_text(getattr(scene, "location", "") or "未知地点")
