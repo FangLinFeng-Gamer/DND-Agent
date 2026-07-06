@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=20260706-isekai-layout";
-import { els, state } from "./state.js?v=20260706-isekai-layout";
-import { t } from "./i18n.js?v=20260706-isekai-layout";
-import { emptyNode, numberOrDefault, setStatus, showError } from "./ui.js?v=20260706-isekai-layout";
+import { api } from "./api.js?v=20260706-isekai-vitals";
+import { els, state } from "./state.js?v=20260706-isekai-vitals";
+import { t } from "./i18n.js?v=20260706-isekai-vitals";
+import { emptyNode, numberOrDefault, setStatus, showError } from "./ui.js?v=20260706-isekai-vitals";
 
 export async function loadModels() {
   try {

@@ -116,3 +116,27 @@ def test_isekai_survival_panel_renders_time_fields():
     assert '"lastTimeCost"' in i18n
     assert '"hoursMinutesShort"' in i18n
     assert '"shelter"' in i18n
+
+
+def test_isekai_survival_panel_displays_player_positive_meters():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    survival_block = game_js.split("function renderIsekaiSurvival", 1)[1].split("function", 1)[0]
+    assert "formatIsekaiPositiveMeter(survival.hunger, true)" in survival_block
+    assert "formatIsekaiPositiveMeter(survival.thirst, true)" in survival_block
+    assert "formatIsekaiPositiveMeter(survival.fatigue, true)" in survival_block
+    assert "formatIsekaiPositiveMeter(survival.sleep_need, true)" in survival_block
+    assert "formatIsekaiPositiveMeter(survival.morale, false)" in survival_block
+    assert '"satiety": "Satiety"' in i18n
+    assert '"hydration": "Hydration"' in i18n
+    assert '"energy": "Energy"' in i18n
+    assert '"sleepSufficiency": "Sleep Sufficiency"' in i18n
+    assert '"survivalDisplayHint": "Higher values mean better condition."' in i18n
+    assert '"satiety": "饱腹度"' in i18n
+    assert '"hydration": "水分"' in i18n
+    assert '"energy": "精力"' in i18n
+    assert '"sleepSufficiency": "睡眠充足"' in i18n
+    assert '"survivalDisplayHint": "数值越高代表状态越好。"' in i18n

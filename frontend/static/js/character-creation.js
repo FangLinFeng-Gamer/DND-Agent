@@ -1,14 +1,14 @@
-import { api } from "./api.js?v=20260706-isekai-layout";
-import { els, state } from "./state.js?v=20260706-isekai-layout";
+import { api } from "./api.js?v=20260706-isekai-vitals";
+import { els, state } from "./state.js?v=20260706-isekai-vitals";
 import {
   localizeBackgroundName,
   localizeClassName,
   localizeEquipmentName,
   localizeRaceName,
   t,
-} from "./i18n.js?v=20260706-isekai-layout";
-import { loadCharacters } from "./game.js?v=20260706-isekai-layout";
-import { setStatus, showError, showView, typingIndicatorNode } from "./ui.js?v=20260706-isekai-layout";
+} from "./i18n.js?v=20260706-isekai-vitals";
+import { loadCharacters } from "./game.js?v=20260706-isekai-vitals";
+import { setStatus, showError, showView, typingIndicatorNode } from "./ui.js?v=20260706-isekai-vitals";
 
 
 const POINT_BUY_COSTS = {

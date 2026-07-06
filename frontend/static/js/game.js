@@ -1,9 +1,9 @@
-import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260706-isekai-layout";
-import { apiBase, els, state } from "./state.js?v=20260706-isekai-layout";
-import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260706-isekai-layout";
-import { localizedStoryText } from "./stories.js?v=20260706-isekai-layout";
-import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260706-isekai-layout";
-import { rollD20ForCheck } from "./dice.js?v=20260706-isekai-layout";
+import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260706-isekai-vitals";
+import { apiBase, els, state } from "./state.js?v=20260706-isekai-vitals";
+import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260706-isekai-vitals";
+import { localizedStoryText } from "./stories.js?v=20260706-isekai-vitals";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260706-isekai-vitals";
+import { rollD20ForCheck } from "./dice.js?v=20260706-isekai-vitals";
 
 const ISEKAI_CREATION_PROGRESS_KEYS = [
   "isekaiProgressRace",
@@ -12,6 +12,7 @@ const ISEKAI_CREATION_PROGRESS_KEYS = [
   "isekaiProgressEnvironment",
   "isekaiProgressSave",
 ];
+const ISEKAI_SURVIVAL_MAX = 100;
 let isekaiCreationProgressTimer = null;
 let isekaiCreationProgressIndex = 0;
 
@@ -1845,16 +1846,26 @@ function localizeShelter(value) {
   return localized === key ? String(value || t("notSet")) : localized;
 }
 
+function formatIsekaiPositiveMeter(value, invert = false) {
+  const numeric = Number(value);
+  const clamped = Number.isFinite(numeric)
+    ? Math.max(0, Math.min(ISEKAI_SURVIVAL_MAX, Math.round(numeric)))
+    : 0;
+  const displayed = invert ? ISEKAI_SURVIVAL_MAX - clamped : clamped;
+  return `${displayed}/${ISEKAI_SURVIVAL_MAX}`;
+}
+
 function renderIsekaiSurvival(survival) {
   const stateData = survival?.state || {};
   renderIsekaiPanel(els.isekaiSurvivalPanel, t("isekaiSurvivalState"), survival ? [
     [t("isekaiDay", { day: survival.day || 1 }), survival.time_of_day || t("notSet")],
     [t("lastTimeCost"), formatIsekaiTimeCost(stateData.last_time_delta_minutes)],
-    [t("hunger"), survival.hunger],
-    [t("thirst"), survival.thirst],
-    [t("fatigue"), survival.fatigue],
-    [t("sleepNeed"), survival.sleep_need],
-    [t("morale"), survival.morale],
+    [t("satiety"), formatIsekaiPositiveMeter(survival.hunger, true)],
+    [t("hydration"), formatIsekaiPositiveMeter(survival.thirst, true)],
+    [t("energy"), formatIsekaiPositiveMeter(survival.fatigue, true)],
+    [t("sleepSufficiency"), formatIsekaiPositiveMeter(survival.sleep_need, true)],
+    [t("morale"), formatIsekaiPositiveMeter(survival.morale, false)],
+    [t("survivalDisplayRule"), t("survivalDisplayHint")],
     [t("weather"), survival.weather],
     [t("shelter"), localizeShelter(survival.shelter)],
   ] : []);
