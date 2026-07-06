@@ -336,6 +336,7 @@ export const enTranslations = {
   "isekaiEventSource.unknown": "Unknown Source",
   "isekaiCurrentEnvironment": "Current Environment",
   "isekaiDay": "Day {day}",
+  "currentTime": "Current Time",
   "lastTimeCost": "Last Time Cost",
   "noTimeCost": "No time advanced",
   "minutesShort": "{minutes} min",

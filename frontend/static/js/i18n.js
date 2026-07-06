@@ -1,6 +1,6 @@
-import { els, state } from "./state.js?v=20260706-isekai-vitals";
-import { enTranslations } from "./locales/en.js?v=20260706-isekai-vitals";
-import { zhCNTranslations } from "./locales/zh-CN.js?v=20260706-isekai-vitals";
+import { els, state } from "./state.js?v=20260706-isekai-clock";
+import { enTranslations } from "./locales/en.js?v=20260706-isekai-clock";
+import { zhCNTranslations } from "./locales/zh-CN.js?v=20260706-isekai-clock";
 
 export const translations = {
   en: enTranslations,

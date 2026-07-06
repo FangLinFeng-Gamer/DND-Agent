@@ -336,6 +336,7 @@ export const zhCNTranslations = {
   "isekaiEventSource.unknown": "来源未知",
   "isekaiCurrentEnvironment": "当前环境",
   "isekaiDay": "第 {day} 天",
+  "currentTime": "当前时间",
   "lastTimeCost": "上次耗时",
   "noTimeCost": "未推进时间",
   "minutesShort": "{minutes} 分钟",

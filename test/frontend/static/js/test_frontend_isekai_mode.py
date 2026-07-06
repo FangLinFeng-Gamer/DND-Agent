@@ -109,13 +109,30 @@ def test_isekai_survival_panel_renders_time_fields():
     ).read_text(encoding="utf-8")
 
     survival_block = game_js.split("function renderIsekaiSurvival", 1)[1].split("function", 1)[0]
-    assert "survival.day" in survival_block
-    assert "survival.time_of_day" in survival_block
+    assert "survival?.day" in game_js
+    assert "survival?.time_of_day" in game_js
+    assert "formatIsekaiCurrentTime(survival)" in survival_block
     assert "last_time_delta_minutes" in survival_block
     assert "survival.shelter" in survival_block
+    assert '"currentTime"' in i18n
     assert '"lastTimeCost"' in i18n
     assert '"hoursMinutesShort"' in i18n
     assert '"shelter"' in i18n
+
+
+def test_isekai_survival_panel_displays_exact_clock_time():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    assert "function formatIsekaiClockTime" in game_js
+    assert "function formatIsekaiCurrentTime" in game_js
+    assert "elapsed_minutes" in game_js
+    assert "padStart(2, \"0\")" in game_js
+    assert "${day} ${label} ${clock}" in game_js
+    assert '"currentTime": "Current Time"' in i18n
+    assert '"currentTime": "当前时间"' in i18n
 
 
 def test_isekai_survival_panel_displays_player_positive_meters():

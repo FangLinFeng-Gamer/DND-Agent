@@ -1,4 +1,4 @@
-import { t } from "./i18n.js?v=20260706-isekai-vitals";
+import { t } from "./i18n.js?v=20260706-isekai-clock";
 
 const MAX_HISTORY = 10;
 const ROLL_DURATION_MS = 700;

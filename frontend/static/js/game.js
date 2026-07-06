@@ -1,9 +1,9 @@
-import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260706-isekai-vitals";
-import { apiBase, els, state } from "./state.js?v=20260706-isekai-vitals";
-import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260706-isekai-vitals";
-import { localizedStoryText } from "./stories.js?v=20260706-isekai-vitals";
-import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260706-isekai-vitals";
-import { rollD20ForCheck } from "./dice.js?v=20260706-isekai-vitals";
+import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260706-isekai-clock";
+import { apiBase, els, state } from "./state.js?v=20260706-isekai-clock";
+import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260706-isekai-clock";
+import { localizedStoryText } from "./stories.js?v=20260706-isekai-clock";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260706-isekai-clock";
+import { rollD20ForCheck } from "./dice.js?v=20260706-isekai-clock";
 
 const ISEKAI_CREATION_PROGRESS_KEYS = [
   "isekaiProgressRace",
@@ -1840,6 +1840,24 @@ function formatIsekaiTimeCost(minutes) {
   return t("minutesShort", { minutes: value });
 }
 
+function formatIsekaiClockTime(minutes) {
+  const numeric = Number(minutes);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  const totalMinutes = ((Math.trunc(numeric) % 1440) + 1440) % 1440;
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+  const minute = String(totalMinutes % 60).padStart(2, "0");
+  return `${hours}:${minute}`;
+}
+
+function formatIsekaiCurrentTime(survival) {
+  const day = t("isekaiDay", { day: survival?.day || 1 });
+  const label = survival?.time_of_day || t("notSet");
+  const clock = formatIsekaiClockTime(survival?.state?.elapsed_minutes);
+  return clock ? `${day} ${label} ${clock}` : `${day} ${label}`;
+}
+
 function localizeShelter(value) {
   const key = `shelter.${value || "none"}`;
   const localized = t(key);
@@ -1857,8 +1875,9 @@ function formatIsekaiPositiveMeter(value, invert = false) {
 
 function renderIsekaiSurvival(survival) {
   const stateData = survival?.state || {};
+  const timeLabel = survival?.time_of_day || t("notSet");
   renderIsekaiPanel(els.isekaiSurvivalPanel, t("isekaiSurvivalState"), survival ? [
-    [t("isekaiDay", { day: survival.day || 1 }), survival.time_of_day || t("notSet")],
+    [t("currentTime"), formatIsekaiCurrentTime(survival) || timeLabel],
     [t("lastTimeCost"), formatIsekaiTimeCost(stateData.last_time_delta_minutes)],
     [t("satiety"), formatIsekaiPositiveMeter(survival.hunger, true)],
     [t("hydration"), formatIsekaiPositiveMeter(survival.thirst, true)],

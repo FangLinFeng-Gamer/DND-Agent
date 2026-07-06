@@ -1,7 +1,7 @@
-import { api } from "./js/api.js?v=20260706-isekai-vitals";
-import { bindElements, els, state } from "./js/state.js?v=20260706-isekai-vitals";
-import { applyTranslations, setLocale, t } from "./js/i18n.js?v=20260706-isekai-vitals";
-import { renderCapabilities, setStatus, showError, showView, viewFromPath } from "./js/ui.js?v=20260706-isekai-vitals";
+import { api } from "./js/api.js?v=20260706-isekai-clock";
+import { bindElements, els, state } from "./js/state.js?v=20260706-isekai-clock";
+import { applyTranslations, setLocale, t } from "./js/i18n.js?v=20260706-isekai-clock";
+import { renderCapabilities, setStatus, showError, showView, viewFromPath } from "./js/ui.js?v=20260706-isekai-clock";
 import {
   deleteAdventure,
   getSelectedCharacter,
@@ -32,13 +32,13 @@ import {
   uploadMapAsset,
   createMapScene,
   syncMapTokens,
-} from "./js/game.js?v=20260706-isekai-vitals";
+} from "./js/game.js?v=20260706-isekai-clock";
 import {
   confirmCharacterCreation,
   ensureCharacterCreationSession,
   renderCharacterCreation,
   sendCharacterCreationMessage,
-} from "./js/character-creation.js?v=20260706-isekai-vitals";
+} from "./js/character-creation.js?v=20260706-isekai-clock";
 import {
   createStory,
   loadStories,
@@ -47,10 +47,10 @@ import {
   renderStoryList,
   renderStorySelect,
   resetStoryForm,
-} from "./js/stories.js?v=20260706-isekai-vitals";
-import { loadModels, renderModelList, resetModelForm, saveModel, testModelConnection } from "./js/models.js?v=20260706-isekai-vitals";
-import { loadRaces, renderRaceDetail, renderRaceList, renderRaceOptions } from "./js/races.js?v=20260706-isekai-vitals";
-import { initDiceTray, renderDiceTray } from "./js/dice.js?v=20260706-isekai-vitals";
+} from "./js/stories.js?v=20260706-isekai-clock";
+import { loadModels, renderModelList, resetModelForm, saveModel, testModelConnection } from "./js/models.js?v=20260706-isekai-clock";
+import { loadRaces, renderRaceDetail, renderRaceList, renderRaceOptions } from "./js/races.js?v=20260706-isekai-clock";
+import { initDiceTray, renderDiceTray } from "./js/dice.js?v=20260706-isekai-clock";
 
 async function loadCapabilities() {
   try {

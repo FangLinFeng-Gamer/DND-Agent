@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 FRONTEND_DIR = Path(__file__).resolve().parents[4] / "frontend" / "static"
-APP_ASSET_VERSION = "20260706-isekai-vitals"
+APP_ASSET_VERSION = "20260706-isekai-clock"
 
 
 def test_frontend_app_entrypoint_is_split_into_focused_modules():
