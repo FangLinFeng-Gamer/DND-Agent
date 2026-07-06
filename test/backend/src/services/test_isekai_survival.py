@@ -93,7 +93,7 @@ class TimelineStreamingPreferenceClient:
         yield '你闻到远处营火上的炖汤香气。"}'
 
 
-def activate_test_model(store):
+def activate_test_model(store, max_context_tokens: int = 4096):
     model_service = LLMModelService(store)
     model = model_service.create(
         LLMModelCreate(
@@ -102,6 +102,7 @@ def activate_test_model(store):
             base_url="https://api.example.test",
             api_key="sk-test-1234567890",
             model_name="isekai-dm-model",
+            max_context_tokens=max_context_tokens,
         )
     )
     model_service.activate(model.id)
@@ -147,6 +148,23 @@ def test_isekai_advance_uses_active_model_for_narration(store):
     assert llm_client.chat_calls[0]["model"].model_name == "isekai-dm-model"
     assert response.dm_message.content == "模型异世界回复：雾中的猎径传来铃声。"
     assert response.dm_message.metadata["source"] == "active_model"
+
+
+def test_isekai_model_context_uses_active_model_context_window(store):
+    activate_test_model(store, max_context_tokens=40960)
+    llm_client = FakeIsekaiLLMClient()
+    service = IsekaiSurvivalService(store, llm_client=llm_client)
+    adventure = service.create_adventure(AdventureCreate(title="Long Memory Wilds", mode="isekai_survival"))
+    for index in range(8):
+        service.adventures.append_message(adventure.id, "player", f"历史玩家行动 {index}", {"mode": "isekai_survival"})
+        service.adventures.append_message(adventure.id, "dm", f"历史模型回复 {index}", {"mode": "isekai_survival"})
+
+    service.advance(adventure.id, MessageCreate(content="现在根据完整历史继续。", locale="zh-CN"))
+
+    payload = json.loads(llm_client.chat_calls[-1]["messages"][-1]["content"])
+    recent_messages = payload["recent_messages"]
+    assert len(recent_messages) > 12
+    assert recent_messages[-1]["content"] == "现在根据完整历史继续。"
 
 
 def test_isekai_active_model_failure_records_fallback_reason(store):
