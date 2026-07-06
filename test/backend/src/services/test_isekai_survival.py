@@ -57,6 +57,20 @@ class FakeStreamingIsekaiLLMClient:
         yield '树影中出现了陌生路标。"}'
 
 
+class FailingIsekaiLLMClient:
+    def chat(self, model, messages):
+        raise RuntimeError("deepseek request failed")
+
+
+class FailingStreamingIsekaiLLMClient:
+    def stream_chat(self, model, messages):
+        raise RuntimeError("deepseek stream failed")
+        yield ""
+
+    def chat(self, model, messages):
+        raise RuntimeError("deepseek chat failed")
+
+
 class TimelineStreamingPreferenceClient:
     def __init__(self):
         self.timeline = []
@@ -135,6 +149,19 @@ def test_isekai_advance_uses_active_model_for_narration(store):
     assert response.dm_message.metadata["source"] == "active_model"
 
 
+def test_isekai_active_model_failure_records_fallback_reason(store):
+    activate_test_model(store)
+    service = IsekaiSurvivalService(store, llm_client=FailingIsekaiLLMClient())
+    adventure = service.create_adventure(AdventureCreate(title="Model Failure", mode="isekai_survival"))
+
+    response = service.advance(adventure.id, MessageCreate(content="我观察雾气。", locale="zh-CN"))
+
+    assert response.dm_message.metadata["source"] == "survival_rules"
+    assert response.dm_message.metadata["model_errors"] == [
+        {"stage": "chat", "message": "deepseek request failed"}
+    ]
+
+
 def test_isekai_model_scene_update_persists_location_and_history(store):
     activate_test_model(store)
     llm_client = SceneUpdateIsekaiLLMClient()
@@ -169,6 +196,20 @@ def test_isekai_stream_uses_active_model_streaming(store):
     assert "模型流式异世界回复" in delta_text
     assert events[-1]["type"] == "final"
     assert events[-1]["dm_message"].metadata["source"] == "active_model"
+
+
+def test_isekai_stream_model_failure_records_fallback_reason(store):
+    activate_test_model(store)
+    service = IsekaiSurvivalService(store, llm_client=FailingStreamingIsekaiLLMClient())
+    adventure = service.create_adventure(AdventureCreate(title="Stream Failure", mode="isekai_survival"))
+
+    events = list(service.advance_stream(adventure.id, MessageCreate(content="我继续前进。", locale="zh-CN")))
+
+    assert events[-1]["dm_message"].metadata["source"] == "survival_rules"
+    assert events[-1]["dm_message"].metadata["model_errors"] == [
+        {"stage": "stream_chat", "message": "deepseek stream failed"},
+        {"stage": "chat", "message": "deepseek chat failed"},
+    ]
 
 
 def test_isekai_stream_defers_preference_learning_until_after_narration(store):

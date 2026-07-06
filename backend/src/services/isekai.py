@@ -141,17 +141,12 @@ class IsekaiSurvivalService:
         turn = self.prepare_turn(adventure_id, message)
         content, source, scene_update = self.generate_narration(turn, message.locale)
         scene = self.apply_scene_progression(adventure_id, turn, content, scene_update)
+        metadata = self.message_metadata(turn, source, scene_update)
         dm_message = self.adventures.append_message(
             adventure_id,
             "dm",
             content,
-            {
-                "mode": "isekai_survival",
-                "survival_delta": turn["delta"],
-                "time": turn["time"],
-                "scene_update": scene_update or {},
-                "source": source,
-            },
+            metadata,
         )
         updated = self.adventures.get(adventure_id)
         return DMAdvanceResponse(
@@ -170,17 +165,12 @@ class IsekaiSurvivalService:
         yield {"type": "player_message", "message": turn["player_message"]}
         content, source, scene_update = yield from self.stream_narration(turn, message.locale)
         scene = self.apply_scene_progression(adventure_id, turn, content, scene_update)
+        metadata = self.message_metadata(turn, source, scene_update)
         dm_message = self.adventures.append_message(
             adventure_id,
             "dm",
             content,
-            {
-                "mode": "isekai_survival",
-                "survival_delta": turn["delta"],
-                "time": turn["time"],
-                "scene_update": scene_update or {},
-                "source": source,
-            },
+            metadata,
         )
         turn["world_state"] = self.learn_preferences_for_current_turn(adventure_id)
         updated = self.adventures.get(adventure_id)
@@ -249,6 +239,28 @@ class IsekaiSurvivalService:
         self.event_director.evaluate_turn(adventure_id, turn, world_state)
         return world_state
 
+    def message_metadata(
+        self,
+        turn: dict[str, Any],
+        source: str,
+        scene_update: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        metadata = {
+            "mode": "isekai_survival",
+            "survival_delta": turn["delta"],
+            "time": turn["time"],
+            "scene_update": scene_update or {},
+            "source": source,
+        }
+        if turn.get("model_errors"):
+            metadata["model_errors"] = turn["model_errors"]
+        return metadata
+
+    def record_model_error(self, turn: dict[str, Any], stage: str, exc: Exception) -> None:
+        errors = list(turn.get("model_errors") or [])
+        errors.append({"stage": stage, "message": str(exc)})
+        turn["model_errors"] = errors
+
     def learn_preferences_for_current_turn(
         self,
         adventure_id: int,
@@ -270,8 +282,8 @@ class IsekaiSurvivalService:
                 raw_response = self.llm_client.chat(model, self.build_model_messages(turn, locale))
                 payload = self.parse_model_payload(raw_response, turn["fallback"])
                 return payload["narration"], "active_model", payload.get("scene_update")
-            except Exception:
-                pass
+            except Exception as exc:
+                self.record_model_error(turn, "chat", exc)
         return turn["fallback"], "survival_rules", None
 
     def stream_narration(self, turn: dict[str, Any], locale: str = "zh-CN"):
@@ -280,8 +292,8 @@ class IsekaiSurvivalService:
             try:
                 payload = yield from self.stream_model_narration(model, self.build_model_messages(turn, locale))
                 return payload["narration"] or turn["fallback"], "active_model", payload.get("scene_update")
-            except Exception:
-                pass
+            except Exception as exc:
+                self.record_model_error(turn, "stream_chat", exc)
 
         content, source, scene_update = self.generate_narration(turn, locale)
         for chunk in chunk_text(content):
