@@ -112,6 +112,7 @@ def normalize_world_state(state: dict[str, Any] | None, story: StoryOut | None =
     normalized.setdefault("pressure_clocks", [])
     normalized.setdefault("npc_states", {})
     normalized.setdefault("location_states", {})
+    normalized.setdefault("location_history", [])
     normalized.setdefault("visible_events", [])
     normalized.setdefault("hidden_events", [])
     normalized.setdefault(
@@ -136,6 +137,7 @@ def public_world_state_view(world_state: dict[str, Any]) -> dict[str, Any]:
         "pressure_clocks": [clock for clock in state.get("pressure_clocks", []) if clock.get("visible", False)],
         "visible_events": list(state.get("visible_events", []))[-3:],
         "location_states": state.get("location_states", {}),
+        "location_history": list(state.get("location_history", []))[-20:],
         "last_advance": state.get("last_advance", {}),
     }
 

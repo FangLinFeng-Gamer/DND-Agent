@@ -22,6 +22,17 @@ def test_cooking_is_time_advancing_action():
     assert action.survival_intent == "cook"
 
 
+def test_city_travel_inputs_are_time_advancing_actions():
+    service = IsekaiTimeService()
+
+    for text in ["我要去城镇", "去白石镇", "继续去城镇"]:
+        action = service.classify_action(text)
+
+        assert action.action_type == "travel"
+        assert action.advances_time is True
+        assert action.time_cost_minutes == 90
+
+
 def test_time_label_for_minutes():
     service = IsekaiTimeService()
 

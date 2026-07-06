@@ -40,6 +40,8 @@ class IsekaiTimeService:
             for word in ["前往", "赶路", "走到", "移动到", "去往", "探索", "前进", "沿着", "走", "travel", "move"]
         ):
             return IsekaiActionResolution("travel", 90, True, "travel", "角色移动到新的地点。")
+        if self._is_travel_intent(text):
+            return IsekaiActionResolution("travel", 90, True, "travel", "角色移动到新的地点。")
         if any(word in text for word in ["搜索", "搜寻", "调查", "仔细找", "寻找", "search"]):
             return IsekaiActionResolution("search", 45, True, "search", "角色仔细搜索附近区域。")
         if any(word in text for word in ["观察", "查看", "聆听", "听", "inspect", "look"]):
@@ -202,11 +204,21 @@ class IsekaiTimeService:
                 "hp",
                 "现在几点",
                 "第几天",
+                "现在在哪",
+                "当前位置",
+                "不是已经",
+                "已经到",
+                "到过",
             ]
         )
 
     def _is_table_talk(self, text: str) -> bool:
         return any(word in text for word in ["规则", "怎么操作", "怎么玩", "系统", "面板", "按钮", "ui"])
+
+    def _is_travel_intent(self, text: str) -> bool:
+        if any(marker in text for marker in ["?", "？", "吗"]):
+            return False
+        return any(word in text for word in ["去", "到达", "进入", "出发", "上路", "继续"])
 
     def _clamp(self, value: int) -> int:
         return max(0, min(100, value))

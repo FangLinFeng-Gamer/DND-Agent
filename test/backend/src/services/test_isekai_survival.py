@@ -15,6 +15,33 @@ class FakeIsekaiLLMClient:
         return json.dumps({"narration": "模型异世界回复：雾中的猎径传来铃声。"})
 
 
+class SceneUpdateIsekaiLLMClient:
+    def __init__(self):
+        self.chat_calls = []
+
+    def chat(self, model, messages):
+        self.chat_calls.append({"model": model, "messages": messages})
+        if len(self.chat_calls) == 1:
+            return json.dumps(
+                {
+                    "narration": "你沿着旧猎径前进，抵达白石镇外的木质哨站。",
+                    "scene_update": {
+                        "location": "白石镇外木质哨站",
+                        "environment": "晨雾中的木质哨站立在旧猎径尽头，路牌指向白石镇。",
+                        "important_objects": ["木质哨站", "指向白石镇的路牌", "披斗篷的守卫"],
+                        "current_objective": "确认哨站守卫的态度，并决定是否进入白石镇。",
+                    },
+                },
+                ensure_ascii=False,
+            )
+        payload = json.loads(messages[-1]["content"])
+        recent_text = "\n".join(message["content"] for message in payload["recent_messages"])
+        assert "抵达白石镇外的木质哨站" in recent_text
+        assert payload["system_state"]["scene"]["location"] == "白石镇外木质哨站"
+        assert payload["system_state"]["world_state"]["location_history"][-1]["to"] == "白石镇外木质哨站"
+        return json.dumps({"narration": "你确实已经抵达白石镇外木质哨站。"}, ensure_ascii=False)
+
+
 class FakeStreamingIsekaiLLMClient:
     def __init__(self):
         self.stream_calls = 0
@@ -106,6 +133,26 @@ def test_isekai_advance_uses_active_model_for_narration(store):
     assert llm_client.chat_calls[0]["model"].model_name == "isekai-dm-model"
     assert response.dm_message.content == "模型异世界回复：雾中的猎径传来铃声。"
     assert response.dm_message.metadata["source"] == "active_model"
+
+
+def test_isekai_model_scene_update_persists_location_and_history(store):
+    activate_test_model(store)
+    llm_client = SceneUpdateIsekaiLLMClient()
+    service = IsekaiSurvivalService(store, llm_client=llm_client)
+    adventure = service.create_adventure(AdventureCreate(title="Memory Road", mode="isekai_survival"))
+
+    first = service.advance(adventure.id, MessageCreate(content="去白石镇", locale="zh-CN"))
+
+    assert first.adventure.current_scene.location == "白石镇外木质哨站"
+    assert first.adventure.survival_state["location"] == "白石镇外木质哨站"
+    assert first.adventure.world_state["location_history"][-1]["from"] == "雾林边境"
+    assert first.adventure.world_state["location_history"][-1]["to"] == "白石镇外木质哨站"
+    assert first.adventure.world_state["location_history"][-1]["triggering_action"] == "去白石镇"
+
+    second = service.advance(adventure.id, MessageCreate(content="我不是已经到木质哨站了吗", locale="zh-CN"))
+
+    assert "确实已经抵达" in second.dm_message.content
+    assert second.adventure.current_scene.location == "白石镇外木质哨站"
 
 
 def test_isekai_stream_uses_active_model_streaming(store):
