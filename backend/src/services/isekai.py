@@ -12,6 +12,7 @@ from backend.src.schemas.isekai import IsekaiCharacterOut, IsekaiSurvivalStateOu
 from backend.src.services.adventures import AdventureService
 from backend.src.services.isekai_events import IsekaiWorldEventDirector
 from backend.src.services.isekai_preferences import IsekaiPreferenceLearner
+from backend.src.services.isekai_resources import IsekaiResourceService
 from backend.src.services.isekai_time import IsekaiActionResolution, IsekaiTimeService
 from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
 from backend.src.services.model_gateway import ModelGateway
@@ -32,11 +33,12 @@ class IsekaiSurvivalService:
         self.event_director = IsekaiWorldEventDirector(store)
         self.preference_learner = IsekaiPreferenceLearner(llm_client=llm_client)
         self.time = IsekaiTimeService()
+        self.resources = IsekaiResourceService()
 
     def generate_character(self) -> IsekaiCharacterOut:
         race = random.choice(RACES)
         class_name = random.choice(CLASSES)
-        inventory = ["干粮 x2", "水囊", "火绒盒", "旧斗篷"]
+        inventory = ["干粮 x2", "水囊(3/3)", "火绒盒", "旧斗篷"]
         if class_name == "Ranger":
             inventory.append("短弓")
         elif class_name == "Wizard":
@@ -68,6 +70,7 @@ class IsekaiSurvivalService:
         )
         survival = self.initial_survival_state(scene)
         adventure = self.adventures.create_isekai_shell(request, scene)
+        self.initialize_scene_facts(adventure.id, scene)
         self.save_character(adventure.id, character)
         self.save_survival_state(adventure.id, survival)
         self.adventures.append_message(
@@ -126,6 +129,12 @@ class IsekaiSurvivalService:
                     "state_json": encode_json(survival.state),
                 },
             )
+
+    def initialize_scene_facts(self, adventure_id: int, scene: SceneState) -> None:
+        world_state = self.adventures.get_world_state(adventure_id)
+        world_state["confirmed_location"] = scene.location
+        world_state.setdefault("location_history", [])
+        self.adventures.update_world_state(adventure_id, world_state)
 
     def opening_text(
         self,
@@ -203,6 +212,9 @@ class IsekaiSurvivalService:
         delta, survival = self.apply_delta(adventure_id, action)
         scene = self.adventures.get_scene(adventure_id)
         character = self.get_character(adventure_id)
+        resource_result = self.resources.apply(character, survival, action, message.content)
+        character = self.update_character_resources(adventure_id, resource_result.character)
+        delta.update(resource_result.delta)
         fallback = self.narrate(message.content, scene, character, survival, delta)
         turn = {
             "player_input": message.content,
@@ -289,17 +301,25 @@ class IsekaiSurvivalService:
             try:
                 raw_response = self.model_gateway.chat(model, self.build_model_messages(turn, locale))
                 payload = self.parse_model_payload(raw_response, turn["fallback"])
-                return payload["narration"], "active_model", payload.get("scene_update")
+                narration = self.reconcile_narration_with_scene_facts(
+                    turn,
+                    payload["narration"],
+                )
+                return narration, "active_model", payload.get("scene_update")
             except Exception as exc:
                 self.record_model_error(turn, "chat", exc)
-        return turn["fallback"], "survival_rules", None
+        return self.reconcile_narration_with_scene_facts(turn, turn["fallback"]), "survival_rules", None
 
     def stream_narration(self, turn: dict[str, Any], locale: str = "zh-CN"):
         model = self.active_model()
         if model and self.llm_client and hasattr(self.llm_client, "stream_chat"):
             try:
                 payload = yield from self.stream_model_narration(model, self.build_model_messages(turn, locale))
-                return payload["narration"] or turn["fallback"], "active_model", payload.get("scene_update")
+                narration = self.reconcile_narration_with_scene_facts(
+                    turn,
+                    payload["narration"] or turn["fallback"],
+                )
+                return narration, "active_model", payload.get("scene_update")
             except Exception as exc:
                 self.record_model_error(turn, "stream_chat", exc)
 
@@ -396,6 +416,20 @@ class IsekaiSurvivalService:
             reserved_payload=reserved_payload,
         )
 
+    def reconcile_narration_with_scene_facts(self, turn: dict[str, Any], narration: str) -> str:
+        scene = turn["scene"]
+        world_state = turn.get("world_state") or {}
+        confirmed_location = str(world_state.get("confirmed_location") or scene.location or "").strip()
+        if not confirmed_location:
+            return narration
+        contradiction_markers = ["并未抵达", "没有抵达", "仍在雾林边境", "还在雾林边境"]
+        if any(marker in narration for marker in contradiction_markers) and confirmed_location not in narration:
+            return (
+                f"你重新确认方位：当前位于{confirmed_location}。"
+                "先前已经发生的位置变化不会被抹掉；你可以在这里继续观察、交谈，或明确前往新的地点。"
+            )
+        return narration
+
     def apply_scene_progression(
         self,
         adventure_id: int,
@@ -405,6 +439,8 @@ class IsekaiSurvivalService:
     ) -> SceneState:
         scene = turn["scene"]
         patch = self.clean_scene_update(scene_update)
+        if not (turn.get("time") or {}).get("advances_time"):
+            patch.pop("location", None)
         inferred_location = self.infer_location_from_turn(turn, narration)
         if inferred_location and not patch.get("location"):
             patch["location"] = inferred_location
@@ -531,6 +567,7 @@ class IsekaiSurvivalService:
         history = list(world_state.get("location_history") or [])
         history.append(history_entry)
         world_state["location_history"] = history[-20:]
+        world_state["confirmed_location"] = history_entry["to"]
         self.adventures.update_world_state(adventure_id, world_state)
 
     def apply_delta(self, adventure_id: int, action: IsekaiActionResolution) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -555,6 +592,26 @@ class IsekaiSurvivalService:
     def get_character(self, adventure_id: int) -> dict[str, Any]:
         adventure = self.adventures.get(adventure_id, include_messages=False)
         return adventure.isekai_character or {}
+
+    def update_character_resources(self, adventure_id: int, character: dict[str, Any]) -> dict[str, Any]:
+        with self.store.connect() as conn:
+            conn.execute(
+                """
+                UPDATE isekai_characters
+                SET hp_current = :hp_current,
+                    inventory_json = :inventory_json,
+                    status_effects_json = :status_effects_json,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE adventure_id = :adventure_id
+                """,
+                {
+                    "adventure_id": adventure_id,
+                    "hp_current": int(character.get("hp_current", 0)),
+                    "inventory_json": encode_json(character.get("inventory") or []),
+                    "status_effects_json": encode_json(character.get("status_effects") or []),
+                },
+            )
+        return self.get_character(adventure_id)
 
     def narrate(
         self,

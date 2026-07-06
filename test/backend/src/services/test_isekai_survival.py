@@ -1,5 +1,6 @@
 import json
 
+from backend.src.db.sqlite import encode_json
 from backend.src.schemas.adventure import AdventureCreate, MessageCreate
 from backend.src.schemas.llm import LLMModelCreate
 from backend.src.services.llm_models import LLMModelService
@@ -25,6 +26,28 @@ class OutOfSettingIsekaiLLMClient:
                     "environment": "烤饼铺子旁边有便利店。",
                     "important_objects": ["广告牌", "热销菜单"],
                     "current_objective": "询问烤饼铺子老板。",
+                },
+            },
+            ensure_ascii=False,
+        )
+
+
+class ContradictoryLocationLLMClient:
+    def chat(self, model, messages):
+        return json.dumps(
+            {"narration": "你并未抵达任何村落，仍在雾林边境。"},
+            ensure_ascii=False,
+        )
+
+
+class NonActionSceneMoveLLMClient:
+    def chat(self, model, messages):
+        return json.dumps(
+            {
+                "narration": "你查看状态时，周围景象又变回了雾林边境。",
+                "scene_update": {
+                    "location": "雾林边境",
+                    "environment": "你又站在最初醒来的针叶林边缘。",
                 },
             },
             ensure_ascii=False,
@@ -125,6 +148,37 @@ def activate_test_model(store, max_context_tokens: int = 4096):
     return model
 
 
+def set_survival_pressure(store, adventure_id: int, **values):
+    with store.connect() as conn:
+        assignments = ", ".join(f"{key} = :{key}" for key in values)
+        conn.execute(
+            f"""
+            UPDATE isekai_survival_states
+            SET {assignments}, updated_at = CURRENT_TIMESTAMP
+            WHERE adventure_id = :adventure_id
+            """,
+            {"adventure_id": adventure_id, **values},
+        )
+
+
+def set_character_state(store, adventure_id: int, **values):
+    payload = dict(values)
+    if "inventory" in payload:
+        payload["inventory_json"] = encode_json(payload.pop("inventory"))
+    if "status_effects" in payload:
+        payload["status_effects_json"] = encode_json(payload.pop("status_effects"))
+    with store.connect() as conn:
+        assignments = ", ".join(f"{key} = :{key}" for key in payload)
+        conn.execute(
+            f"""
+            UPDATE isekai_characters
+            SET {assignments}, updated_at = CURRENT_TIMESTAMP
+            WHERE adventure_id = :adventure_id
+            """,
+            {"adventure_id": adventure_id, **payload},
+        )
+
+
 def test_random_isekai_character_has_survival_inventory_and_world_reaction_tags(store):
     service = IsekaiSurvivalService(store)
 
@@ -136,6 +190,54 @@ def test_random_isekai_character_has_survival_inventory_and_world_reaction_tags(
     assert character.gold >= 5
     assert character.inventory
     assert character.world_reaction_tags
+
+
+def test_isekai_eat_drink_consumes_inventory_and_records_resource_changes(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Resource Road", mode="isekai_survival"))
+    before_inventory = adventure.isekai_character["inventory"]
+
+    response = service.advance(adventure.id, MessageCreate(content="我吃干粮并喝水。", locale="zh-CN"))
+
+    after_inventory = response.adventure.isekai_character["inventory"]
+    changes = response.dm_message.metadata["survival_delta"]["inventory_changes"]
+    assert before_inventory != after_inventory
+    assert any("消耗干粮" in change for change in changes)
+    assert any("饮用水囊" in change for change in changes)
+    assert "干粮 x2" not in after_inventory
+    assert response.dm_message.metadata["survival_delta"]["hp_delta"] == 0
+
+
+def test_isekai_high_survival_pressure_damages_hp_and_adds_status_effects(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Pressure Road", mode="isekai_survival"))
+    set_survival_pressure(store, adventure.id, hunger=95, thirst=95, fatigue=95, sleep_need=95)
+    set_character_state(store, adventure.id, hp_current=10, status_effects=[])
+
+    response = service.advance(adventure.id, MessageCreate(content="我继续前进。", locale="zh-CN"))
+
+    character = response.adventure.isekai_character
+    delta = response.dm_message.metadata["survival_delta"]
+    assert character["hp_current"] < 10
+    assert delta["hp_delta"] < 0
+    assert {"饥饿虚弱", "脱水", "极度疲劳"} <= set(character["status_effects"])
+    assert {"饥饿虚弱", "脱水", "极度疲劳"} <= set(delta["status_effects_added"])
+
+
+def test_isekai_recovered_pressure_removes_status_effects(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Recovery Road", mode="isekai_survival"))
+    set_survival_pressure(store, adventure.id, hunger=20, thirst=20, fatigue=20, sleep_need=20)
+    set_character_state(store, adventure.id, status_effects=["饥饿虚弱", "脱水", "极度疲劳"])
+
+    response = service.advance(adventure.id, MessageCreate(content="我现在的状态怎么样？", locale="zh-CN"))
+
+    character = response.adventure.isekai_character
+    delta = response.dm_message.metadata["survival_delta"]
+    assert "饥饿虚弱" not in character["status_effects"]
+    assert "脱水" not in character["status_effects"]
+    assert "极度疲劳" not in character["status_effects"]
+    assert {"饥饿虚弱", "脱水", "极度疲劳"} <= set(delta["status_effects_removed"])
 
 
 def test_survival_rules_increase_pressure_for_exploration(store):
@@ -243,6 +345,82 @@ def test_isekai_model_scene_update_persists_location_and_history(store):
 
     assert "确实已经抵达" in second.dm_message.content
     assert second.adventure.current_scene.location == "白石镇外木质哨站"
+
+
+def test_confirmed_location_overrides_contradictory_model_narration(store):
+    activate_test_model(store)
+    service = IsekaiSurvivalService(store, llm_client=ContradictoryLocationLLMClient())
+    adventure = service.create_adventure(AdventureCreate(title="Fact Lock Road", mode="isekai_survival"))
+    locked_scene = adventure.current_scene.model_copy(update={"location": "白石镇外木质哨站"})
+    service.adventures.update_scene(adventure.id, locked_scene)
+    service.update_world_location_history(
+        adventure.id,
+        {
+            "from": "雾林边境",
+            "to": "白石镇外木质哨站",
+            "triggering_action": "去白石镇",
+            "day": 1,
+            "time_of_day": "夜晚",
+            "summary": "你已经抵达白石镇外木质哨站。",
+        },
+    )
+    service.update_survival_location(
+        adventure.id,
+        "白石镇外木质哨站",
+        {
+            "from": "雾林边境",
+            "to": "白石镇外木质哨站",
+            "triggering_action": "去白石镇",
+            "day": 1,
+            "time_of_day": "夜晚",
+            "summary": "你已经抵达白石镇外木质哨站。",
+        },
+    )
+
+    response = service.advance(adventure.id, MessageCreate(content="我不是已经到木质哨站了吗？", locale="zh-CN"))
+
+    assert "白石镇外木质哨站" in response.dm_message.content
+    assert "并未抵达" not in response.dm_message.content
+    assert "仍在雾林边境" not in response.dm_message.content
+    assert response.adventure.current_scene.location == "白石镇外木质哨站"
+    assert response.adventure.world_state["confirmed_location"] == "白石镇外木质哨站"
+
+
+def test_non_action_scene_update_cannot_move_character(store):
+    activate_test_model(store)
+    service = IsekaiSurvivalService(store, llm_client=NonActionSceneMoveLLMClient())
+    adventure = service.create_adventure(AdventureCreate(title="No Move Road", mode="isekai_survival"))
+    locked_scene = adventure.current_scene.model_copy(update={"location": "白石镇外木质哨站"})
+    service.adventures.update_scene(adventure.id, locked_scene)
+    service.update_world_location_history(
+        adventure.id,
+        {
+            "from": "雾林边境",
+            "to": "白石镇外木质哨站",
+            "triggering_action": "去白石镇",
+            "day": 1,
+            "time_of_day": "夜晚",
+            "summary": "你已经抵达白石镇外木质哨站。",
+        },
+    )
+    service.update_survival_location(
+        adventure.id,
+        "白石镇外木质哨站",
+        {
+            "from": "雾林边境",
+            "to": "白石镇外木质哨站",
+            "triggering_action": "去白石镇",
+            "day": 1,
+            "time_of_day": "夜晚",
+            "summary": "你已经抵达白石镇外木质哨站。",
+        },
+    )
+
+    response = service.advance(adventure.id, MessageCreate(content="我现在在哪？", locale="zh-CN"))
+
+    assert response.adventure.current_scene.location == "白石镇外木质哨站"
+    assert response.adventure.survival_state["location"] == "白石镇外木质哨站"
+    assert response.dm_message.metadata["time"]["advances_time"] is False
 
 
 def test_isekai_stream_uses_active_model_streaming(store):

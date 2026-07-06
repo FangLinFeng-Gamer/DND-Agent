@@ -151,3 +151,35 @@ def test_isekai_world_events_are_isolated_per_adventure(client):
 
     assert response.status_code == 200
     assert response.json()["world_events"] == []
+
+
+def test_delete_isekai_adventure_removes_mode_specific_rows_and_world_events(client):
+    adventure = client.post(
+        "/api/adventures",
+        json={"title": "Delete Isekai", "mode": "isekai_survival", "locale": "zh-CN"},
+    ).json()
+    WorldEventService(client.app.state.store).create(
+        adventure["id"],
+        WorldEventCreate(
+            event_type="world",
+            title="删除测试事件",
+            description="这个事件应该随冒险一起删除。",
+            importance=1,
+            metadata={
+                "mode": "isekai_survival",
+                "scope": "local",
+                "source": "random_world",
+                "knowledge_channel": "direct_observation",
+                "known_to_character": True,
+            },
+        ),
+    )
+
+    deleted = client.delete(f"/api/adventures/{adventure['id']}")
+
+    assert deleted.status_code == 200
+    with client.app.state.store.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM isekai_characters WHERE adventure_id = ?", (adventure["id"],)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM isekai_survival_states WHERE adventure_id = ?", (adventure["id"],)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM world_events WHERE adventure_id = ?", (adventure["id"],)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM messages WHERE adventure_id = ?", (adventure["id"],)).fetchone()[0] == 0

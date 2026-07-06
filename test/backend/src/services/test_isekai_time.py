@@ -11,6 +11,37 @@ def test_status_question_does_not_advance_time():
     assert action.time_cost_minutes == 0
 
 
+def test_short_clarification_does_not_advance_time():
+    service = IsekaiTimeService()
+
+    for text in ["什么？", "什么意思", "？", "?"]:
+        action = service.classify_action(text)
+
+        assert action.action_type == "table_talk"
+        assert action.advances_time is False
+        assert action.time_cost_minutes == 0
+
+
+def test_money_query_does_not_advance_time():
+    service = IsekaiTimeService()
+
+    action = service.classify_action("我有多少钱？")
+
+    assert action.action_type == "status_check"
+    assert action.advances_time is False
+    assert action.time_cost_minutes == 0
+
+
+def test_unknown_input_defaults_to_table_talk_without_time_cost():
+    service = IsekaiTimeService()
+
+    action = service.classify_action("嗯？")
+
+    assert action.action_type == "table_talk"
+    assert action.advances_time is False
+    assert action.time_cost_minutes == 0
+
+
 def test_cooking_is_time_advancing_action():
     service = IsekaiTimeService()
 

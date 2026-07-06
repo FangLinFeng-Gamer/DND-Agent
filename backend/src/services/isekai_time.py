@@ -48,7 +48,7 @@ class IsekaiTimeService:
             return IsekaiActionResolution("observe", 15, True, "observe", "角色快速观察周围。")
         if any(word in text for word in ["交谈", "询问", "问", "说", "talk"]):
             return IsekaiActionResolution("short_dialogue", 10, True, "social", "角色进行了简短对话。")
-        return IsekaiActionResolution("short_dialogue", 10, True, "social", "角色进行了简短行动。")
+        return IsekaiActionResolution("table_talk", 0, False, "none", "输入没有明确构成消耗时间的角色行动。")
 
     def time_label(self, elapsed_minutes: int) -> str:
         minute = int(elapsed_minutes) % MINUTES_PER_DAY
@@ -199,12 +199,19 @@ class IsekaiTimeService:
                 "生存状态",
                 "背包",
                 "库存",
+                "包里",
                 "属性",
                 "生命值",
                 "hp",
+                "金币",
+                "多少钱",
+                "多少干粮",
+                "多少水",
+                "水囊还有",
                 "现在几点",
                 "第几天",
                 "现在在哪",
+                "我在哪",
                 "当前位置",
                 "不是已经",
                 "已经到",
@@ -213,7 +220,24 @@ class IsekaiTimeService:
         )
 
     def _is_table_talk(self, text: str) -> bool:
-        return any(word in text for word in ["规则", "怎么操作", "怎么玩", "系统", "面板", "按钮", "ui"])
+        stripped = text.strip()
+        if stripped in {"?", "？", "什么", "什么?", "什么？", "嗯?", "嗯？"}:
+            return True
+        return any(
+            word in text
+            for word in [
+                "规则",
+                "怎么操作",
+                "怎么玩",
+                "系统",
+                "面板",
+                "按钮",
+                "ui",
+                "什么意思",
+                "解释一下",
+                "这是什么意思",
+            ]
+        )
 
     def _is_travel_intent(self, text: str) -> bool:
         if any(marker in text for marker in ["?", "？", "吗"]):

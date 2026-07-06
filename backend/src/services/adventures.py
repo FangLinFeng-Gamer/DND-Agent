@@ -111,6 +111,9 @@ class AdventureService:
             conn.execute("DELETE FROM combat_states WHERE adventure_id = ?", (adventure_id,))
             conn.execute("DELETE FROM adventure_characters WHERE adventure_id = ?", (adventure_id,))
             conn.execute("DELETE FROM map_combat_tokens WHERE adventure_id = ?", (adventure_id,))
+            conn.execute("DELETE FROM isekai_characters WHERE adventure_id = ?", (adventure_id,))
+            conn.execute("DELETE FROM isekai_survival_states WHERE adventure_id = ?", (adventure_id,))
+            conn.execute("DELETE FROM world_events WHERE adventure_id = ?", (adventure_id,))
             conn.execute("UPDATE map_scenes SET adventure_id = NULL, active = 0 WHERE adventure_id = ?", (adventure_id,))
             conn.execute("DELETE FROM adventures WHERE id = ?", (adventure_id,))
 

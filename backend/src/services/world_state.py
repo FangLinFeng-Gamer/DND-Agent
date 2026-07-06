@@ -137,6 +137,7 @@ def public_world_state_view(world_state: dict[str, Any]) -> dict[str, Any]:
         "pressure_clocks": [clock for clock in state.get("pressure_clocks", []) if clock.get("visible", False)],
         "visible_events": list(state.get("visible_events", []))[-3:],
         "location_states": state.get("location_states", {}),
+        "confirmed_location": state.get("confirmed_location"),
         "location_history": list(state.get("location_history", []))[-20:],
         "last_advance": state.get("last_advance", {}),
     }
