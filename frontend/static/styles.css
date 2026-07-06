@@ -2250,44 +2250,66 @@ select:focus {
 
 .isekai-room-layout {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(420px, 1fr) minmax(260px, 340px);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(280px, 360px) minmax(520px, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   grid-template-areas:
-    "character environment survival"
-    "inventory chat events"
-    "inventory chat events";
+    "info chat";
   gap: 14px;
   min-height: 0;
   padding: 18px 20px 20px;
 }
 
-#isekai-character-panel {
-  grid-area: character;
-}
-
-#isekai-survival-panel {
-  grid-area: survival;
-}
-
-#isekai-inventory-panel {
-  grid-area: inventory;
-}
-
-#isekai-environment-panel {
-  grid-area: environment;
+.isekai-info-panel {
+  display: grid;
+  grid-area: info;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
 }
 
-#isekai-events-panel {
+.isekai-info-tabs {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-area: events;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.isekai-info-tabs button {
+  min-width: 0;
+  border: 1px solid rgba(169, 140, 84, .25);
+  border-radius: 7px;
+  background: rgba(14, 13, 10, .7);
+  color: #bda878;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.1;
+  padding: 9px 8px;
+}
+
+.isekai-info-tabs button.active {
+  border-color: rgba(244, 221, 154, .55);
+  background: rgba(77, 62, 31, .62);
+  color: #f4dd9a;
+}
+
+.isekai-info-page {
+  display: none;
+  min-height: 0;
+  overflow: auto;
+}
+
+.isekai-info-page.active {
+  display: block;
+}
+
+#isekai-events-panel {
   min-height: 0;
 }
 
 .isekai-chat-panel {
   grid-area: chat;
-  min-height: 520px;
+  min-height: 0;
 }
 
 .isekai-location {
@@ -2332,14 +2354,46 @@ select:focus {
   white-space: nowrap;
 }
 
+.isekai-merged-section {
+  margin-top: 16px;
+  border-top: 1px solid rgba(169, 140, 84, .22);
+  padding-top: 14px;
+}
+
+.isekai-merged-section h3 {
+  margin: 0;
+  color: #f4dd9a;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.isekai-environment-card {
+  border: 1px solid rgba(169, 140, 84, .28);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .28);
+  margin-bottom: 14px;
+  padding: 13px 14px;
+}
+
+.isekai-environment-card h2 {
+  margin: 0 0 10px;
+}
+
+.isekai-environment-card p {
+  margin: 10px 0 0;
+  color: #f0e2bb;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .isekai-event-list {
   display: grid;
   gap: 10px;
   align-content: start;
   min-height: 0;
-  max-height: 420px;
+  max-height: none;
   margin-top: 12px;
-  overflow: auto;
   padding-right: 4px;
 }
 
@@ -4008,12 +4062,8 @@ button.choice-card,
     grid-template-columns: 1fr;
     grid-template-rows: auto;
     grid-template-areas:
-      "character"
-      "survival"
-      "environment"
-      "inventory"
       "chat"
-      "events";
+      "info";
   }
 
   .room-status,

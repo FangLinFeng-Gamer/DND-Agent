@@ -1,7 +1,7 @@
-import { api } from "./js/api.js?v=20260703-isekai-time";
-import { bindElements, els, state } from "./js/state.js?v=20260703-isekai-time";
-import { applyTranslations, setLocale, t } from "./js/i18n.js?v=20260703-isekai-time";
-import { renderCapabilities, setStatus, showError, showView, viewFromPath } from "./js/ui.js?v=20260703-isekai-time";
+import { api } from "./js/api.js?v=20260706-isekai-layout";
+import { bindElements, els, state } from "./js/state.js?v=20260706-isekai-layout";
+import { applyTranslations, setLocale, t } from "./js/i18n.js?v=20260706-isekai-layout";
+import { renderCapabilities, setStatus, showError, showView, viewFromPath } from "./js/ui.js?v=20260706-isekai-layout";
 import {
   deleteAdventure,
   getSelectedCharacter,
@@ -32,13 +32,13 @@ import {
   uploadMapAsset,
   createMapScene,
   syncMapTokens,
-} from "./js/game.js?v=20260703-isekai-time";
+} from "./js/game.js?v=20260706-isekai-layout";
 import {
   confirmCharacterCreation,
   ensureCharacterCreationSession,
   renderCharacterCreation,
   sendCharacterCreationMessage,
-} from "./js/character-creation.js?v=20260703-isekai-time";
+} from "./js/character-creation.js?v=20260706-isekai-layout";
 import {
   createStory,
   loadStories,
@@ -47,10 +47,10 @@ import {
   renderStoryList,
   renderStorySelect,
   resetStoryForm,
-} from "./js/stories.js?v=20260703-isekai-time";
-import { loadModels, renderModelList, resetModelForm, saveModel, testModelConnection } from "./js/models.js?v=20260703-isekai-time";
-import { loadRaces, renderRaceDetail, renderRaceList, renderRaceOptions } from "./js/races.js?v=20260703-isekai-time";
-import { initDiceTray, renderDiceTray } from "./js/dice.js?v=20260703-isekai-time";
+} from "./js/stories.js?v=20260706-isekai-layout";
+import { loadModels, renderModelList, resetModelForm, saveModel, testModelConnection } from "./js/models.js?v=20260706-isekai-layout";
+import { loadRaces, renderRaceDetail, renderRaceList, renderRaceOptions } from "./js/races.js?v=20260706-isekai-layout";
+import { initDiceTray, renderDiceTray } from "./js/dice.js?v=20260706-isekai-layout";
 
 async function loadCapabilities() {
   try {
@@ -175,6 +175,14 @@ function wireEvents() {
   els.isekaiAdventureForm.addEventListener("submit", (event) => {
     event.preventDefault();
     createIsekaiAdventure();
+  });
+  els.isekaiInfoTabs?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-isekai-info-tab]");
+    if (!button) {
+      return;
+    }
+    state.selectedIsekaiInfoTab = button.dataset.isekaiInfoTab;
+    renderAdventureDetail();
   });
   els.messageForm.addEventListener("submit", (event) => {
     event.preventDefault();

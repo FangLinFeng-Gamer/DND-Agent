@@ -1,9 +1,9 @@
-import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260703-isekai-time";
-import { apiBase, els, state } from "./state.js?v=20260703-isekai-time";
-import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260703-isekai-time";
-import { localizedStoryText } from "./stories.js?v=20260703-isekai-time";
-import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260703-isekai-time";
-import { rollD20ForCheck } from "./dice.js?v=20260703-isekai-time";
+import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260706-isekai-layout";
+import { apiBase, els, state } from "./state.js?v=20260706-isekai-layout";
+import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260706-isekai-layout";
+import { localizedStoryText } from "./stories.js?v=20260706-isekai-layout";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260706-isekai-layout";
+import { rollD20ForCheck } from "./dice.js?v=20260706-isekai-layout";
 
 const ISEKAI_CREATION_PROGRESS_KEYS = [
   "isekaiProgressRace",
@@ -1735,12 +1735,30 @@ function renderIsekaiAdventureDetail(adventure, messages) {
   if (els.isekaiRouteTag) {
     els.isekaiRouteTag.textContent = `/game/${adventure.id}`;
   }
+  renderIsekaiInfoTabs();
   renderIsekaiCharacter(adventure.isekai_character);
   renderIsekaiSurvival(survival);
-  renderIsekaiInventory(adventure.isekai_character);
-  renderIsekaiEnvironment(adventure);
   renderIsekaiEvents(adventure);
   renderMessageList(els.isekaiMessages, messages || adventure.messages || []);
+}
+
+function renderIsekaiInfoTabs() {
+  const tabs = ["character", "survival", "world"];
+  if (!tabs.includes(state.selectedIsekaiInfoTab)) {
+    state.selectedIsekaiInfoTab = "character";
+  }
+  els.isekaiInfoTabs?.querySelectorAll("[data-isekai-info-tab]").forEach((button) => {
+    const active = button.dataset.isekaiInfoTab === state.selectedIsekaiInfoTab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  [
+    ["character", els.isekaiCharacterPanel],
+    ["survival", els.isekaiSurvivalPanel],
+    ["world", els.isekaiEventsPanel],
+  ].forEach(([tab, panel]) => {
+    panel?.classList.toggle("active", state.selectedIsekaiInfoTab === tab);
+  });
 }
 
 function renderIsekaiPanel(target, title, rows) {
@@ -1771,6 +1789,7 @@ function renderIsekaiPanel(target, title, rows) {
 }
 
 function renderIsekaiCharacter(character) {
+  const inventory = character?.inventory || [];
   renderIsekaiPanel(els.isekaiCharacterPanel, t("isekaiGeneratedCharacter"), character ? [
     [t("name"), character.name],
     [t("race"), character.race],
@@ -1778,6 +1797,32 @@ function renderIsekaiCharacter(character) {
     [t("hp"), `${character.hp_current}/${character.hp_max}`],
     [t("gold"), character.gold],
   ] : []);
+  if (!character || !els.isekaiCharacterPanel) {
+    return;
+  }
+  const inventorySection = document.createElement("section");
+  inventorySection.className = "isekai-merged-section";
+  const heading = document.createElement("h3");
+  heading.textContent = t("isekaiInventory");
+  inventorySection.append(heading);
+  if (!inventory.length) {
+    inventorySection.append(emptyNode(t("notSet")));
+  } else {
+    const list = document.createElement("div");
+    list.className = "isekai-stat-list";
+    inventory.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.className = "isekai-stat-row";
+      const label = document.createElement("span");
+      label.textContent = String(index + 1);
+      const value = document.createElement("strong");
+      value.textContent = item;
+      row.append(label, value);
+      list.append(row);
+    });
+    inventorySection.append(list);
+  }
+  els.isekaiCharacterPanel.append(inventorySection);
 }
 
 function formatIsekaiTimeCost(minutes) {
@@ -1815,24 +1860,10 @@ function renderIsekaiSurvival(survival) {
   ] : []);
 }
 
-function renderIsekaiInventory(character) {
-  const inventory = character?.inventory || [];
-  renderIsekaiPanel(
-    els.isekaiInventoryPanel,
-    t("isekaiInventory"),
-    inventory.map((item, index) => [String(index + 1), item]),
-  );
-}
-
-function renderIsekaiEnvironment(adventure) {
+function renderIsekaiEnvironmentSummary(adventure) {
   const scene = adventure.current_scene || {};
-  const target = els.isekaiEnvironmentPanel;
-  if (!target) {
-    return;
-  }
-  target.replaceChildren();
-  const inner = document.createElement("div");
-  inner.className = "panel-inner";
+  const card = document.createElement("article");
+  card.className = "isekai-environment-card";
   const heading = document.createElement("h2");
   heading.textContent = t("isekaiCurrentEnvironment");
   const location = document.createElement("strong");
@@ -1843,8 +1874,8 @@ function renderIsekaiEnvironment(adventure) {
   const objective = document.createElement("p");
   objective.className = "field-hint";
   objective.textContent = scene.current_objective || "";
-  inner.append(heading, location, body, objective);
-  target.append(inner);
+  card.append(heading, location, body, objective);
+  return card;
 }
 
 export function getIsekaiKnownWorldEvents(adventure) {
@@ -1885,7 +1916,7 @@ function renderIsekaiEvents(adventure) {
   target.replaceChildren();
   const heading = document.createElement("h2");
   heading.textContent = t("isekaiWorldEvents");
-  target.append(heading);
+  target.append(renderIsekaiEnvironmentSummary(adventure), heading);
 
   const events = getIsekaiKnownWorldEvents(adventure).slice(-6).reverse();
   if (!events.length) {

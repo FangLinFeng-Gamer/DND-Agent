@@ -42,15 +42,18 @@ def test_isekai_room_is_independent_from_dnd_room():
     css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert 'id="isekai-room"' in html
+    assert 'id="isekai-info-tabs"' in html
     assert 'id="isekai-character-panel"' in html
     assert 'id="isekai-survival-panel"' in html
-    assert 'id="isekai-inventory-panel"' in html
-    assert 'id="isekai-environment-panel"' in html
     assert 'id="isekai-events-panel"' in html
+    assert 'id="isekai-inventory-panel"' not in html
+    assert 'id="isekai-environment-panel"' not in html
     assert "renderIsekaiAdventureDetail" in game_js
     assert 'adventureMode(adventure) === "isekai_survival"' in game_js
     assert "renderCombat(null)" not in game_js.split("function renderIsekaiAdventureDetail", 1)[1].split("function", 1)[0]
     assert ".isekai-room-layout" in css
+    assert ".isekai-info-tabs" in css
+    assert ".isekai-info-page.active" in css
 
 
 def test_isekai_creation_shows_step_by_step_progress():
@@ -80,12 +83,23 @@ def test_isekai_world_events_use_event_cards_instead_of_stat_rows():
     css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
 
     events_block = game_js.split("function renderIsekaiEvents", 1)[1].split("export function", 1)[0]
+    assert "renderIsekaiEnvironmentSummary" in events_block
     assert "isekai-event-list" in events_block
     assert "isekai-event-card" in events_block
     assert "renderIsekaiPanel" not in events_block
+    assert ".isekai-environment-card" in css
     assert ".isekai-event-list" in css
     assert ".isekai-event-card" in css
     assert "white-space: normal" in css
+
+
+def test_isekai_character_panel_includes_inventory():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+
+    character_block = game_js.split("function renderIsekaiCharacter", 1)[1].split("function", 1)[0]
+    assert "isekaiInventory" in character_block
+    assert "inventory" in character_block
+    assert "renderIsekaiInventory" not in game_js
 
 
 def test_isekai_survival_panel_renders_time_fields():

@@ -1,4 +1,4 @@
-import { t } from "./i18n.js?v=20260703-isekai-time";
+import { t } from "./i18n.js?v=20260706-isekai-layout";
 
 const MAX_HISTORY = 10;
 const ROLL_DURATION_MS = 700;

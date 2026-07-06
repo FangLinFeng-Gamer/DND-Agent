@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500;600;700;800&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/styles.css?v=20260703-isekai-time">
+    <link rel="stylesheet" href="/styles.css?v=20260706-isekai-layout">
   </head>
   <body>
     <div class="embers" aria-hidden="true">
@@ -590,10 +590,16 @@
             <span id="isekai-route-tag" class="route-tag">/game</span>
           </header>
           <div class="isekai-room-layout">
-            <aside id="isekai-character-panel" class="compact-panel"></aside>
-            <section id="isekai-environment-panel" class="panel"></section>
-            <aside id="isekai-survival-panel" class="compact-panel"></aside>
-            <aside id="isekai-inventory-panel" class="compact-panel"></aside>
+            <aside class="compact-panel isekai-info-panel">
+              <div id="isekai-info-tabs" class="isekai-info-tabs" role="tablist" aria-label="Isekai information">
+                <button type="button" data-isekai-info-tab="character" data-i18n="isekaiGeneratedCharacter">Generated Character</button>
+                <button type="button" data-isekai-info-tab="survival" data-i18n="isekaiSurvivalState">Survival</button>
+                <button type="button" data-isekai-info-tab="world" data-i18n="isekaiWorldEvents">World Events</button>
+              </div>
+              <section id="isekai-character-panel" class="isekai-info-page"></section>
+              <section id="isekai-survival-panel" class="isekai-info-page"></section>
+              <section id="isekai-events-panel" class="isekai-info-page"></section>
+            </aside>
             <section class="chat-panel room-chat-panel isekai-chat-panel">
               <div class="chat-head">
                 <div>
@@ -608,12 +614,11 @@
                 <button id="isekai-message-send" type="submit" data-i18n="askDm">Ask the DM</button>
               </form>
             </section>
-            <aside id="isekai-events-panel" class="compact-panel"></aside>
           </div>
         </section>
         </div>
       </main>
     </div>
-    <script type="module" src="/app.js?v=20260703-isekai-time"></script>
+    <script type="module" src="/app.js?v=20260706-isekai-layout"></script>
   </body>
 </html>
