@@ -194,6 +194,21 @@ def test_isekai_room_has_collapsed_dm_debug_panel():
     assert '"debugSceneUpdateApplied": "场景更新生效"' in i18n
 
 
+def test_isekai_dm_debug_panel_renders_model_errors():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    debug_block = game_js.split("function renderIsekaiDmDebug", 1)[1].split("export function", 1)[0]
+    assert "metadata.model_errors" in debug_block
+    assert "debugModelErrors" in debug_block
+    assert "error.stage" in debug_block
+    assert "error.message" in debug_block
+    assert '"debugModelErrors": "Model Errors"' in i18n
+    assert '"debugModelErrors": "模型错误"' in i18n
+
+
 def test_isekai_environment_summary_renders_pressure_goals():
     game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
     css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
@@ -236,6 +251,28 @@ def test_isekai_environment_summary_renders_location_economy_entitlements_and_re
     assert '"isekaiTransactions": "近期交易"' in i18n
     assert '"isekaiRelationships": "NPC Attitude"' in i18n
     assert '"isekaiRelationships": "NPC 态度"' in i18n
+
+
+def test_isekai_room_has_dedicated_economy_panel_for_facility_loop_state():
+    html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'data-isekai-info-tab="economy"' in html
+    assert 'id="isekai-economy-panel"' in html
+    assert '"economy", els.isekaiEconomyPanel' in game_js
+    assert "renderIsekaiEconomyPanel(adventure)" in game_js
+    assert "current_scene?.interactables" in game_js
+    assert "current_scene?.suggested_actions" in game_js
+    assert "renderIsekaiCurrentInteractables" in game_js
+    assert ".isekai-economy-dashboard" in css
+    assert '"isekaiEconomy": "Economy"' in i18n
+    assert '"isekaiEconomy": "经济"' in i18n
+    assert '"isekaiCurrentInteractables": "Current Interactables"' in i18n
+    assert '"isekaiCurrentInteractables": "当前可互动对象"' in i18n
 
 
 def test_isekai_dm_messages_render_interactables_and_suggestions():
@@ -295,3 +332,26 @@ def test_isekai_world_panel_renders_pressure_clocks():
     assert ".isekai-pressure-clock-bar" in css
     assert '"isekaiPressureClocks": "Pressure Clocks"' in i18n
     assert '"isekaiPressureClocks": "压力时钟"' in i18n
+
+
+def test_isekai_world_panel_renders_single_quest_clues_and_pressure_event():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    environment_block = game_js.split("function renderIsekaiEnvironmentSummary", 1)[1].split("export function", 1)[0]
+    assert "renderIsekaiQuestSummary" in environment_block
+    assert "isekai_quest" in environment_block
+    assert "isekai_clues" in environment_block
+    assert "isekai_pressure_events" in environment_block
+    assert "night_wolf_line" in game_js
+    assert ".isekai-quest-summary" in css
+    assert ".isekai-clue-list" in css
+    assert '"isekaiCurrentQuest": "Current Quest"' in i18n
+    assert '"isekaiCurrentQuest": "当前任务线"' in i18n
+    assert '"isekaiKnownClues": "Known Clues"' in i18n
+    assert '"isekaiKnownClues": "已知线索"' in i18n
+    assert '"isekaiLastPressureEvent": "Latest Pressure Event"' in i18n
+    assert '"isekaiLastPressureEvent": "最近压力事件"' in i18n

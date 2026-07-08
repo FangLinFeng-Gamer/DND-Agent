@@ -1810,6 +1810,7 @@ function renderIsekaiAdventureDetail(adventure, messages) {
   renderIsekaiInfoTabs();
   renderIsekaiCharacter(adventure.isekai_character, adventure.world_state?.isekai_economy);
   renderIsekaiSurvival(survival);
+  renderIsekaiEconomyPanel(adventure);
   renderIsekaiEvents(adventure);
   const roomMessages = messages || adventure.messages || [];
   renderMessageList(els.isekaiMessages, roomMessages);
@@ -1817,7 +1818,7 @@ function renderIsekaiAdventureDetail(adventure, messages) {
 }
 
 function renderIsekaiInfoTabs() {
-  const tabs = ["character", "survival", "world"];
+  const tabs = ["character", "survival", "economy", "world"];
   if (!tabs.includes(state.selectedIsekaiInfoTab)) {
     state.selectedIsekaiInfoTab = "character";
   }
@@ -1829,6 +1830,7 @@ function renderIsekaiInfoTabs() {
   [
     ["character", els.isekaiCharacterPanel],
     ["survival", els.isekaiSurvivalPanel],
+    ["economy", els.isekaiEconomyPanel],
     ["world", els.isekaiEventsPanel],
   ].forEach(([tab, panel]) => {
     panel?.classList.toggle("active", state.selectedIsekaiInfoTab === tab);
@@ -1963,6 +1965,103 @@ function renderIsekaiSurvival(survival) {
   ] : []);
 }
 
+function renderIsekaiEconomyPanel(adventure) {
+  const target = els.isekaiEconomyPanel;
+  if (!target) {
+    return;
+  }
+  target.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = t("isekaiEconomy");
+  target.append(heading);
+
+  const scene = adventure.current_scene || {};
+  const locationPath = scene.location_path || {};
+  const locationRows = [
+    [t("isekaiCurrentLocation"), locationPath.display_name || scene.location || t("notSet")],
+    [t("region"), locationPath.region || t("notSet")],
+    [t("site"), locationPath.site || t("notSet")],
+    [t("sublocation"), locationPath.sublocation || t("notSet")],
+  ];
+  const locationBlock = document.createElement("section");
+  locationBlock.className = "isekai-economy-dashboard";
+  locationBlock.append(renderIsekaiEconomySection(t("isekaiCurrentLocation"), locationRows.map(([label, value]) => `${label}: ${value}`)));
+  target.append(locationBlock);
+
+  const economySummary = renderIsekaiEconomySummary(adventure.world_state?.isekai_economy || {});
+  if (economySummary) {
+    target.append(economySummary);
+  } else {
+    target.append(renderIsekaiEconomySection(t("isekaiCurrency"), [formatIsekaiCurrency(0)]));
+  }
+
+  const currentInteractables = Array.isArray(adventure.current_scene?.interactables)
+    ? adventure.current_scene.interactables
+    : [];
+  const currentSuggestedActions = Array.isArray(adventure.current_scene?.suggested_actions)
+    ? adventure.current_scene.suggested_actions
+    : [];
+  target.append(renderIsekaiCurrentInteractables(currentInteractables, currentSuggestedActions));
+}
+
+function renderIsekaiCurrentInteractables(interactables, suggestedActions) {
+  const section = document.createElement("section");
+  section.className = "isekai-current-interactables";
+  const heading = document.createElement("h3");
+  heading.textContent = t("isekaiCurrentInteractables");
+  section.append(heading);
+
+  if (!interactables.length) {
+    section.append(emptyNode(t("notSet")));
+  } else {
+    const list = document.createElement("div");
+    list.className = "isekai-current-interactable-list";
+    interactables.slice(0, 8).forEach((entry) => {
+      const item = document.createElement("article");
+      item.className = "isekai-current-interactable";
+      const name = document.createElement("strong");
+      name.textContent = entry.name || entry.id || t("notSet");
+      const details = [
+        entry.type || "",
+        entry.state || "",
+        Array.isArray(entry.affordances) && entry.affordances.length ? `${t("isekaiAffordances")}: ${entry.affordances.join("、")}` : "",
+        entry.risk ? `${t("risk")}: ${entry.risk}` : "",
+      ].filter(Boolean);
+      const meta = document.createElement("span");
+      meta.textContent = details.join(" · ");
+      item.append(name);
+      if (meta.textContent) {
+        item.append(meta);
+      }
+      list.append(item);
+    });
+    section.append(list);
+  }
+
+  if (suggestedActions.length) {
+    const actions = document.createElement("div");
+    actions.className = "isekai-current-actions";
+    const actionTitle = document.createElement("h3");
+    actionTitle.textContent = t("isekaiSuggestedActions");
+    actions.append(actionTitle);
+    suggestedActions.slice(0, 5).forEach((action) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "isekai-suggested-action";
+      button.textContent = String(action);
+      button.addEventListener("click", () => {
+        if (els.isekaiMessageInput) {
+          els.isekaiMessageInput.value = String(action);
+          els.isekaiMessageInput.focus();
+        }
+      });
+      actions.append(button);
+    });
+    section.append(actions);
+  }
+  return section;
+}
+
 function renderIsekaiEnvironmentSummary(adventure) {
   const scene = adventure.current_scene || {};
   const locationPath = scene.location_path || {};
@@ -2004,6 +2103,10 @@ function renderIsekaiEnvironmentSummary(adventure) {
   if (economySummary) {
     card.append(economySummary);
   }
+  const questSummary = renderIsekaiQuestSummary(adventure.world_state || {});
+  if (questSummary) {
+    card.append(questSummary);
+  }
   if (pressureGoals.length) {
     const pressure = document.createElement("div");
     pressure.className = "isekai-pressure-goals";
@@ -2027,6 +2130,78 @@ function renderIsekaiEnvironmentSummary(adventure) {
     card.append(clocks);
   }
   return card;
+}
+
+function renderIsekaiQuestSummary(worldState) {
+  const quest = worldState?.isekai_quest || {};
+  const clues = Array.isArray(worldState?.isekai_clues) ? worldState.isekai_clues : [];
+  const pressureState = worldState?.isekai_pressure_events || {};
+  const pressureEvent = pressureState.last_event || null;
+  const risks = worldState?.isekai_risks || {};
+  const hasQuest = quest.active_quest_id === "night_wolf_line";
+  if (!hasQuest && !clues.length && !pressureEvent) {
+    return null;
+  }
+
+  const wrap = document.createElement("section");
+  wrap.className = "isekai-quest-summary";
+  const title = document.createElement("h3");
+  title.textContent = t("isekaiCurrentQuest");
+  wrap.append(title);
+
+  if (hasQuest) {
+    const questName = document.createElement("strong");
+    questName.textContent = localizeIsekaiQuestId(quest.active_quest_id);
+    const stage = document.createElement("span");
+    stage.textContent = localizeIsekaiQuestStage(quest.stage || "not_started");
+    wrap.append(questName, stage);
+  } else {
+    wrap.append(emptyNode(t("notSet")));
+  }
+
+  if (clues.length) {
+    const clueTitle = document.createElement("h3");
+    clueTitle.textContent = t("isekaiKnownClues");
+    const clueList = document.createElement("div");
+    clueList.className = "isekai-clue-list";
+    clues.slice(-5).forEach((clue) => {
+      const item = document.createElement("span");
+      item.textContent = String(clue);
+      clueList.append(item);
+    });
+    wrap.append(clueTitle, clueList);
+  }
+
+  if (pressureEvent?.visible_text) {
+    const pressureTitle = document.createElement("h3");
+    pressureTitle.textContent = t("isekaiLastPressureEvent");
+    const eventText = document.createElement("p");
+    eventText.textContent = pressureEvent.visible_text;
+    wrap.append(pressureTitle, eventText);
+  }
+
+  const riskRows = Object.entries(risks).filter(([, value]) => Number(value) !== 0);
+  if (riskRows.length) {
+    const riskText = document.createElement("p");
+    riskText.className = "field-hint";
+    riskText.textContent = riskRows.map(([key, value]) => `${key}: ${value}`).join(" · ");
+    wrap.append(riskText);
+  }
+
+  return wrap;
+}
+
+function localizeIsekaiQuestId(questId) {
+  if (questId === "night_wolf_line") {
+    return t("isekaiQuest.night_wolf_line");
+  }
+  return questId || t("notSet");
+}
+
+function localizeIsekaiQuestStage(stage) {
+  const key = `isekaiQuestStage.${stage}`;
+  const localized = t(key);
+  return localized === key ? stage : localized;
 }
 
 function renderIsekaiEconomySummary(economy) {
@@ -2171,6 +2346,9 @@ function renderIsekaiDmDebug(adventure, messages = []) {
   const sceneUpdateApplied = typeof metadata.scene_update_applied === "boolean"
     ? metadata.scene_update_applied
     : Boolean(debug.scene_update_applied);
+  const modelErrors = Array.isArray(metadata.model_errors)
+    ? metadata.model_errors.map((error) => `${error.stage || "model"}: ${error.message || error}`).join(" | ")
+    : "";
   const details = document.createElement("details");
   details.className = "isekai-dm-debug-details";
   const summary = document.createElement("summary");
@@ -2182,6 +2360,7 @@ function renderIsekaiDmDebug(adventure, messages = []) {
     [t("debugRawHungerThirst"), `${raw.hunger ?? t("notSet")} / ${raw.thirst ?? t("notSet")}`],
     [t("debugVisibleSatietyHydration"), `${satiety ?? t("notSet")} / ${hydration ?? t("notSet")}`],
     [t("debugSceneUpdateApplied"), formatIsekaiDebugBoolean(sceneUpdateApplied)],
+    [t("debugModelErrors"), modelErrors || t("notSet")],
   ];
   const list = document.createElement("div");
   list.className = "isekai-dm-debug-grid";

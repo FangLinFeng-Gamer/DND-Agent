@@ -85,10 +85,10 @@ class IsekaiStateChangeService:
             self._record_blocked(blocked, "npc_updates", npc_updates)
             return [], [], [], blocked
 
-        if action_type not in {"gather", "forage", "cook", "eat_drink"}:
+        if action_type not in {"gather", "forage", "cook", "eat_drink", "search", "force_open"}:
             self._record_blocked(blocked, "add_items", added)
             added = []
-        elif target_name:
+        elif target_name and action_type in {"gather", "forage"}:
             allowed_added: list[str] = []
             for item in added:
                 if self._item_matches_target(item, target_name):
@@ -97,7 +97,7 @@ class IsekaiStateChangeService:
                     self._record_blocked(blocked, "add_items", [item])
             added = allowed_added
 
-        if action_type not in {"manage_inventory", "eat_drink", "cook"}:
+        if action_type not in {"manage_inventory", "eat_drink", "eat_food", "drink_water", "cook"}:
             self._record_blocked(blocked, "remove_items", removed)
             removed = []
 
@@ -109,7 +109,14 @@ class IsekaiStateChangeService:
 
     def _protected_state_changes(self, state_changes: dict[str, Any]) -> dict[str, Any]:
         blocked: dict[str, Any] = {}
-        for key in ["money_changes", "entitlement_changes", "relationship_changes"]:
+        for key in [
+            "money_changes",
+            "item_rewards",
+            "entitlement_changes",
+            "relationship_changes",
+            "quest_stage_changes",
+            "npc_relationship_changes",
+        ]:
             value = state_changes.get(key)
             if isinstance(value, list) and value:
                 blocked[key] = [dict(item) if isinstance(item, dict) else item for item in value[:8]]

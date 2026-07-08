@@ -3,6 +3,7 @@ import json
 from backend.src.db.sqlite import encode_json
 from backend.src.schemas.adventure import AdventureCreate, MessageCreate, SceneState
 from backend.src.schemas.llm import LLMModelCreate
+from backend.src.services.adventures import AdventureService
 from backend.src.services.llm_models import LLMModelService
 from backend.src.services.isekai import IsekaiSurvivalService
 
@@ -354,6 +355,20 @@ def test_isekai_create_initializes_copper_economy_separate_from_character_gold(s
     assert "铜" in adventure.messages[-1].content
 
 
+def test_isekai_old_adventure_read_migrates_missing_copper_economy(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Legacy Missing Economy", mode="isekai_survival"))
+    world_state = service.adventures.get_world_state(adventure.id)
+    world_state.pop("isekai_economy", None)
+    service.adventures.update_world_state(adventure.id, world_state)
+
+    migrated = AdventureService(store).get(adventure.id, include_messages=False)
+
+    economy = migrated.world_state["isekai_economy"]
+    assert set(economy["currency"].keys()) == {"copper_total"}
+    assert 20 <= economy["currency"]["copper_total"] <= 80
+
+
 def test_isekai_create_uses_active_model_for_opening_scene(store):
     activate_test_model(store)
     llm_client = OpeningIsekaiLLMClient()
@@ -370,6 +385,85 @@ def test_isekai_create_uses_active_model_for_opening_scene(store):
     assert adventure.world_state["confirmed_location"] == "灰桥镇废弃马厩"
     assert "灰桥镇废弃马厩" in adventure.messages[0].content
     assert adventure.messages[0].metadata["opening_source"] == "active_model"
+
+
+def test_isekai_search_can_apply_confirmed_item_gain_from_model(store):
+    activate_test_model(store)
+    service = IsekaiSurvivalService(
+        store,
+        llm_client=StructuredStateChangeIsekaiLLMClient(
+            {
+                "narration": "你拨开冷灰烬堆，找到一枚烧焦铜币。",
+                "state_changes": {"add_items": ["烧焦铜币 x1"]},
+                "interactables": [{"id": "campfire", "type": "place", "name": "小火堆"}],
+                "suggested_actions": ["继续检查墙壁符文"],
+            }
+        ),
+    )
+    adventure = service.create_adventure(AdventureCreate(title="Ash Coin", mode="isekai_survival"))
+    scene = adventure.current_scene.model_copy(
+        update={
+            "location": "废弃瞭望塔底层",
+            "environment": "底层圆形大厅里有冷灰烬堆和兽骨。",
+            "important_objects": ["冷灰烬堆", "兽骨"],
+            "interactables": [
+                {
+                    "id": "cold_ashes",
+                    "type": "place",
+                    "name": "冷灰烬堆",
+                    "affordances": ["检查", "翻找"],
+                }
+            ],
+        }
+    )
+    service.adventures.update_scene(adventure.id, scene)
+
+    response = service.advance(adventure.id, MessageCreate(content="检查冷灰烬堆和兽骨", locale="zh-CN"))
+
+    assert response.dm_message.metadata["parsed_action"]["action_type"] == "search"
+    assert "烧焦铜币" in response.adventure.isekai_character["inventory"]
+    assert response.dm_message.metadata["state_changes_applied"]["inventory_added"] == ["烧焦铜币 x1"]
+    assert response.dm_message.metadata["state_changes_applied"]["blocked"] == {}
+
+
+def test_isekai_compound_rest_and_eat_food_consumes_ration(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Rest Eat", mode="isekai_survival"))
+    set_character_state(store, adventure.id, inventory=["干粮 x2", "水囊(2/3)"])
+
+    response = service.advance(
+        adventure.id,
+        MessageCreate(content="在火堆旁休息一小时，吃半份干粮，尽量恢复体力。", locale="zh-CN"),
+    )
+
+    assert response.dm_message.metadata["source"] == "action_resolution"
+    assert response.dm_message.metadata["parsed_action"]["action_type"] == "compound"
+    assert "干粮 x1" in response.adventure.isekai_character["inventory"]
+    assert "消耗干粮 x1" in response.dm_message.metadata["survival_delta"]["inventory_changes"]
+
+
+def test_isekai_otherworld_signal_uses_scene_update_location(store):
+    service = IsekaiSurvivalService(store)
+    old_scene = SceneState(
+        location="废弃瞭望塔塔基",
+        environment="塔门外雨声很密。",
+        important_objects=["塔门"],
+        current_objective="进入塔内。",
+    )
+    turn = {
+        "survival": {"hunger": 10, "thirst": 10, "fatigue": 10, "sleep_need": 10},
+        "visible_survival": service.visible_survival_state({"hunger": 10, "thirst": 10, "fatigue": 10, "sleep_need": 10}),
+        "character": {"race": "Half-Elf"},
+        "scene": old_scene,
+        "world_state": {},
+        "action_type": "enter_location",
+        "model_payload": {"scene_update": {"location": "废弃瞭望塔底层"}},
+    }
+
+    repaired = service.repair_narration_for_turn(turn, "你踏入塔内，火光照亮圆形大厅。")
+
+    assert "废弃瞭望塔底层" in repaired
+    assert "废弃瞭望塔塔基的空气" not in repaired
 
 
 def test_isekai_opening_falls_back_when_model_payload_is_invalid(store):

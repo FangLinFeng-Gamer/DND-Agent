@@ -159,6 +159,7 @@ export function bindElements() {
     "isekai-info-tabs",
     "isekai-character-panel",
     "isekai-survival-panel",
+    "isekai-economy-panel",
     "isekai-events-panel",
     "isekai-messages",
     "isekai-message-form",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from copy import deepcopy
 from typing import Any
 
 
@@ -97,6 +98,13 @@ class IsekaiEconomyService:
         valid_until: str,
     ) -> IsekaiEconomyResult:
         current = self.ensure_state(state, {"gold": 0})
+        if item_id not in self.PRICE_CONFIGS:
+            return IsekaiEconomyResult(
+                success=False,
+                state=current,
+                error_code="unknown_item",
+                alternatives=["明确要买床位", "明确要买热炖菜", "先询问店主当前价格"],
+            )
         price = self._price(item_id)
         copper = int(current["currency"]["copper_total"])
         if copper < price:
@@ -130,6 +138,60 @@ class IsekaiEconomyService:
             return IsekaiEconomyResult(success=True, state=next_state, rewards=["一碗热炖菜"], transaction=transaction)
         return IsekaiEconomyResult(success=False, state=current, error_code="unknown_item")
 
+    def purchase_offer(
+        self,
+        state: dict[str, Any],
+        *,
+        offer: dict[str, Any],
+        buyer_note: str,
+        valid_until: str,
+    ) -> IsekaiEconomyResult:
+        current = self.ensure_state(state, {"gold": 0})
+        if not isinstance(offer, dict) or not str(offer.get("offer_id") or "").strip():
+            return IsekaiEconomyResult(
+                success=False,
+                state=current,
+                error_code="unknown_item",
+                alternatives=["重新确认要购买的商品或服务"],
+            )
+        price = self._offer_price(offer)
+        copper = int(current["currency"]["copper_total"])
+        if copper < price:
+            return IsekaiEconomyResult(
+                success=False,
+                state=current,
+                error_code="insufficient_funds",
+                shortfall_copper=price - copper,
+                alternatives=[str(item) for item in offer.get("alternatives", []) if str(item).strip()]
+                or ["询问是否有更便宜的替代方案", "先寻找能换取报酬的工作"],
+            )
+        grants = offer.get("grants") if isinstance(offer.get("grants"), dict) else {}
+        reward_items = [str(item).strip() for item in grants.get("items", []) if str(item).strip()] if isinstance(grants.get("items"), list) else []
+        entitlements = self._offer_entitlements(grants, offer, valid_until)
+        fallback_name = str(offer.get("name") or offer.get("item") or offer.get("offer_id") or "").strip()
+        rewards = [*reward_items, *[str(item.get("name") or item.get("status") or item.get("id")) for item in entitlements]]
+        rewards = [str(item).strip() for item in rewards if str(item).strip()] or ([fallback_name] if fallback_name else [])
+        gained = "、".join(rewards) if rewards else "交易权益"
+        reason = str(buyer_note or "").strip() or (f"购买{fallback_name}" if fallback_name else "购买")
+        transaction = {"lost": f"{price} 铜", "gained": gained, "reason": reason}
+        next_state = {**current, "currency": {"copper_total": copper - price}}
+        for entitlement in entitlements:
+            next_state["entitlements"] = self._upsert_entitlement(next_state.get("entitlements", []), entitlement)
+        next_state["transaction_log"] = [*next_state.get("transaction_log", []), transaction][-20:]
+        relationship_changes = [
+            dict(item) for item in grants.get("relationship_changes", []) if isinstance(item, dict)
+        ] if isinstance(grants.get("relationship_changes"), list) else []
+        if relationship_changes:
+            next_state["relationship_changes"] = [*next_state.get("relationship_changes", []), *relationship_changes][-12:]
+        return IsekaiEconomyResult(
+            success=True,
+            state=next_state,
+            rewards=rewards,
+            entitlements=entitlements,
+            relationship_changes=relationship_changes,
+            transaction=transaction,
+        )
+
     def grant_repair_reward(self, state: dict[str, Any], *, valid_until: str) -> IsekaiEconomyResult:
         current = self.ensure_state(state, {"gold": 0})
         entitlement = self._bed_entitlement(valid_until)
@@ -153,6 +215,26 @@ class IsekaiEconomyService:
 
     def _price(self, item_id: str) -> int:
         return self.price_for(item_id)
+
+    def _offer_price(self, offer: dict[str, Any]) -> int:
+        if "price_copper" in offer:
+            return self._non_negative_int(offer.get("price_copper"))
+        return self.price_to_copper(offer.get("price"))
+
+    def _offer_entitlements(self, grants: dict[str, Any], offer: dict[str, Any], valid_until: str) -> list[dict[str, Any]]:
+        raw = grants.get("entitlements")
+        if not isinstance(raw, list):
+            return []
+        entitlements: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            entitlement = deepcopy(item)
+            entitlement.setdefault("id", str(offer.get("offer_id") or "entitlement"))
+            entitlement.setdefault("name", str(offer.get("name") or entitlement["id"]))
+            entitlement.setdefault("valid_until", valid_until)
+            entitlements.append(entitlement)
+        return entitlements
 
     def _non_negative_int(self, value: Any) -> int:
         try:

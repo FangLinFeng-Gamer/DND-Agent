@@ -59,6 +59,7 @@ class IsekaiActionResolutionEngine:
         locations: Any = None,
         economy: Any = None,
         time_cost: Any = None,
+        content: Any = None,
     ):
         self.time = time_service
         self.preconditions = preconditions
@@ -68,6 +69,7 @@ class IsekaiActionResolutionEngine:
         self.locations = locations
         self.economy = economy
         self.time_cost = time_cost
+        self.content = content
 
     def resolve(
         self,
@@ -133,6 +135,12 @@ class IsekaiActionResolutionEngine:
                 break
             risk = self.risk.assess(action, updated_survival)
             current_scene = self._scene_after_action(current_scene, action, planned.text)
+            current_scene, discovery_text, discovery_delta = self._apply_discovery_table(
+                current_scene,
+                action,
+                current_world_state,
+            )
+            delta = self._append_delta(delta, discovery_delta)
             current_survival = updated_survival
             total_delta = self._merge_delta(total_delta, delta, risk)
             steps.append(
@@ -141,7 +149,7 @@ class IsekaiActionResolutionEngine:
                     action=action,
                     delta=delta,
                     risk=risk,
-                    result_text=self._result_text(action),
+                    result_text=discovery_text or self._result_text(action, current_scene),
                 )
             )
 
@@ -201,10 +209,37 @@ class IsekaiActionResolutionEngine:
             merged["outcome_level"] = "partial_success"
         if "shortfall_copper" in delta:
             merged["shortfall_copper"] = delta["shortfall_copper"]
+        if delta.get("narration_style"):
+            merged["narration_style"] = delta["narration_style"]
         risk_change = dict(merged.get("risk_change") or {})
         for key, value in risk.deltas.items():
             risk_change[key] = int(risk_change.get(key, 0)) + int(value)
         merged["risk_change"] = risk_change
+        return merged
+
+    def _append_delta(self, base: dict[str, Any], addition: dict[str, Any]) -> dict[str, Any]:
+        if not addition:
+            return base
+        merged = dict(base)
+        for key in ["inventory_changes", "status_effects_added", "status_effects_removed", "visible_events"]:
+            if key in addition:
+                merged[key] = [*merged.get(key, []), *addition.get(key, [])]
+        for key in ["rewards", "entitlements", "relationship_changes", "clues"]:
+            if key in addition:
+                merged[key] = [*merged.get(key, []), *addition.get(key, [])]
+        for key, value in addition.items():
+            if key in {
+                "inventory_changes",
+                "status_effects_added",
+                "status_effects_removed",
+                "visible_events",
+                "rewards",
+                "entitlements",
+                "relationship_changes",
+                "clues",
+            }:
+                continue
+            merged[key] = value
         return merged
 
     def _with_resolved_time(
@@ -242,6 +277,78 @@ class IsekaiActionResolutionEngine:
             return self._project_if_needed(scene, action.action_type)
         return scene
 
+    def _apply_discovery_table(
+        self,
+        scene: SceneState,
+        action: ParsedIsekaiAction,
+        world_state: dict[str, Any],
+    ) -> tuple[SceneState, str, dict[str, Any]]:
+        if action.action_type not in {"search", "observe"} or not action.target_id:
+            return scene, "", {}
+        tables = self.content.discovery_tables(world_state) if self.content else {}
+        entries = self._discovery_entries_for_action(tables, action, scene)
+        if not entries:
+            return scene, "", {}
+        entry = self._matching_discovery_entry(entries, action.action_type)
+        if not entry:
+            return scene, "", {}
+        result = entry.get("result") if isinstance(entry.get("result"), dict) else {}
+        narration = str(result.get("narration_fact") or "").strip()
+        reveal_objects = result.get("reveal_objects") if isinstance(result.get("reveal_objects"), list) else []
+        next_scene = scene
+        if reveal_objects and self.content:
+            next_scene, _metadata = self.content.materialize_scene_objects(next_scene, {"add": reveal_objects})
+        clues = [str(item).strip() for item in result.get("clues", []) if str(item).strip()] if isinstance(result.get("clues"), list) else []
+        rewards = [str(item).strip() for item in result.get("rewards", []) if str(item).strip()] if isinstance(result.get("rewards"), list) else []
+        delta: dict[str, Any] = {}
+        if clues:
+            delta["clues"] = clues
+        if rewards:
+            delta["rewards"] = rewards
+        if narration or clues or rewards or reveal_objects:
+            delta["outcome_level"] = "partial_success"
+            delta["narration_style"] = "exploration_discovery"
+        return next_scene, narration, delta
+
+    def _discovery_entries_for_action(
+        self,
+        tables: dict[str, list[dict[str, Any]]],
+        action: ParsedIsekaiAction,
+        scene: SceneState,
+    ) -> list[dict[str, Any]]:
+        if action.target_id and action.target_id in tables:
+            return [entry for entry in tables[action.target_id] if self._discovery_entry_matches_scene(entry, scene)]
+        target_text = action.target_name or ""
+        if not target_text:
+            return []
+        matches: list[dict[str, Any]] = []
+        for entries in tables.values():
+            for entry in entries:
+                if self._discovery_entry_matches_target_text(entry, target_text) and self._discovery_entry_matches_scene(entry, scene):
+                    matches.append(entry)
+        return matches
+
+    def _discovery_entry_matches_target_text(self, entry: dict[str, Any], target_text: str) -> bool:
+        aliases = entry.get("_target_aliases") if isinstance(entry.get("_target_aliases"), list) else []
+        return any(str(alias).strip() and str(alias).strip() in target_text for alias in aliases)
+
+    def _discovery_entry_matches_scene(self, entry: dict[str, Any], scene: SceneState) -> bool:
+        aliases = entry.get("_scene_aliases") if isinstance(entry.get("_scene_aliases"), list) else []
+        if not aliases:
+            return True
+        scene_text = " ".join([scene.location, scene.environment, *scene.important_objects])
+        return any(str(alias).strip() and str(alias).strip() in scene_text for alias in aliases)
+
+    def _matching_discovery_entry(self, entries: list[dict[str, Any]], action_type: str) -> dict[str, Any] | None:
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            trigger = entry.get("trigger") if isinstance(entry.get("trigger"), dict) else {}
+            expected = str(trigger.get("action_type") or "").strip()
+            if not expected or expected == action_type:
+                return entry
+        return None
+
     def _apply_economy(
         self,
         world_state: dict[str, Any],
@@ -264,7 +371,7 @@ class IsekaiActionResolutionEngine:
             result = self.economy.quote_bed(next_economy)
             next_economy = result.state
             delta.update({"rewards": result.rewards, "relationship_changes": result.relationship_changes})
-        elif action.action_type == "repair":
+        elif action.action_type == "repair" and self._is_inn_repair_action(action, text):
             next_world["pending_lodging_reward"] = True
             delta.update(
                 {
@@ -290,8 +397,14 @@ class IsekaiActionResolutionEngine:
                 }
             )
         elif action.action_type == "purchase":
-            item_id = str(action.arguments.get("item_id") or "")
-            result = self.economy.purchase(next_economy, item_id=item_id, buyer_note="住宿费" if item_id == "inn_bed" else "热食", valid_until=valid_until)
+            offer = self._purchase_offer(action, world_state, text)
+            item_id = self._purchase_item_id(action, text) if not offer else ""
+            buyer_note = self._buyer_note_for_offer(offer) if offer else ("住宿费" if item_id == "inn_bed" else "热食")
+            result = (
+                self.economy.purchase_offer(next_economy, offer=offer, buyer_note=buyer_note, valid_until=valid_until)
+                if offer
+                else self.economy.purchase(next_economy, item_id=item_id, buyer_note=buyer_note, valid_until=valid_until)
+            )
             next_economy = result.state
             if not result.success:
                 delta.update(
@@ -301,6 +414,12 @@ class IsekaiActionResolutionEngine:
                         "rewards": [],
                     }
                 )
+                if result.error_code == "unknown_item":
+                    block = {
+                        "result_text": "你还没有明确要购买床位、热炖菜，还是别的东西；店主没有收钱。",
+                        "alternatives": result.alternatives,
+                    }
+                    return next_world, next_economy, next_character, delta, block
                 block = {
                     "result_text": f"你的铜币不够，还差 {result.shortfall_copper} 铜。",
                     "alternatives": result.alternatives,
@@ -309,6 +428,9 @@ class IsekaiActionResolutionEngine:
                 if item_id == "inn_bed":
                     next_character = self._add_inventory(next_character, "二楼三号房钥匙")
                     delta.setdefault("inventory_changes", []).append("获得二楼三号房钥匙")
+                for item in self._offer_inventory_items(offer):
+                    next_character = self._add_inventory(next_character, item)
+                    delta.setdefault("inventory_changes", []).append(f"获得{item}")
                 delta.update(
                     {
                         "outcome_level": "key_success" if item_id == "inn_bed" else "normal_success",
@@ -323,6 +445,79 @@ class IsekaiActionResolutionEngine:
             delta.update({"clues": ["暗夜狼的低嚎来自镇墙外北侧"], "outcome_level": "partial_success"})
 
         return next_world, next_economy, next_character, delta, block
+
+    def _is_inn_repair_action(self, action: ParsedIsekaiAction, text: str = "") -> bool:
+        combined = " ".join(
+            [
+                text,
+                action.target_name,
+                str(action.arguments.get("item") or ""),
+                str(action.arguments.get("target") or ""),
+                str(action.arguments.get("target_node_id") or ""),
+            ]
+        )
+        return any(word in combined for word in ["锅把", "后厨", "厨房"]) and not any(
+            word in combined for word in ["斗篷", "缺口", "避风", "临时营地", "扎营"]
+        )
+
+    def _purchase_item_id(self, action: ParsedIsekaiAction, text: str = "") -> str:
+        explicit = str(action.arguments.get("item_id") or "").strip()
+        if explicit:
+            return explicit
+        combined = " ".join(
+            [
+                text,
+                action.target_name,
+                str(action.arguments.get("item") or ""),
+                str(action.arguments.get("goods") or ""),
+                str(action.arguments.get("cost") or ""),
+            ]
+        )
+        if any(word in combined for word in ["床位", "住宿", "钥匙", "客房", "房间"]):
+            return "inn_bed"
+        if any(word in combined for word in ["炖菜", "热食", "饭", "餐"]):
+            return "stew_meal"
+        return ""
+
+    def _purchase_offer(self, action: ParsedIsekaiAction, world_state: dict[str, Any], text: str = "") -> dict[str, Any]:
+        if not self.content:
+            return {}
+        offers_by_owner = self.content.merchant_offers(world_state)
+        offer_id = str(action.arguments.get("offer_id") or "").strip()
+        if offer_id:
+            for offers in offers_by_owner.values():
+                for offer in offers:
+                    if isinstance(offer, dict) and str(offer.get("offer_id") or "") == offer_id:
+                        return dict(offer)
+            return {}
+        target_text = " ".join(
+            [
+                text,
+                action.target_name,
+                str(action.arguments.get("item") or ""),
+                str(action.arguments.get("goods") or ""),
+            ]
+        )
+        owner_ids = [action.target_id] if action.target_id else list(offers_by_owner.keys())
+        for owner_id in owner_ids:
+            for offer in offers_by_owner.get(owner_id, []):
+                if not isinstance(offer, dict):
+                    continue
+                name = str(offer.get("name") or offer.get("item") or "").strip()
+                aliases = [str(item).strip() for item in offer.get("aliases", []) if str(item).strip()] if isinstance(offer.get("aliases"), list) else []
+                if name and name in target_text:
+                    return dict(offer)
+                if any(alias and alias in target_text for alias in aliases):
+                    return dict(offer)
+        return {}
+
+    def _buyer_note_for_offer(self, offer: dict[str, Any]) -> str:
+        name = str((offer or {}).get("name") or (offer or {}).get("item") or "").strip()
+        return f"购买{name}" if name else "购买"
+
+    def _offer_inventory_items(self, offer: dict[str, Any]) -> list[str]:
+        grants = offer.get("grants") if isinstance(offer, dict) and isinstance(offer.get("grants"), dict) else {}
+        return [str(item).strip() for item in grants.get("items", []) if str(item).strip()] if isinstance(grants.get("items"), list) else []
 
     def _add_inventory(self, character: dict[str, Any], item: str) -> dict[str, Any]:
         inventory = [str(value) for value in character.get("inventory", [])]
@@ -401,20 +596,32 @@ class IsekaiActionResolutionEngine:
         return None
 
     def _default_destination_objects(self, target_name: str) -> list[str]:
+        if "灰橡镇" in target_name:
+            return ["街边旅店", "镇门口告示板", "守门棚", "避雨屋檐"]
+        if "镇" in target_name:
+            return ["街边旅店", "镇门口告示板", "巡逻民兵", "避雨屋檐"]
         if "车厢" in target_name or "马车" in target_name:
             return ["货袋", "破损木箱", "黑暗角落", "狭窄破口"]
+        if "哨塔" in target_name:
+            return ["旧火堆", "地基缝隙", "避风角落", "墙体缺口", "墙角兽毛"]
         if "小屋" in target_name:
             return ["木箱", "雨水桶", "倒塌木柜", "半开的地窖门", "黑暗角落", "墙上的抓痕"]
         return ["周围环境"]
 
     def _default_destination_environment(self, target_name: str) -> str:
+        if "灰橡镇" in target_name:
+            return "灰橡镇门内的泥街被阴雨压得发暗，低矮屋檐下挤着避雨的旅人，街边旅店的烟囱正冒出潮湿柴烟。"
+        if "镇" in target_name:
+            return f"{target_name}门内街道潮湿拥挤，旅店招牌、告示板和巡逻身影都能立刻看见。"
         if "车厢" in target_name or "马车" in target_name:
             return "侧翻车厢内部潮湿狭窄，座椅下压着货袋，破损木箱旁有黑暗角落。"
+        if "哨塔" in target_name:
+            return "坍塌的石砌哨塔内部漏着冷风，旧火堆旁有灰烬，地基缝隙透出潮气，避风角落和墙体缺口都需要确认。"
         if "小屋" in target_name:
             return "小屋内空气潮湿，角落里有木箱和接雨水的木桶，倒塌木柜与黑暗角落都可能藏着风险。"
         return f"{target_name}内部光线复杂，能看见几处尚未确认的物件。"
 
-    def _result_text(self, action: ParsedIsekaiAction) -> str:
+    def _result_text(self, action: ParsedIsekaiAction, scene: SceneState | None = None) -> str:
         target = action.target_name or "当前目标"
         if action.action_type == "drink_water":
             return "你喝了水，水囊里的水减少，水分压力缓解。"
@@ -441,8 +648,12 @@ class IsekaiActionResolutionEngine:
             return "你和店主讨价还价，确认今晚床位报价为 3 铜；他仍戒备，但愿意谈交易。"
         if action.action_type == "purchase":
             return "你支付铜币，换取明确的住宿权益和钥匙。"
-        if action.action_type == "repair":
+        if action.action_type == "secure_shelter":
+            return f"你处理{target}，用能找到的遮挡物压住漏风处，临时营地比刚才更稳，但火光仍需要控制。"
+        if action.action_type == "repair" and self._is_inn_repair_action(action):
             return "你花了约 15 分钟修好松动锅把，后厨蒸汽重新稳定，店主愿意用住宿权抵这次帮忙。"
+        if action.action_type == "repair":
+            return f"你修整{target}，让它暂时可用，但没有触发额外报酬。"
         if action.action_type == "eat_meal":
             return "你坐在火塘边吃下热炖菜，胃里暖起来，疲惫稍微退开。"
         if "暗夜狼" in str(action.arguments):

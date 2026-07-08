@@ -11,18 +11,27 @@ from backend.src.schemas.adventure import AdventureCreate, AdventureOut, DMAdvan
 from backend.src.schemas.llm import LLMModelRecord
 from backend.src.schemas.isekai import IsekaiCharacterOut, IsekaiSurvivalStateOut
 from backend.src.services.isekai_action_parser import IsekaiActionParser
+from backend.src.services.isekai_action_grounder import IsekaiActionGrounder
+from backend.src.services.isekai_action_policy import IsekaiActionPolicyService
 from backend.src.services.isekai_action_preconditions import IsekaiActionPreconditionService
 from backend.src.services.isekai_action_resolution import IsekaiActionResolutionEngine
 from backend.src.services.adventures import AdventureService
+from backend.src.services.isekai_consequences import IsekaiConsequenceResolver
+from backend.src.services.isekai_content import IsekaiContentService
 from backend.src.services.isekai_economy import IsekaiEconomyService
 from backend.src.services.isekai_events import IsekaiWorldEventDirector
 from backend.src.services.isekai_fallback_narrator import IsekaiFallbackNarrator
 from backend.src.services.isekai_interactables import IsekaiInteractableProjector
+from backend.src.services.isekai_intent_interpreter import IsekaiIntentInterpreter
 from backend.src.services.isekai_intent_planner import IsekaiIntentPlan, IsekaiIntentPlanner
+from backend.src.services.isekai_intent_schema import IsekaiIntentSchema, LLMIntentPlan
 from backend.src.services.isekai_locations import IsekaiLocationService
 from backend.src.services.isekai_narration_composer import IsekaiNarrationComposer
 from backend.src.services.isekai_opening import IsekaiOpeningGenerator
 from backend.src.services.isekai_preferences import IsekaiPreferenceLearner
+from backend.src.services.isekai_pressure_events import IsekaiPressureEventService
+from backend.src.services.isekai_quests import IsekaiQuestService
+from backend.src.services.isekai_rewards import IsekaiRewardService
 from backend.src.services.isekai_resources import IsekaiResourceService
 from backend.src.services.isekai_risk import IsekaiRiskService
 from backend.src.services.isekai_state_changes import IsekaiStateChangeService
@@ -50,13 +59,22 @@ class IsekaiSurvivalService:
         self.time = IsekaiTimeService()
         self.action_parser = IsekaiActionParser(self.time)
         self.intent_planner = IsekaiIntentPlanner(self.action_parser)
+        self.intent_schema = IsekaiIntentSchema()
+        self.intent_interpreter = IsekaiIntentInterpreter(self.model_gateway, self.intent_schema)
+        self.action_grounder = IsekaiActionGrounder(self.time)
+        self.action_policy = IsekaiActionPolicyService()
         self.preconditions = IsekaiActionPreconditionService(self.time)
         self.resources = IsekaiResourceService()
         self.state_changes = IsekaiStateChangeService(store)
+        self.content = IsekaiContentService()
         self.interactable_projector = IsekaiInteractableProjector()
         self.fallback_narrator = IsekaiFallbackNarrator()
         self.risk = IsekaiRiskService()
-        self.locations = IsekaiLocationService()
+        self.quests = IsekaiQuestService()
+        self.pressure_events = IsekaiPressureEventService()
+        self.rewards = IsekaiRewardService()
+        self.consequences = IsekaiConsequenceResolver(self.rewards, self.quests)
+        self.locations = IsekaiLocationService(self.content)
         self.economy = IsekaiEconomyService()
         self.time_cost = IsekaiTimeCostService()
         self.narration_composer = IsekaiNarrationComposer()
@@ -69,6 +87,7 @@ class IsekaiSurvivalService:
             self.locations,
             self.economy,
             self.time_cost,
+            self.content,
         )
 
     def generate_character(self) -> IsekaiCharacterOut:
@@ -168,6 +187,9 @@ class IsekaiSurvivalService:
         world_state["isekai_pressure_goals"] = self.worldview.pressure_goals()
         world_state["pressure_clocks"] = self.ensure_pressure_clocks(world_state.get("pressure_clocks"))
         world_state.setdefault("location_history", [])
+        world_state = self.content.ensure_world_state(world_state)
+        world_state = self.quests.initial_world_state(world_state)
+        world_state = self.pressure_events.ensure_state(world_state)
         self.adventures.update_world_state(adventure_id, world_state)
 
     def initialize_economy(self, adventure_id: int, copper_total: int) -> None:
@@ -264,8 +286,17 @@ class IsekaiSurvivalService:
             {"mode": "isekai_survival"},
         )
         scene = self.repair_legacy_scene_if_needed(adventure_id, self.adventures.get_scene(adventure_id))
+        llm_intent_turn = self.prepare_llm_intent_turn(
+            adventure_id,
+            message,
+            player_message,
+            scene,
+            learn_preferences=learn_preferences,
+        )
+        if llm_intent_turn is not None:
+            return llm_intent_turn
         plan = self.intent_planner.plan(message.content, scene)
-        if self.should_resolve_action_plan(plan):
+        if self.should_resolve_action_plan(plan, self.adventures.get_world_state(adventure_id), scene):
             return self.prepare_resolved_turn(
                 adventure_id,
                 message,
@@ -311,7 +342,144 @@ class IsekaiSurvivalService:
         )
         return turn
 
-    def should_resolve_action_plan(self, plan: IsekaiIntentPlan) -> bool:
+    def prepare_llm_intent_turn(
+        self,
+        adventure_id: int,
+        message: MessageCreate,
+        player_message: Any,
+        scene: SceneState,
+        learn_preferences: bool = True,
+    ) -> dict[str, Any] | None:
+        model = self.active_model()
+        if not model or not self.llm_client or not hasattr(self.llm_client, "chat"):
+            return None
+        if not getattr(self.llm_client, "supports_intent_interpretation", False):
+            return None
+        interpretation = self.intent_interpreter.interpret(message.content, scene, model)
+        if interpretation.plan is not None:
+            plan = interpretation.plan
+            if plan.requires_clarification:
+                return self.prepare_intent_clarification_turn(
+                    adventure_id,
+                    message,
+                    player_message,
+                    scene,
+                    plan.clarification_question,
+                    intent_source="active_model",
+                    intent_plan=plan,
+                    intent_error=interpretation.error,
+                    learn_preferences=learn_preferences,
+                )
+            grounded = self.action_grounder.ground(plan, scene)
+            if grounded.steps and grounded.steps[0].action.requires_clarification:
+                return self.prepare_intent_clarification_turn(
+                    adventure_id,
+                    message,
+                    player_message,
+                    scene,
+                    grounded.steps[0].action.arguments.get("clarification_question") or grounded.steps[0].action.reason,
+                    intent_source="active_model",
+                    intent_plan=plan,
+                    candidates=grounded.steps[0].action.candidates,
+                    learn_preferences=learn_preferences,
+                )
+            if grounded.steps:
+                turn = self.prepare_resolved_turn(
+                    adventure_id,
+                    message,
+                    player_message,
+                    scene,
+                    grounded,
+                    learn_preferences=learn_preferences,
+                )
+                turn["intent_source"] = "active_model"
+                turn["intent_plan"] = plan.payload()
+                if interpretation.raw_response:
+                    turn["intent_raw_response"] = interpretation.raw_response
+                return turn
+
+        if interpretation.source == "error":
+            fallback_plan = self.intent_planner.plan(message.content, scene)
+            if self.should_block_fallback_intent(fallback_plan):
+                return self.prepare_intent_clarification_turn(
+                    adventure_id,
+                    message,
+                    player_message,
+                    scene,
+                    "模型暂时没能可靠拆解这个复合行动。为了避免误操作，请把要执行的第一步单独说清楚。",
+                    intent_source="fallback_blocked",
+                    intent_error=interpretation.error,
+                    learn_preferences=learn_preferences,
+                )
+        return None
+
+    def should_block_fallback_intent(self, plan: IsekaiIntentPlan) -> bool:
+        allowed = {"status_check", "table_talk", "drink_water", "eat_food", "rest_short", "sleep", "observe"}
+        if plan.truncated:
+            return True
+        if len(plan.steps) > 1:
+            return any(step.action.action_type not in allowed for step in plan.steps)
+        return any(step.action.action_type not in allowed for step in plan.steps)
+
+    def prepare_intent_clarification_turn(
+        self,
+        adventure_id: int,
+        message: MessageCreate,
+        player_message: Any,
+        scene: SceneState,
+        question: str,
+        *,
+        intent_source: str,
+        intent_plan: LLMIntentPlan | None = None,
+        intent_error: str = "",
+        candidates: list[dict[str, Any]] | None = None,
+        learn_preferences: bool = True,
+    ) -> dict[str, Any]:
+        action = self.action_parser._build(
+            "clarification",
+            arguments={"clarification_question": question},
+            confidence="low",
+            confidence_reasons=["llm_intent:clarification"],
+            matched_rules=[f"intent_source:{intent_source}"],
+            requires_clarification=True,
+            candidates=candidates or [],
+        )
+        delta, survival = self.apply_delta(adventure_id, action)
+        character = self.get_character(adventure_id)
+        fallback = question or self.clarification_narration({"parsed_action": self.parsed_action_payload(action)})
+        turn = {
+            "player_input": message.content,
+            "player_message": player_message,
+            "action_type": action.action_type,
+            "action": action,
+            "parsed_action": self.parsed_action_payload(action),
+            "time": {
+                "time_cost_minutes": delta["time_cost_minutes"],
+                "advances_time": delta["advances_time"],
+                "survival_intent": action.survival_intent,
+                "reason": action.reason,
+            },
+            "delta": delta,
+            "survival": survival,
+            "visible_survival": self.visible_survival_state(survival),
+            "scene": scene,
+            "character": character,
+            "recent_messages": [],
+            "fallback": fallback,
+            "intent_source": intent_source,
+            "intent_error": intent_error,
+        }
+        if intent_plan is not None:
+            turn["intent_plan"] = intent_plan.payload()
+        turn["world_state"] = self.advance_world_context(adventure_id, turn, learn_preferences=learn_preferences)
+        return turn
+
+    def should_resolve_action_plan(
+        self,
+        plan: IsekaiIntentPlan,
+        world_state: dict[str, Any] | None = None,
+        scene: SceneState | None = None,
+    ) -> bool:
         if not plan.steps:
             return False
         deterministic_actions = {
@@ -327,6 +495,11 @@ class IsekaiSurvivalService:
         }
         if any(step.action.action_type in deterministic_actions for step in plan.steps):
             return True
+        resource_actions = {"eat_food", "drink_water", "eat_drink", "refill_water", "rest_short", "sleep", "secure_shelter"}
+        if len(plan.steps) > 1 and any(step.action.action_type in resource_actions for step in plan.steps):
+            return True
+        if scene and self.plan_has_scene_scoped_discovery(plan, world_state or {}, scene):
+            return True
         if any(step.action.action_type == "search" and step.action.target_name in {"货袋"} for step in plan.steps):
             return True
         if any(step.action.action_type == "travel" for step in plan.steps) and any(marker in plan.original_text for marker in ["连夜", "夜里", "夜晚"]):
@@ -334,6 +507,46 @@ class IsekaiSurvivalService:
         if "暗夜狼" in plan.original_text:
             return True
         return False
+
+    def plan_has_scene_scoped_discovery(
+        self,
+        plan: IsekaiIntentPlan,
+        world_state: dict[str, Any],
+        scene: SceneState,
+    ) -> bool:
+        discovery_tables = self.content.discovery_tables(world_state)
+        for step in plan.steps:
+            action = step.action
+            if action.action_type not in {"search", "observe"}:
+                continue
+            entries = discovery_tables.get(action.target_id, []) if action.target_id else []
+            if not entries:
+                target_text = action.target_name or ""
+                entries = [
+                    entry
+                    for table_entries in discovery_tables.values()
+                    for entry in table_entries
+                    if self.discovery_entry_matches_target_text(entry, target_text)
+                ]
+            if any(self.discovery_entry_matches_scene(entry, scene) and self.discovery_entry_matches_action(entry, action.action_type) for entry in entries):
+                return True
+        return False
+
+    def discovery_entry_matches_target_text(self, entry: dict[str, Any], target_text: str) -> bool:
+        aliases = entry.get("_target_aliases") if isinstance(entry.get("_target_aliases"), list) else []
+        return any(str(alias).strip() and str(alias).strip() in target_text for alias in aliases)
+
+    def discovery_entry_matches_scene(self, entry: dict[str, Any], scene: SceneState) -> bool:
+        aliases = entry.get("_scene_aliases") if isinstance(entry.get("_scene_aliases"), list) else []
+        if not aliases:
+            return True
+        scene_text = " ".join([scene.location, scene.environment, *scene.important_objects])
+        return any(str(alias).strip() and str(alias).strip() in scene_text for alias in aliases)
+
+    def discovery_entry_matches_action(self, entry: dict[str, Any], action_type: str) -> bool:
+        trigger = entry.get("trigger") if isinstance(entry.get("trigger"), dict) else {}
+        expected = str(trigger.get("action_type") or "").strip()
+        return not expected or expected == action_type
 
     def prepare_resolved_turn(
         self,
@@ -477,10 +690,30 @@ class IsekaiSurvivalService:
         learn_preferences: bool = True,
     ) -> dict[str, Any]:
         world_state = self.adventures.get_world_state(adventure_id)
+        world_state = self.quests.initial_world_state(world_state)
+        world_state = self.pressure_events.ensure_state(world_state)
         world_state["turn_count"] = int(world_state.get("turn_count", 0)) + 1
         world_state["isekai_pressure_goals"] = self.worldview.pressure_goals()
         world_state["pressure_clocks"] = self.ensure_pressure_clocks(world_state.get("pressure_clocks"))
         world_state = self.advance_pressure_clocks(world_state, turn)
+        world_state, pressure_event = self.pressure_events.evaluate(world_state, turn)
+        turn["pressure_event"] = pressure_event
+        turn["pressure_event_fired"] = bool(pressure_event)
+        if pressure_event:
+            turn.setdefault("delta", {}).setdefault("visible_events", [])
+            turn["delta"]["visible_events"].append(pressure_event["visible_text"])
+            risk_change = dict(turn["delta"].get("risk_change") or {})
+            for key, value in (pressure_event.get("state_delta") or {}).items():
+                risk_change[key] = int(risk_change.get(key, 0)) + int(value)
+            turn["delta"]["risk_change"] = risk_change
+        world_state, quest_update = self.quests.advance_for_turn(world_state, turn, pressure_event)
+        turn["quest_update"] = quest_update
+        if quest_update.get("clues_added"):
+            turn.setdefault("delta", {}).setdefault("clues", [])
+            for clue in quest_update["clues_added"]:
+                if clue not in turn["delta"]["clues"]:
+                    turn["delta"]["clues"].append(clue)
+        world_state = self.apply_rule_rewards_for_turn(adventure_id, turn, world_state, quest_update)
         if learn_preferences:
             world_state = self.learn_preferences_for_current_turn(adventure_id, world_state)
         else:
@@ -488,6 +721,75 @@ class IsekaiSurvivalService:
         self.event_director.evaluate_turn(adventure_id, turn, world_state)
         self.adventures.update_world_state(adventure_id, world_state)
         return world_state
+
+    def apply_rule_rewards_for_turn(
+        self,
+        adventure_id: int,
+        turn: dict[str, Any],
+        world_state: dict[str, Any],
+        quest_update: dict[str, Any],
+    ) -> dict[str, Any]:
+        character = dict(turn.get("character") or self.get_character(adventure_id))
+        reward_payload: dict[str, Any] = {"clues_added": list((turn.get("delta") or {}).get("clues") or [])}
+        if quest_update.get("before") == "tracking" and quest_update.get("after") == "resolved":
+            reward_payload = {
+                "items_added": ["暗夜狼牙 x1"],
+                "currency_delta": 8,
+                "relationship_delta": [
+                    {"npc_id": "old_furnace_keeper", "name": "旧炉旅店店主", "trust": 10, "attitude": "更信任"}
+                ],
+                "clues_added": [*reward_payload["clues_added"], "暗夜狼惧怕梦魇草燃烟"],
+                "entitlements_added": [],
+            }
+        if not any(reward_payload.get(key) for key in ["items_added", "currency_delta", "relationship_delta", "clues_added", "entitlements_added"]):
+            return world_state
+
+        next_character, next_world, applied = self.rewards.apply(
+            character,
+            world_state,
+            reward_payload,
+            reason="暗夜狼任务线" if quest_update.get("after") == "resolved" else "行动线索",
+        )
+        turn["reward_applied"] = applied
+        turn["character"] = self.update_character_resources(adventure_id, next_character)
+        if applied.get("items_added"):
+            turn.setdefault("delta", {}).setdefault("inventory_changes", [])
+            turn["delta"]["inventory_changes"].extend([f"获得{item}" for item in applied["items_added"]])
+        if applied.get("currency_delta"):
+            turn.setdefault("delta", {}).setdefault("rewards", [])
+            turn["delta"]["rewards"].append(f"{applied['currency_delta']} 铜")
+        if applied.get("relationship_delta"):
+            turn.setdefault("delta", {}).setdefault("relationship_changes", [])
+            turn["delta"]["relationship_changes"].extend(applied["relationship_delta"])
+        if applied.get("clues_added"):
+            turn.setdefault("delta", {}).setdefault("clues", [])
+            for clue in applied["clues_added"]:
+                if clue not in turn["delta"]["clues"]:
+                    turn["delta"]["clues"].append(clue)
+        if turn.get("resolved_turn") and quest_update.get("after") == "resolved":
+            turn["resolved_content"] = self.append_reward_text(
+                str(turn.get("resolved_content") or turn.get("fallback") or ""),
+                applied,
+            )
+            turn["fallback"] = turn["resolved_content"]
+        return next_world
+
+    def append_reward_text(self, content: str, applied: dict[str, Any]) -> str:
+        parts: list[str] = []
+        for item in applied.get("items_added", []):
+            parts.append(f"获得{item}")
+        if applied.get("currency_delta"):
+            parts.append(f"获得{applied['currency_delta']} 铜")
+        for clue in applied.get("clues_added", []):
+            parts.append(f"线索：{clue}")
+        for relationship in applied.get("relationship_delta", []):
+            if isinstance(relationship, dict):
+                name = relationship.get("name") or relationship.get("npc_id") or "NPC"
+                trust = relationship.get("trust")
+                parts.append(f"{name}信任提升{trust}" if trust is not None else f"{name}态度改善")
+        if not parts:
+            return content
+        return self.worldview.normalize_text(f"{content} 任务奖励已入账：{'，'.join(parts)}。")
 
     def message_metadata(
         self,
@@ -535,6 +837,18 @@ class IsekaiSurvivalService:
             metadata["state_changes_applied"] = turn["state_changes_applied"]
         if turn.get("resolved_steps"):
             metadata["resolved_steps"] = turn["resolved_steps"]
+        world_state = turn.get("world_state") or {}
+        if isinstance(world_state.get("isekai_quest"), dict):
+            metadata["isekai_quest"] = world_state["isekai_quest"]
+        if isinstance(world_state.get("isekai_clues"), list):
+            metadata["isekai_clues"] = world_state["isekai_clues"]
+        metadata["pressure_event_fired"] = bool(turn.get("pressure_event_fired"))
+        if isinstance(turn.get("pressure_event"), dict):
+            metadata["pressure_event"] = turn["pressure_event"]
+        if isinstance(turn.get("quest_update"), dict):
+            metadata["quest_update"] = turn["quest_update"]
+        if isinstance(turn.get("reward_applied"), dict):
+            metadata["reward_applied"] = turn["reward_applied"]
         if isinstance((turn.get("delta") or {}).get("risk_change"), dict):
             metadata["risk_change"] = turn["delta"]["risk_change"]
         for key in ["outcome_level", "rewards", "entitlements", "relationship_changes", "clues", "shortfall_copper"]:
@@ -544,6 +858,16 @@ class IsekaiSurvivalService:
             metadata["scene_update_blocked_reason"] = turn["scene_update_blocked_reason"]
         if turn.get("model_errors"):
             metadata["model_errors"] = turn["model_errors"]
+        if turn.get("intent_source"):
+            metadata["intent_source"] = turn["intent_source"]
+        if turn.get("intent_plan"):
+            metadata["intent_plan"] = turn["intent_plan"]
+        if turn.get("intent_error"):
+            metadata["intent_error"] = turn["intent_error"]
+        if turn.get("scene_object_source"):
+            metadata["scene_object_source"] = turn["scene_object_source"]
+        if turn.get("scene_objects_applied"):
+            metadata["scene_objects_applied"] = turn["scene_objects_applied"]
         return metadata
 
     def parsed_action_payload(self, action: Any) -> dict[str, Any]:
@@ -756,10 +1080,55 @@ class IsekaiSurvivalService:
         )
         turn["character"] = result.character
         turn["state_changes_applied"] = result.applied
+        consequence_character, consequence_world, consequence_applied = self.consequences.resolve(
+            result.character,
+            self.adventures.get_world_state(adventure_id),
+            self.model_consequence_proposals(turn.get("model_payload") or {}),
+            action_type=str(turn.get("action_type") or ""),
+        )
+        if consequence_applied.get("blocked") or consequence_applied.get("applied"):
+            turn["state_changes_applied"] = self.merge_state_change_applied(result.applied, consequence_applied)
+        if consequence_character != result.character:
+            turn["character"] = self.update_character_resources(adventure_id, consequence_character)
+        if consequence_world != self.adventures.get_world_state(adventure_id):
+            self.adventures.update_world_state(adventure_id, consequence_world)
         if result.scene is not None:
             self.adventures.update_scene(adventure_id, result.scene)
             return result.scene
         return scene
+
+    def model_consequence_proposals(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {}
+        state_changes = payload.get("state_changes") if isinstance(payload.get("state_changes"), dict) else {}
+        result: dict[str, Any] = {}
+        for key in [
+            "money_changes",
+            "item_rewards",
+            "entitlement_changes",
+            "quest_stage_changes",
+            "npc_relationship_changes",
+        ]:
+            if key in payload:
+                result[key] = payload[key]
+            elif key in state_changes:
+                result[key] = state_changes[key]
+        return result
+
+    def merge_state_change_applied(self, current: dict[str, Any], consequence_applied: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(current or {})
+        blocked = dict(merged.get("blocked") or {})
+        for key, value in (consequence_applied.get("blocked") or {}).items():
+            blocked[key] = value
+        if blocked:
+            merged["blocked"] = blocked
+        applied = dict(merged.get("consequence_applied") or {})
+        for key, value in (consequence_applied.get("applied") or {}).items():
+            if value:
+                applied[key] = value
+        if applied:
+            merged["consequence_applied"] = applied
+        return merged
 
     def model_payload_for_state_changes(self, turn: dict[str, Any]) -> dict[str, Any]:
         payload = dict(turn.get("model_payload") or {})
@@ -860,6 +1229,9 @@ class IsekaiSurvivalService:
 
     def clarification_narration(self, turn: dict[str, Any]) -> str:
         parsed = turn.get("parsed_action") or {}
+        question = ((parsed.get("arguments") or {}) if isinstance(parsed, dict) else {}).get("clarification_question")
+        if question:
+            return str(question)
         candidates = parsed.get("candidates") if isinstance(parsed, dict) else []
         names = [str(candidate.get("name") or "").strip() for candidate in candidates if isinstance(candidate, dict)]
         names = [name for name in names if name]
@@ -881,12 +1253,24 @@ class IsekaiSurvivalService:
         return self.parse_model_payload(json.dumps(payload, ensure_ascii=False), raw_narration)
 
     def repair_narration_for_turn(self, turn: dict[str, Any], narration: str) -> str:
+        scene_payload = turn["scene"].model_dump()
+        model_payload = turn.get("model_payload") if isinstance(turn.get("model_payload"), dict) else {}
+        scene_update = model_payload.get("scene_update") if isinstance(model_payload, dict) else {}
+        if isinstance(scene_update, dict):
+            for key in ["location", "environment", "current_objective"]:
+                value = scene_update.get(key)
+                if isinstance(value, str) and value.strip():
+                    scene_payload[key] = value.strip()
+            if isinstance(scene_update.get("important_objects"), list):
+                scene_payload["important_objects"] = [
+                    str(item).strip() for item in scene_update["important_objects"] if str(item).strip()
+                ][:8]
         return self.worldview.repair_narration(
             narration,
             {
                 "visible_survival": turn.get("visible_survival") or self.visible_survival_state(turn["survival"]),
                 "character": turn.get("character") or {},
-                "scene": turn["scene"].model_dump(),
+                "scene": scene_payload,
                 "world_state": turn.get("world_state") or {},
                 "action_type": turn.get("action_type"),
             },
@@ -927,10 +1311,22 @@ class IsekaiSurvivalService:
                 "parsed_action": turn.get("parsed_action") or {},
                 "time": turn.get("time", {}),
                 "world_state": turn.get("world_state", {}),
+                "active_quest": (turn.get("world_state") or {}).get("isekai_quest", {}),
+                "known_clues": (turn.get("world_state") or {}).get("isekai_clues", []),
+                "pressure_event_fired": bool(turn.get("pressure_event_fired")),
+                "pressure_event": turn.get("pressure_event") or None,
                 "pressure_goals": self.worldview.pressure_goals(),
                 "day": turn["survival"].get("day"),
                 "time_of_day": turn["survival"].get("time_of_day"),
                 "survival_state_json": turn["survival"].get("state", {}),
+                "model_permission_policy": {
+                    "money_changes": "proposal_only",
+                    "item_rewards": "proposal_only",
+                    "entitlement_changes": "proposal_only",
+                    "quest_stage_changes": "proposal_only",
+                    "npc_relationship_changes": "proposal_only",
+                    "final_state_owner": "IsekaiConsequenceResolver",
+                },
             },
             "fallback_narration": turn["fallback"],
             "locale": locale,
@@ -965,6 +1361,8 @@ class IsekaiSurvivalService:
                     "recent_messages 是本局真实对话历史，必须用于保持地点、NPC、目标和剧情连续性。"
                     "如果 recent_messages 与 system_state.scene、confirmed_location 或 event_impacts 冲突，以 system_state 为准。"
                     "system_state.pressure_goals 是本阶段必须维持的生存压力：落脚身份、外来者怀疑、异族税和宵禁巡逻都要影响 NPC 与选择后果。"
+                    "压力事件只能在 system_state.pressure_event_fired=true 时写进旁白；否则不要重复写“宵禁压力”“外来者被排斥”“异族税压力”等系统解释句。"
+                    "当前 P1 只能运行 night_wolf_line 一条任务线；禁止创建第二条任务线、第二城镇主线或多阵营主线。"
                     "回复内部必须满足：状态是否变化、场景可交互对象、NPC 态度、生存压力是否合理，并给玩家 2-3 个自然行动钩子。"
                     "如果叙事导致角色位置、环境、可交互物或当前目标改变，必须输出 scene_update。"
                     "只输出 JSON 对象，格式为 {\"narration\":\"...\",\"scene_update\":{\"location\":\"...\","
@@ -973,6 +1371,7 @@ class IsekaiSurvivalService:
                     "\"state\":\"...\",\"affordances\":[\"交涉\",\"采集\"],\"risk\":\"...\"}],"
                     "\"suggested_actions\":[\"...\",\"...\",\"...\"],"
                     "\"state_changes\":{\"add_items\":[],\"remove_items\":[],\"npc_updates\":[],\"pressure_updates\":[]}}。"
+                    "money_changes、item_rewards、entitlement_changes、quest_stage_changes、npc_relationship_changes 全部只是 proposal，后端可能拦截；不要在 narration 宣称未由 system_state 或 fallback_narration 确认入账的奖励。"
                     "当 narration 明确确认玩家获得、丢弃或消耗物品时，必须在 state_changes.add_items 或 remove_items 写出物品中文名。"
                     "当 NPC 态度、信任或已知事实变化时，必须在 state_changes.npc_updates 写出 id、name、attitude、trust_delta 或 known_facts。"
                 ),
@@ -994,7 +1393,17 @@ class IsekaiSurvivalService:
             result: dict[str, Any] = {"narration": narration or self.worldview.normalize_text(fallback)}
             if isinstance(scene_update, dict):
                 result["scene_update"] = self.worldview.normalize_scene_update(scene_update)
-            for key in ["interactables", "suggested_actions", "state_changes"]:
+            for key in [
+                "interactables",
+                "suggested_actions",
+                "state_changes",
+                "money_changes",
+                "item_rewards",
+                "entitlement_changes",
+                "quest_stage_changes",
+                "npc_relationship_changes",
+                "scene_objects",
+            ]:
                 if key in payload:
                     result[key] = payload[key]
             return result
@@ -1040,6 +1449,7 @@ class IsekaiSurvivalService:
             return turn["resolved_scene"]
         scene = turn["scene"]
         patch = self.clean_scene_update(scene_update)
+        model_payload = turn.get("model_payload") if isinstance(turn.get("model_payload"), dict) else {}
         if not (turn.get("time") or {}).get("advances_time"):
             if patch:
                 turn["scene_update_blocked_reason"] = (
@@ -1052,7 +1462,10 @@ class IsekaiSurvivalService:
         if inferred_location and not patch.get("location"):
             patch["location"] = inferred_location
         if not patch:
-            return scene
+            scene_with_objects = self.materialize_scene_objects_for_turn(scene, turn)
+            if scene_with_objects.model_dump() != scene.model_dump():
+                self.adventures.update_scene(adventure_id, scene_with_objects)
+            return scene_with_objects
 
         old_location = scene.location
         new_location = str(patch.get("location") or scene.location).strip() or scene.location
@@ -1080,11 +1493,24 @@ class IsekaiSurvivalService:
             npc_states=scene.npc_states,
         )
         next_scene = self.project_interactables_if_needed(next_scene, turn)
+        next_scene = self.materialize_scene_objects_for_turn(next_scene, turn)
         self.adventures.update_scene(adventure_id, next_scene)
         if location_changed:
             history_entry = self.location_history_entry(old_location, new_location, turn, narration)
             self.update_survival_location(adventure_id, new_location, history_entry)
             self.update_world_location_history(adventure_id, history_entry)
+        return next_scene
+
+    def materialize_scene_objects_for_turn(self, scene: SceneState, turn: dict[str, Any]) -> SceneState:
+        model_payload = turn.get("model_payload") if isinstance(turn.get("model_payload"), dict) else {}
+        next_scene, metadata = self.content.materialize_scene_objects(scene, model_payload.get("scene_objects"))
+        if metadata:
+            turn["scene_object_source"] = metadata.get("source")
+            turn["scene_objects_applied"] = metadata
+        suggested = model_payload.get("suggested_actions")
+        if isinstance(suggested, list):
+            merged = [*next_scene.suggested_actions, *[str(item) for item in suggested if str(item).strip()]]
+            next_scene = next_scene.model_copy(update={"suggested_actions": list(dict.fromkeys(merged))[:8]})
         return next_scene
 
     def action_allows_location_change(self, turn: dict[str, Any]) -> bool:

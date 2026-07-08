@@ -17,6 +17,8 @@ class IsekaiActionPreconditionService:
         if action.action_type == "enter_location":
             if not action.target_id and not action.arguments.get("target_node_id"):
                 return self._fail(action, "missing_location_target", "需要先明确可进入的地点。")
+            if action.arguments.get("virtual_entry"):
+                return action
             if action.target_id and not self._entry_is_possible(action, scene):
                 return self._fail(
                     action,

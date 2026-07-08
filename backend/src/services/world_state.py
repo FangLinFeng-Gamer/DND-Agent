@@ -144,6 +144,10 @@ def public_world_state_view(world_state: dict[str, Any]) -> dict[str, Any]:
         "last_advance": state.get("last_advance", {}),
         "last_pressure_advance": state.get("last_pressure_advance", {}),
         "isekai_economy": state.get("isekai_economy", {}),
+        "isekai_quest": state.get("isekai_quest", {}),
+        "isekai_clues": list(state.get("isekai_clues", []))[-20:],
+        "isekai_pressure_events": state.get("isekai_pressure_events", {}),
+        "isekai_risks": state.get("isekai_risks", {}),
         "pending_lodging_reward": state.get("pending_lodging_reward", False),
     }
 

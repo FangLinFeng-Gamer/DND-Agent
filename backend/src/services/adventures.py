@@ -335,9 +335,14 @@ class AdventureService:
             if mode == "isekai_survival"
             else []
         )
-        world_state = public_world_state_view(
-            normalize_world_state(decode_json(row["world_state_json"], {}), self._story_from_row(row))
-        )
+        normalized_world_state = normalize_world_state(decode_json(row["world_state_json"], {}), self._story_from_row(row))
+        if mode == "isekai_survival":
+            normalized_world_state = self._ensure_isekai_world_state_for_output(
+                row["id"],
+                normalized_world_state,
+                current_scene,
+            )
+        world_state = public_world_state_view(normalized_world_state)
         if mode == "isekai_survival":
             from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
 
@@ -360,11 +365,102 @@ class AdventureService:
             world_events=world_events,
         )
 
+    def _ensure_isekai_world_state_for_output(
+        self,
+        adventure_id: int,
+        world_state: dict[str, Any],
+        current_scene: SceneState | None = None,
+    ) -> dict[str, Any]:
+        from backend.src.services.isekai_pressure_events import IsekaiPressureEventService
+        from backend.src.services.isekai_quests import IsekaiQuestService
+
+        updated = self._ensure_isekai_economy_for_output(adventure_id, world_state)
+        updated = IsekaiQuestService().initial_world_state(updated)
+        updated = IsekaiPressureEventService().ensure_state(updated)
+        updated = self._repair_legacy_isekai_world_state(updated, current_scene)
+        if updated != world_state:
+            self.update_world_state(adventure_id, updated)
+        return updated
+
+    def _repair_legacy_isekai_world_state(
+        self,
+        world_state: dict[str, Any],
+        current_scene: SceneState | None,
+    ) -> dict[str, Any]:
+        if not current_scene or not world_state.get("pending_lodging_reward"):
+            return world_state
+        scene_text = " ".join(
+            [
+                current_scene.location,
+                current_scene.environment,
+                *current_scene.important_objects,
+                current_scene.current_objective,
+            ]
+        )
+        in_wilderness_watchtower = any(word in scene_text for word in ["哨塔", "森林", "麋鹿", "溪流"])
+        in_inn_context = any(word in scene_text for word in ["旅店", "后厨", "厨房", "前厅", "锅把"])
+        economy = dict(world_state.get("isekai_economy") or {})
+        has_lodging_record = bool(economy.get("entitlements") or economy.get("transaction_log"))
+        if not in_wilderness_watchtower or in_inn_context or has_lodging_record:
+            return world_state
+
+        updated = dict(world_state)
+        updated.pop("pending_lodging_reward", None)
+        clues = [
+            str(clue)
+            for clue in updated.get("isekai_clues", [])
+            if str(clue).strip() and "店主" not in str(clue) and "旧炉旅店" not in str(clue)
+        ]
+        updated["isekai_clues"] = clues
+        quest = dict(updated.get("isekai_quest") or {})
+        flags = dict(quest.get("flags") or {})
+        if quest.get("active_quest_id") == "night_wolf_line" and quest.get("stage") == "rumor_heard" and flags.get("rumor_source") == "old_furnace_keeper":
+            quest["stage"] = "not_started"
+            quest["flags"] = {}
+            updated["isekai_quest"] = quest
+        return updated
+
+    def _ensure_isekai_economy_for_output(self, adventure_id: int, world_state: dict[str, Any]) -> dict[str, Any]:
+        from backend.src.services.isekai_economy import IsekaiEconomyService
+
+        economy_service = IsekaiEconomyService()
+        current = world_state.get("isekai_economy")
+        has_currency = isinstance(current, dict) and isinstance(current.get("currency"), dict)
+        has_copper = has_currency and "copper_total" in current["currency"]
+        economy = economy_service.ensure_state(current, None) if has_copper else economy_service.initial_state()
+        if current == economy:
+            return world_state
+        updated = {**world_state, "isekai_economy": economy}
+        self.update_world_state(adventure_id, updated)
+        return updated
+
     def _isekai_scene_for_output(self, scene: SceneState) -> SceneState:
         from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
+        from backend.src.services.isekai_interactables import IsekaiInteractableProjector
 
         repaired = IsekaiWorldviewNormalizer().repair_scene_state_payload(scene.model_dump())
-        return SceneState.model_validate(repaired)
+        output_scene = SceneState.model_validate(repaired)
+        output_scene = self._repair_generic_isekai_scene(output_scene)
+        projected, suggestions = IsekaiInteractableProjector().project(output_scene, "output")
+        if not projected:
+            return output_scene
+        current_names = {str(entry.get("name") or "").strip() for entry in output_scene.interactables if isinstance(entry, dict)}
+        generic_current = current_names <= {"", "木箱", "门口", "周围环境"}
+        if not output_scene.interactables or generic_current:
+            return output_scene.model_copy(update={"interactables": projected, "suggested_actions": suggestions})
+        return output_scene
+
+    def _repair_generic_isekai_scene(self, scene: SceneState) -> SceneState:
+        generic_objects = {str(item).strip() for item in scene.important_objects}
+        if "哨塔" in scene.location and generic_objects <= {"", "周围环境"}:
+            return scene.model_copy(
+                update={
+                    "environment": "坍塌的石砌哨塔内部漏着冷风，旧火堆旁有灰烬，地基缝隙透出潮气，避风角落和墙体缺口都需要确认。",
+                    "important_objects": ["旧火堆", "地基缝隙", "避风角落", "墙体缺口", "墙角兽毛"],
+                    "current_objective": "确认哨塔内部是否适合扎营，同时避免夜里暴露。",
+                }
+            )
+        return scene
 
     def _story_from_row(self, row: Row) -> StoryOut | None:
         snapshot = decode_json(row["story_snapshot_json"], {})

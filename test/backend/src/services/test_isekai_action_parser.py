@@ -64,6 +64,105 @@ def shelter_scene():
     )
 
 
+def tower_scene():
+    return SceneState(
+        location="废弃瞭望塔底层",
+        environment="圆形大厅里有冷灰烬堆、兽骨、墙壁符文和半掩的塔门。",
+        important_objects=["冷灰烬堆", "兽骨", "墙壁符文", "半掩的塔门"],
+        npcs=[],
+        current_objective="确认这里是否能作为临时营地。",
+        interactables=[
+            {
+                "id": "cold_ashes",
+                "type": "place",
+                "name": "冷灰烬堆",
+                "affordances": ["检查", "翻找"],
+                "risk": "可能有碎骨或残留火星",
+            },
+            {
+                "id": "wall_runes",
+                "type": "item",
+                "name": "墙壁符文",
+                "affordances": ["研究", "拓印", "观察"],
+                "risk": "乱碰可能触发残余魔法",
+            },
+        ],
+    )
+
+
+def hunter_camp_scene():
+    return SceneState(
+        location="鹿角林边猎人营地",
+        environment="营火只剩红炭，周围挂着半干的兽皮，林中有细碎枝响。",
+        important_objects=["将熄营火", "半干兽皮", "猎人留下的刻痕"],
+        npcs=[],
+        current_objective="判断猎人营地为何空无一人，并寻找可用补给。",
+        interactables=[
+            {
+                "id": "drying_hide",
+                "type": "item",
+                "name": "半干兽皮",
+                "affordances": ["观察", "拿起", "收起"],
+                "risk": "可能带有气味，容易吸引野兽",
+            }
+        ],
+    )
+
+
+def test_parser_treats_looking_for_takeable_camp_items_as_search():
+    action = parser().parse("看看营地有什么可以拿的东西", hunter_camp_scene())
+
+    assert action.action_type == "search"
+    assert action.advances_time is True
+    assert "intent:search" in action.matched_rules
+
+
+def test_parser_treats_putting_hide_into_backpack_as_inventory_action():
+    action = parser().parse("半干兽皮装到背包里", hunter_camp_scene())
+
+    assert action.action_type == "manage_inventory"
+    assert action.target_id == "drying_hide"
+    assert action.advances_time is True
+    assert "intent:manage_inventory" in action.matched_rules
+
+
+def test_parser_treats_opening_crate_as_searching_container():
+    scene = SceneState(
+        location="废弃神庙",
+        environment="角落里有一个旧木箱。",
+        important_objects=["旧木箱"],
+        npcs=[],
+        current_objective="确认木箱里有什么。",
+        interactables=[
+            {
+                "id": "wooden_crate_01",
+                "type": "container",
+                "name": "旧木箱",
+                "affordances": ["搜索", "观察", "打开"],
+            }
+        ],
+    )
+
+    action = IsekaiActionParser(IsekaiTimeService()).parse("打开木箱", scene)
+
+    assert action.action_type == "search"
+    assert action.target_id == "wooden_crate_01"
+
+
+def test_parser_recognizes_inspect_and_study_as_play_actions():
+    p = parser()
+
+    inspect = p.parse("检查冷灰烬堆和兽骨", tower_scene())
+    study = p.parse("研究墙壁符文，尝试解读其含义", tower_scene())
+
+    assert inspect.action_type == "search"
+    assert inspect.target_id == "cold_ashes"
+    assert inspect.advances_time is True
+    assert study.action_type in {"observe", "search"}
+    assert study.target_id == "wall_runes"
+    assert study.advances_time is True
+
+
 def inn_scene():
     return SceneState(
         location="灰石镇 / 旧炉旅店 / 前厅",

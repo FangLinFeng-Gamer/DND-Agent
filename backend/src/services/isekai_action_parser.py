@@ -125,9 +125,9 @@ class IsekaiActionParser:
             return "forage", ["intent:forage"], ""
         if self._is_travel(text):
             return "travel", ["intent:travel"], ""
-        if any(word in text for word in ["搜索", "搜寻", "调查", "仔细找", "寻找", "search"]):
+        if self._is_search(text):
             return "search", ["intent:search"], ""
-        if any(word in text for word in ["观察", "查看", "聆听", "听", "inspect", "look"]):
+        if any(word in text for word in ["观察", "查看", "聆听", "听", "检查", "研究", "inspect", "look"]):
             return "observe", ["intent:observe"], ""
         if any(word in text for word in ["交谈", "询问", "问", "说", "talk"]):
             return "short_dialogue", ["intent:short_dialogue"], ""
@@ -219,7 +219,7 @@ class IsekaiActionParser:
         expected = {
             "gather": ["采集", "拾取", "摘", "拿起"],
             "refill_water": ["装水", "取水", "补水"],
-            "observe": ["观察", "检查", "查看"],
+            "observe": ["观察", "检查", "查看", "研究", "解读"],
             "short_dialogue": ["交涉", "交谈", "询问"],
             "enter_location": ["进入", "查看"],
             "approach": ["靠近", "接近", "观察", "绕行"],
@@ -230,7 +230,7 @@ class IsekaiActionParser:
             "purchase": ["支付", "购买", "买"],
             "repair": ["修理", "修好", "维修"],
             "eat_meal": ["食用", "吃", "购买"],
-            "search": ["搜索", "调查", "检查"],
+            "search": ["搜索", "调查", "检查", "翻找", "研究", "解读", "打开"],
             "manage_inventory": ["拾取", "拿起", "整理"],
             "secure_shelter": ["堵门", "加固", "封堵"],
         }.get(action_type)
@@ -245,6 +245,8 @@ class IsekaiActionParser:
             return True
         for token in [
             "浆果",
+            "木箱",
+            "箱",
             "水囊",
             "水桶",
             "雨水桶",
@@ -259,6 +261,17 @@ class IsekaiActionParser:
             "货袋",
             "暗格",
             "破口",
+            "麋鹿",
+            "骸骨",
+            "铁头箭",
+            "折断的箭",
+            "血迹",
+            "溪流",
+            "哨塔",
+            "旧火堆",
+            "地基缝隙",
+            "避风角落",
+            "缺口",
             "猎网",
             "燧石",
             "伐木工",
@@ -472,7 +485,27 @@ class IsekaiActionParser:
         )
 
     def _is_manage_inventory(self, text: str) -> bool:
-        return any(word in text for word in ["扔掉", "丢掉", "丢弃", "放下", "收起", "整理", "拿出", "取出", "掏出", "放进背包", "放入背包"])
+        return any(
+            word in text
+            for word in [
+                "扔掉",
+                "丢掉",
+                "丢弃",
+                "放下",
+                "收起",
+                "整理",
+                "拿出",
+                "取出",
+                "掏出",
+                "放进背包",
+                "放入背包",
+                "装到背包",
+                "装进背包",
+                "塞进背包",
+                "塞到背包",
+                "收入背包",
+            ]
+        )
 
     def _is_drink_water(self, text: str) -> bool:
         return any(word in text for word in ["喝水", "喝一口", "饮水", "drink water"]) or ("喝" in text and "水" in text)
@@ -517,6 +550,17 @@ class IsekaiActionParser:
 
     def _is_gather(self, text: str) -> bool:
         return any(word in text for word in ["摘", "采", "采摘", "捡", "拾起", "捡起", "拿起", "收集", "采集"])
+
+    def _is_search(self, text: str) -> bool:
+        if any(word in text for word in ["搜索", "搜寻", "调查", "仔细找", "寻找", "检查", "翻找", "研究", "解读", "search"]):
+            return True
+        if "打开" in text and any(word in text for word in ["箱", "木箱", "盒", "柜", "包", "袋"]):
+            return True
+        if any(word in text for word in ["看看", "找找", "看一下"]) and any(
+            word in text for word in ["有什么", "可以拿", "可拿", "能拿", "东西", "物资", "补给"]
+        ):
+            return True
+        return False
 
     def _is_travel(self, text: str) -> bool:
         if any(marker in text for marker in ["?", "？", "吗"]):

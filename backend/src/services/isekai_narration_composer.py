@@ -15,6 +15,16 @@ class IsekaiNarrationComposer:
         interactable_text = self._interactable_text(scene)
         alternatives = self._alternatives_text(steps)
         reward_text = self._reward_text(getattr(result, "delta", {}) or {})
+        natural = self._natural_exploration_text(
+            action_text,
+            time_text,
+            resource_text,
+            risk_text,
+            interactable_text,
+            getattr(result, "delta", {}) or {},
+        )
+        if natural:
+            return natural
         if alternatives:
             action_text = f"{action_text} 可替代做法：{alternatives}"
         return (
@@ -25,6 +35,28 @@ class IsekaiNarrationComposer:
             f" 奖励与权益：{reward_text}"
             f" 新的可互动内容：{interactable_text}"
         )
+
+    def _natural_exploration_text(
+        self,
+        action_text: str,
+        time_text: str,
+        resource_text: str,
+        risk_text: str,
+        interactable_text: str,
+        delta: dict[str, Any],
+    ) -> str:
+        if delta.get("narration_style") != "exploration_discovery":
+            return ""
+        parts = [action_text]
+        if time_text and time_text != "没有推进时间。":
+            parts.append(time_text)
+        if resource_text and resource_text != "没有明显资源变化。":
+            parts.append(f"身体反馈：{resource_text}。")
+        if risk_text and risk_text != "风险没有明显变化。":
+            parts.append(f"{risk_text}")
+        if interactable_text:
+            parts.append(f"现在你可以继续查看：{interactable_text}。")
+        return " ".join(part.strip() for part in parts if part.strip())
 
     def _time_text(self, delta: dict[str, Any]) -> str:
         minutes = int(delta.get("time_cost_minutes", 0))
