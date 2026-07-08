@@ -26,11 +26,15 @@ class AdventureCreate(BaseModel):
 
 class SceneState(BaseModel):
     location: str
+    location_path: dict[str, Any] = Field(default_factory=dict)
     environment: str
     important_objects: list[str] = Field(default_factory=list)
     npcs: list[str] = Field(default_factory=list)
     current_objective: str
     world_changes: list[str] = Field(default_factory=list)
+    interactables: list[dict[str, Any]] = Field(default_factory=list)
+    suggested_actions: list[str] = Field(default_factory=list)
+    npc_states: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class MessageCreate(BaseModel):

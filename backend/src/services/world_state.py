@@ -142,6 +142,9 @@ def public_world_state_view(world_state: dict[str, Any]) -> dict[str, Any]:
         "location_history": list(state.get("location_history", []))[-20:],
         "event_impacts": list(state.get("event_impacts", []))[-12:],
         "last_advance": state.get("last_advance", {}),
+        "last_pressure_advance": state.get("last_pressure_advance", {}),
+        "isekai_economy": state.get("isekai_economy", {}),
+        "pending_lodging_reward": state.get("pending_lodging_reward", False),
     }
 
 

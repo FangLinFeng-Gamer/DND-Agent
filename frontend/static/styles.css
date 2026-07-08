@@ -1419,6 +1419,67 @@ select:focus {
   background: rgba(233, 214, 154, .34);
 }
 
+.isekai-message-extras {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.isekai-interactables,
+.isekai-suggested-actions {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid rgba(169, 140, 84, .22);
+  padding-top: 9px;
+}
+
+.isekai-interactables h3,
+.isekai-suggested-actions h3 {
+  margin: 0;
+  color: #d8c28d;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.isekai-interactable {
+  display: grid;
+  gap: 3px;
+  border-left: 2px solid rgba(220, 179, 87, .45);
+  padding-left: 8px;
+}
+
+.isekai-interactable strong {
+  color: #f0e2bb;
+  font-size: 13px;
+}
+
+.isekai-interactable span {
+  color: #a89669;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.isekai-suggested-actions {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.isekai-suggested-actions h3 {
+  grid-column: 1 / -1;
+}
+
+.isekai-suggested-action {
+  border-color: rgba(169, 140, 84, .36);
+  background: rgba(0, 0, 0, .18);
+  color: #f0e2bb;
+  line-height: 1.35;
+  min-height: 34px;
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+  text-align: left;
+  white-space: normal;
+}
+
 /* illuminated drop cap on the DM's narration */
 .message.dm p::first-letter {
   float: left;
@@ -2312,10 +2373,101 @@ select:focus {
   min-height: 0;
 }
 
+.isekai-dm-debug {
+  margin-top: 10px;
+}
+
+.isekai-dm-debug-details {
+  border: 1px dashed rgba(169, 140, 84, .36);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .18);
+  color: #a89669;
+  font-size: 12px;
+}
+
+.isekai-dm-debug-details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1;
+  padding: 9px 10px;
+}
+
+.isekai-dm-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.isekai-dm-debug-row {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.isekai-dm-debug-row span {
+  color: #8f805f;
+}
+
+.isekai-dm-debug-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #d8c28d;
+  font-family: var(--font-body);
+}
+
 .isekai-location {
   color: #f0e2bb;
   font-family: var(--font-display);
   font-size: 20px;
+}
+
+.isekai-section-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #bda878;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.isekai-economy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.isekai-economy-section {
+  min-width: 0;
+  border: 1px solid rgba(169, 140, 84, .24);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .2);
+  padding: 9px 10px;
+}
+
+.isekai-economy-section h3 {
+  margin: 0 0 7px;
+  color: #f4dd9a;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.isekai-economy-list {
+  display: grid;
+  gap: 5px;
+}
+
+.isekai-economy-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #d8cba6;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .isekai-stat-list {
@@ -2385,6 +2537,87 @@ select:focus {
   color: #f0e2bb;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.isekai-pressure-goals {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.isekai-pressure-goals h3 {
+  margin: 0;
+  color: #d8c28d;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.isekai-pressure-goal {
+  display: grid;
+  gap: 3px;
+  border-left: 2px solid rgba(220, 179, 87, .55);
+  padding-left: 9px;
+}
+
+.isekai-pressure-goal strong {
+  color: #f0e2bb;
+  font-size: 13px;
+}
+
+.isekai-pressure-goal span {
+  color: #a89669;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.isekai-pressure-clocks {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.isekai-pressure-clocks h3 {
+  margin: 0;
+  color: #d8c28d;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.isekai-pressure-clock {
+  display: grid;
+  gap: 5px;
+}
+
+.isekai-pressure-clock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #f0e2bb;
+  font-size: 12px;
+}
+
+.isekai-pressure-clock-track {
+  overflow: hidden;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .32);
+}
+
+.isekai-pressure-clock-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7ca982, #dcb357);
+}
+
+.isekai-pressure-clock p {
+  margin: 0;
+  color: #a89669;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .isekai-event-list {

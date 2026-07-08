@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from backend.src.services.isekai_inventory import consume_waterskin_charge, refill_waterskins
 from backend.src.services.isekai_time import IsekaiActionResolution
 
 
@@ -26,7 +27,16 @@ class IsekaiResourceService:
         status_effects = [str(effect) for effect in updated.get("status_effects", [])]
         changes: list[str] = []
 
-        if action.action_type == "eat_drink":
+        if action.action_type == "drink_water":
+            inventory, change = self._consume_water(inventory)
+            changes.append(change)
+        elif action.action_type == "eat_food":
+            inventory, change = self._consume_ration(inventory)
+            changes.append(change)
+        elif action.action_type == "refill_water":
+            inventory, change = self._refill_water(inventory)
+            changes.append(change)
+        elif action.action_type == "eat_drink":
             text = str(player_input or "")
             if self._wants_food(text):
                 inventory, change = self._consume_ration(inventory)
@@ -75,30 +85,16 @@ class IsekaiResourceService:
         return result, "没有可用干粮"
 
     def _consume_water(self, inventory: list[str]) -> tuple[list[str], str]:
-        result = list(inventory)
-        for index, item in enumerate(result):
-            if "水囊" not in item:
-                continue
-            current, maximum = self._waterskin_charges(item)
-            if current <= 0:
-                return result, "水囊已经空了"
-            result[index] = f"水囊({current - 1}/{maximum})"
-            return result, "饮用水囊 1 份"
-        return result, "没有可用饮水"
+        return consume_waterskin_charge(inventory)
+
+    def _refill_water(self, inventory: list[str]) -> tuple[list[str], str]:
+        return refill_waterskins(inventory)
 
     def _item_count(self, item: str, default: int) -> int:
         match = re.search(r"x\s*(\d+)", item)
         if not match:
             return default
         return max(0, int(match.group(1)))
-
-    def _waterskin_charges(self, item: str) -> tuple[int, int]:
-        match = re.search(r"\((\d+)\s*/\s*(\d+)\)", item)
-        if not match:
-            return 3, 3
-        maximum = max(1, int(match.group(2)))
-        current = max(0, min(maximum, int(match.group(1))))
-        return current, maximum
 
     def _pressure_consequences(
         self,

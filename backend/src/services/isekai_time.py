@@ -19,36 +19,45 @@ class IsekaiActionResolution:
 
 
 class IsekaiTimeService:
-    def classify_action(self, content: str) -> IsekaiActionResolution:
-        text = str(content or "").strip().lower()
-        if self._is_status_check(text):
-            return IsekaiActionResolution("status_check", 0, False, "none", "玩家查看状态，不推进时间。")
-        if self._is_table_talk(text):
-            return IsekaiActionResolution("table_talk", 0, False, "none", "玩家询问系统或规则，不推进时间。")
-        if any(word in text for word in ["睡觉", "睡到", "过夜", "长休", "sleep"]):
-            return IsekaiActionResolution("sleep", 480, True, "sleep", "角色进行长时间睡眠。")
-        if any(word in text for word in ["短休", "小憩", "休息", "rest"]):
-            return IsekaiActionResolution("rest_short", 60, True, "rest", "角色短暂休整。")
-        if any(word in text for word in ["吃干粮", "吃饭", "吃掉", "喝水", "喝一口", "饮水", "eat", "drink"]):
-            return IsekaiActionResolution("eat_drink", 15, True, "consume", "角色消耗食物或饮水。")
-        if any(word in text for word in ["做汤", "做饭", "做菜", "做一锅", "热汤", "烹饪", "料理", "煮", "cook"]):
-            return IsekaiActionResolution("cook", 60, True, "cook", "角色花时间准备食物。")
-        if any(word in text for word in ["寻找食物", "寻找水", "找水", "觅食", "采集", "打猎", "forage"]):
-            return IsekaiActionResolution("forage", 120, True, "forage", "角色搜寻食物或水源。")
-        if any(
-            word in text
-            for word in ["前往", "赶路", "走到", "移动到", "去往", "探索", "前进", "沿着", "走", "travel", "move"]
-        ):
-            return IsekaiActionResolution("travel", 90, True, "travel", "角色移动到新的地点。")
-        if self._is_travel_intent(text):
-            return IsekaiActionResolution("travel", 90, True, "travel", "角色移动到新的地点。")
-        if any(word in text for word in ["搜索", "搜寻", "调查", "仔细找", "寻找", "search"]):
-            return IsekaiActionResolution("search", 45, True, "search", "角色仔细搜索附近区域。")
-        if any(word in text for word in ["观察", "查看", "聆听", "听", "inspect", "look"]):
-            return IsekaiActionResolution("observe", 15, True, "observe", "角色快速观察周围。")
-        if any(word in text for word in ["交谈", "询问", "问", "说", "talk"]):
-            return IsekaiActionResolution("short_dialogue", 10, True, "social", "角色进行了简短对话。")
-        return IsekaiActionResolution("table_talk", 0, False, "none", "输入没有明确构成消耗时间的角色行动。")
+    def classify_action(self, content: str, scene_context: dict[str, Any] | None = None) -> IsekaiActionResolution:
+        from backend.src.services.isekai_action_parser import IsekaiActionParser
+
+        return IsekaiActionParser(self).parse(content, scene_context=scene_context)
+
+    def resolve_action_type(self, action_type: str) -> IsekaiActionResolution:
+        actions = {
+            "manage_inventory": IsekaiActionResolution("manage_inventory", 5, True, "inventory", "角色整理、取出或丢弃物品。"),
+            "status_check": IsekaiActionResolution("status_check", 0, False, "none", "玩家查看状态，不推进时间。"),
+            "table_talk": IsekaiActionResolution("table_talk", 0, False, "none", "玩家询问系统或规则，不推进时间。"),
+            "clarification": IsekaiActionResolution("clarification", 0, False, "none", "输入目标存在歧义，需要玩家澄清。"),
+            "condition_failed": IsekaiActionResolution("condition_failed", 0, False, "none", "当前行动缺少必要前置条件。"),
+            "short_dialogue": IsekaiActionResolution("short_dialogue", 10, True, "social", "角色进行了简短对话。"),
+            "seek_shelter": IsekaiActionResolution("seek_shelter", 45, True, "shelter", "角色寻找可过夜或避险的庇护点。"),
+            "sleep": IsekaiActionResolution("sleep", 480, True, "sleep", "角色进行长时间睡眠。"),
+            "rest_short": IsekaiActionResolution("rest_short", 60, True, "rest", "角色短暂休整。"),
+            "eat_drink": IsekaiActionResolution("eat_drink", 15, True, "consume", "角色消耗食物或饮水。"),
+            "drink_water": IsekaiActionResolution("drink_water", 5, True, "drink", "角色饮用随身饮水。"),
+            "eat_food": IsekaiActionResolution("eat_food", 10, True, "eat", "角色食用随身干粮。"),
+            "refill_water": IsekaiActionResolution("refill_water", 15, True, "refill", "角色从可用水源补充水囊。"),
+            "cook": IsekaiActionResolution("cook", 60, True, "cook", "角色花时间准备食物。"),
+            "gather": IsekaiActionResolution("gather", 30, True, "gather", "角色采集或拾取附近物品。"),
+            "forage": IsekaiActionResolution("forage", 120, True, "forage", "角色搜寻食物或水源。"),
+            "travel": IsekaiActionResolution("travel", 90, True, "travel", "角色移动到新的地点。"),
+            "enter_location": IsekaiActionResolution("enter_location", 10, True, "move", "角色进入明确地点。"),
+            "leave_location": IsekaiActionResolution("leave_location", 10, True, "move", "角色离开当前地点。"),
+            "secure_shelter": IsekaiActionResolution("secure_shelter", 20, True, "shelter", "角色加固或封堵庇护点。"),
+            "approach": IsekaiActionResolution("approach", 15, True, "position", "角色靠近明确目标。"),
+            "hide": IsekaiActionResolution("hide", 10, True, "stealth", "角色隐藏身形以规避危险。"),
+            "avoid": IsekaiActionResolution("avoid", 15, True, "stealth", "角色绕开或规避危险。"),
+            "force_open": IsekaiActionResolution("force_open", 20, True, "force", "角色强行打开障碍物。"),
+            "negotiate": IsekaiActionResolution("negotiate", 12, True, "social", "角色讨价还价或打听价格。"),
+            "purchase": IsekaiActionResolution("purchase", 5, True, "trade", "角色支付货币购买物品或权益。"),
+            "repair": IsekaiActionResolution("repair", 15, True, "repair", "角色进行简单修理。"),
+            "eat_meal": IsekaiActionResolution("eat_meal", 20, True, "meal", "角色花时间吃热食。"),
+            "search": IsekaiActionResolution("search", 45, True, "search", "角色仔细搜索附近区域。"),
+            "observe": IsekaiActionResolution("observe", 15, True, "observe", "角色快速观察周围。"),
+        }
+        return actions.get(action_type, actions["table_talk"])
 
     def time_label(self, elapsed_minutes: int) -> str:
         minute = int(elapsed_minutes) % MINUTES_PER_DAY
@@ -138,10 +147,27 @@ class IsekaiTimeService:
             "search": {"fatigue": 2},
             "travel": {"fatigue": 3, "thirst": 1},
             "forage": {"fatigue": 4, "thirst": 1},
+            "gather": {"fatigue": 2, "thirst": 1},
+            "seek_shelter": {"fatigue": 1, "morale": 1},
+            "manage_inventory": {"fatigue": 0},
             "cook": {"fatigue": 1, "hunger": -2},
             "eat_drink": {"hunger": -8, "thirst": -12},
+            "drink_water": {"thirst": -12},
+            "eat_food": {"hunger": -8},
+            "refill_water": {"fatigue": 1},
             "rest_short": {"fatigue": -8, "sleep_need": -2},
             "sleep": {"fatigue": -25, "sleep_need": -35, "morale": 3},
+            "enter_location": {"fatigue": 1},
+            "leave_location": {"fatigue": 1},
+            "secure_shelter": {"fatigue": 2, "morale": 1},
+            "approach": {"fatigue": 1},
+            "hide": {"fatigue": 1, "morale": -1},
+            "avoid": {"fatigue": 2},
+            "force_open": {"fatigue": 3, "thirst": 1},
+            "negotiate": {"fatigue": 1},
+            "purchase": {},
+            "repair": {"fatigue": 2, "thirst": 1, "morale": 1},
+            "eat_meal": {"hunger": -10, "fatigue": -1, "morale": 2},
         }
         for key, value in extras.get(action.action_type, {}).items():
             delta[key] = delta.get(key, 0) + value
@@ -236,6 +262,103 @@ class IsekaiTimeService:
                 "什么意思",
                 "解释一下",
                 "这是什么意思",
+            ]
+        )
+
+    def _is_npc_dialogue_intent(self, text: str) -> bool:
+        return any(
+            phrase in text
+            for phrase in [
+                "你是什么",
+                "你是谁",
+                "你这里",
+                "你们",
+                "你知道",
+                "你见过",
+                "你能",
+                "请问",
+                "打听",
+            ]
+        )
+
+    def _is_sleep_intent(self, text: str) -> bool:
+        if "找" in text and any(word in text for word in ["过夜", "落脚", "庇护", "住处", "睡觉的地方"]):
+            return False
+        if any(
+            word in text
+            for word in [
+                "睡觉",
+                "睡到",
+                "睡一觉",
+                "入睡",
+                "安心睡",
+                "睡下",
+                "躺下睡",
+                "长休",
+                "sleep",
+            ]
+        ):
+            return True
+        if any(word in text for word in ["等待天亮", "等待真正的天亮", "等到天亮"]):
+            return True
+        if any(word in text for word in ["闭眼", "闭上眼睛"]) and any(
+            word in text for word in ["休息", "恢复精力", "放松身体", "天亮"]
+        ):
+            return True
+        if "过夜" in text:
+            return any(word in text for word in ["在这里", "原地", "就在", "这里", "营地", "休息"])
+        return False
+
+    def _is_seek_shelter(self, text: str) -> bool:
+        return any(
+            phrase in text
+            for phrase in [
+                "找个可以过夜",
+                "找一个可以过夜",
+                "找地方过夜",
+                "寻找庇护",
+                "找庇护",
+                "找落脚",
+                "寻找落脚",
+                "找住处",
+                "寻找住处",
+                "找睡觉的地方",
+                "找安全地方",
+                "找安全的地方",
+            ]
+        )
+
+    def _is_manage_inventory(self, text: str) -> bool:
+        return any(
+            word in text
+            for word in [
+                "扔掉",
+                "丢掉",
+                "丢弃",
+                "放下",
+                "收起",
+                "整理",
+                "拿出",
+                "取出",
+                "掏出",
+                "放进背包",
+                "放入背包",
+            ]
+        )
+
+    def _is_gather(self, text: str) -> bool:
+        return any(
+            word in text
+            for word in [
+                "摘",
+                "采",
+                "采摘",
+                "捡",
+                "拾起",
+                "捡起",
+                "拿起",
+                "收集",
+                "采集",
             ]
         )
 

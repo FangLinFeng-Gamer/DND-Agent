@@ -102,6 +102,20 @@ def test_isekai_character_panel_includes_inventory():
     assert "renderIsekaiInventory" not in game_js
 
 
+def test_isekai_character_race_and_class_are_localized():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+
+    generated_block = game_js.split("export function renderIsekaiGeneratedCharacter", 1)[1].split("export function", 1)[0]
+    character_block = game_js.split("function renderIsekaiCharacter", 1)[1].split("function", 1)[0]
+
+    assert "localizeRaceName" in game_js
+    assert "localizeClassName" in game_js
+    assert "[t(\"race\"), localizeRaceName(character.race)]" in generated_block
+    assert "[t(\"className\"), localizeClassName(character.class_name)]" in generated_block
+    assert "[t(\"race\"), localizeRaceName(character.race)]" in character_block
+    assert "[t(\"className\"), localizeClassName(character.class_name)]" in character_block
+
+
 def test_isekai_survival_panel_renders_time_fields():
     game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
     i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
@@ -157,3 +171,127 @@ def test_isekai_survival_panel_displays_player_positive_meters():
     assert '"energy": "精力"' in i18n
     assert '"sleepSufficiency": "睡眠充足"' in i18n
     assert '"survivalDisplayHint": "数值越高代表状态越好。"' in i18n
+
+
+def test_isekai_room_has_collapsed_dm_debug_panel():
+    html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="isekai-dm-debug"' in html
+    assert "renderIsekaiDmDebug" in game_js
+    assert "findLatestIsekaiDmMessage" in game_js
+    assert "scene_update_applied" in game_js
+    assert "visible_survival" in game_js
+    assert "formatIsekaiDebugBoolean" in game_js
+    assert ".isekai-dm-debug" in css
+    assert '"isekaiDmDebug": "DM Debug"' in i18n
+    assert '"isekaiDmDebug": "DM 调试"' in i18n
+    assert '"debugSceneUpdateApplied": "Scene Update Applied"' in i18n
+    assert '"debugSceneUpdateApplied": "场景更新生效"' in i18n
+
+
+def test_isekai_environment_summary_renders_pressure_goals():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    environment_block = game_js.split("function renderIsekaiEnvironmentSummary", 1)[1].split("export function", 1)[0]
+    assert "isekai_pressure_goals" in environment_block
+    assert "isekai-pressure-goals" in environment_block
+    assert ".isekai-pressure-goals" in css
+    assert '"isekaiPressureGoals": "Current Pressure"' in i18n
+    assert '"isekaiPressureGoals": "当前压力"' in i18n
+
+
+def test_isekai_environment_summary_renders_location_economy_entitlements_and_relationships():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    environment_block = game_js.split("function renderIsekaiEnvironmentSummary", 1)[1].split("export function", 1)[0]
+    assert "location_path" in environment_block
+    assert "isekai_economy" in environment_block
+    assert "formatIsekaiCurrency" in game_js
+    assert "renderIsekaiEconomySummary" in game_js
+    assert "transaction_log" in game_js
+    assert "entitlements" in game_js
+    assert "relationship_changes" in game_js
+    assert "isekai-economy-grid" in game_js
+    assert ".isekai-economy-grid" in css
+    assert '"isekaiCurrentLocation": "Current Location"' in i18n
+    assert '"isekaiCurrentLocation": "当前地点"' in i18n
+    assert '"isekaiCurrency": "Money"' in i18n
+    assert '"isekaiCurrency": "钱币"' in i18n
+    assert '"isekaiEntitlements": "Entitlements"' in i18n
+    assert '"isekaiEntitlements": "权益"' in i18n
+    assert '"isekaiTransactions": "Recent Transactions"' in i18n
+    assert '"isekaiTransactions": "近期交易"' in i18n
+    assert '"isekaiRelationships": "NPC Attitude"' in i18n
+    assert '"isekaiRelationships": "NPC 态度"' in i18n
+
+
+def test_isekai_dm_messages_render_interactables_and_suggestions():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    assert "renderIsekaiMessageExtras" in game_js
+    assert "isekai-interactables" in game_js
+    assert "isekai-suggested-actions" in game_js
+    assert "interactables" in game_js
+    assert "suggested_actions" in game_js
+    assert "els.isekaiMessageInput.value = action" in game_js
+    assert 'addEventListener("click"' in game_js
+    assert ".isekai-interactables" in css
+    assert ".isekai-suggested-actions" in css
+    assert '"isekaiInteractables": "Interactables"' in i18n
+    assert '"isekaiInteractables": "可互动内容"' in i18n
+    assert '"isekaiSuggestedActions": "Try"' in i18n
+    assert '"isekaiSuggestedActions": "可尝试行动"' in i18n
+
+
+def test_isekai_suggested_action_buttons_wrap_long_text():
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+
+    action_block = css.split(".isekai-suggested-action {", 1)[1].split("}", 1)[0]
+    assert "white-space: normal" in action_block
+    assert "overflow-wrap: anywhere" in action_block
+    assert "line-height:" in action_block
+
+
+def test_isekai_message_extras_do_not_fallback_to_current_scene_for_history():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+
+    extras_block = game_js.split("function renderIsekaiMessageExtras", 1)[1].split("function renderPendingCheck", 1)[0]
+    assert "state.selectedAdventure?.current_scene" not in extras_block
+    assert "scene.interactables" not in extras_block
+    assert "scene.suggested_actions" not in extras_block
+    assert "Array.isArray(metadata.interactables) ? metadata.interactables : []" in extras_block
+    assert "Array.isArray(metadata.suggested_actions) ? metadata.suggested_actions : []" in extras_block
+
+
+def test_isekai_world_panel_renders_pressure_clocks():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+    css = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+    i18n = (FRONTEND_DIR / "js/locales/en.js").read_text(encoding="utf-8") + (
+        FRONTEND_DIR / "js/locales/zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    environment_block = game_js.split("function renderIsekaiEnvironmentSummary", 1)[1].split("export function", 1)[0]
+    assert "pressure_clocks" in environment_block
+    assert "isekai-pressure-clock" in environment_block
+    assert "renderIsekaiPressureClocks" in game_js
+    assert ".isekai-pressure-clock" in css
+    assert ".isekai-pressure-clock-bar" in css
+    assert '"isekaiPressureClocks": "Pressure Clocks"' in i18n
+    assert '"isekaiPressureClocks": "压力时钟"' in i18n

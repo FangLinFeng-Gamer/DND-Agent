@@ -1,5 +1,6 @@
 from backend.src.schemas.adventure import AdventureCreate
 from backend.src.services.isekai import IsekaiSurvivalService
+from backend.src.services.isekai_event_catalog import IsekaiEventCatalog
 from backend.src.services.isekai_events import IsekaiWorldEventDirector
 from backend.src.services.world_events import WorldEventService
 
@@ -224,3 +225,16 @@ def test_world_event_text_is_normalized_to_fantasy_world_terms(store):
     assert "烤饼铺子" not in event.metadata["triggering_action"]
     assert "早餐套餐" not in event.metadata["triggering_action"]
     assert "炉饼摊" in event.metadata["triggering_action"]
+
+
+def test_event_catalog_contains_isekai_social_pressure_events():
+    seeds = IsekaiEventCatalog.SEEDS
+    combined_text = "\n".join(f"{seed['title']} {seed['description']} {seed['impact_context']}" for seed in seeds)
+    tags = {tag for seed in seeds for tag in seed["tags"]}
+
+    assert "异族税" in combined_text
+    assert "禁忌" in combined_text
+    assert any(word in combined_text for word in ["神殿", "领主"])
+    assert any(word in combined_text for word in ["巡逻", "宵禁"])
+    assert any(word in combined_text for word in ["物价", "价格", "声望", "警戒"])
+    assert {"outsider", "law", "survival_pressure"} <= tags

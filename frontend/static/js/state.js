@@ -164,6 +164,7 @@ export function bindElements() {
     "isekai-message-form",
     "isekai-message-input",
     "isekai-message-send",
+    "isekai-dm-debug",
     "world-state-phase",
     "world-state-clocks",
     "world-state-events",

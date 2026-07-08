@@ -327,11 +327,21 @@ class AdventureService:
         party_ids, party_characters = self._party_for_adventure(row["id"], row["character_id"])
         isekai_character = self._isekai_character_for_adventure(row["id"]) if mode == "isekai_survival" else None
         survival_state = self._isekai_survival_state_for_adventure(row["id"]) if mode == "isekai_survival" else None
+        current_scene = SceneState.model_validate(decode_json(row["current_scene_json"], {}))
+        if mode == "isekai_survival":
+            current_scene = self._isekai_scene_for_output(current_scene)
         world_events = (
             WorldEventService(self.store).list_known_for_adventure(row["id"])
             if mode == "isekai_survival"
             else []
         )
+        world_state = public_world_state_view(
+            normalize_world_state(decode_json(row["world_state_json"], {}), self._story_from_row(row))
+        )
+        if mode == "isekai_survival":
+            from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
+
+            world_state["isekai_pressure_goals"] = IsekaiWorldviewNormalizer().pressure_goals()
         return AdventureOut(
             id=row["id"],
             title=row["title"],
@@ -343,14 +353,18 @@ class AdventureService:
             party_characters=party_characters,
             status=row["status"],
             summary=row["summary"],
-            current_scene=SceneState.model_validate(decode_json(row["current_scene_json"], {})),
-            world_state=public_world_state_view(
-                normalize_world_state(decode_json(row["world_state_json"], {}), self._story_from_row(row))
-            ),
+            current_scene=current_scene,
+            world_state=world_state,
             isekai_character=isekai_character,
             survival_state=survival_state,
             world_events=world_events,
         )
+
+    def _isekai_scene_for_output(self, scene: SceneState) -> SceneState:
+        from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
+
+        repaired = IsekaiWorldviewNormalizer().repair_scene_state_payload(scene.model_dump())
+        return SceneState.model_validate(repaired)
 
     def _story_from_row(self, row: Row) -> StoryOut | None:
         snapshot = decode_json(row["story_snapshot_json"], {})
