@@ -1,0 +1,617 @@
+{
+  "schema_version": 1,
+  "content_pack_id": "isekai_containers_p0",
+  "kind": "container_catalog",
+  "container_catalog": {
+    "category_defaults": {
+      "liquid_vessel": {
+        "physical": { "size": "small", "weight_kg": 0.5, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "open", "close", "search", "drink", "refill_water", "pour"],
+        "tags": ["container", "liquid_container"],
+        "container": {
+          "capacity": { "amount": 1.0, "unit": "liter" },
+          "contents": []
+        },
+        "state": { "opened": false }
+      },
+      "soft_bag": {
+        "physical": { "size": "small", "weight_kg": 0.3, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "open", "close", "search"],
+        "tags": ["container", "soft_container"],
+        "container": {
+          "capacity": { "amount": 6, "unit": "slot" },
+          "contents": []
+        },
+        "state": { "opened": false }
+      },
+      "rigid_box": {
+        "physical": { "size": "small", "weight_kg": 1.2, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "open", "close", "search"],
+        "tags": ["container", "rigid_container"],
+        "container": {
+          "capacity": { "amount": 4, "unit": "slot" },
+          "contents": []
+        },
+        "state": { "opened": false }
+      },
+      "travel_pack": {
+        "physical": { "size": "medium", "weight_kg": 1.4, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "open", "close", "search"],
+        "tags": ["container", "travel_container"],
+        "container": {
+          "capacity": { "amount": 12, "unit": "slot" },
+          "contents": []
+        },
+        "state": { "opened": false }
+      },
+      "storage_chest": {
+        "physical": { "size": "medium", "weight_kg": 8.0, "portable": false, "condition": "worn" },
+        "affordances": ["observe", "open", "close", "search", "move"],
+        "tags": ["container", "storage"],
+        "container": {
+          "capacity": { "amount": 20, "unit": "slot" },
+          "contents": []
+        },
+        "state": { "opened": false }
+      },
+      "barrel_crate": {
+        "physical": { "size": "large", "weight_kg": 12.0, "portable": false, "condition": "worn" },
+        "affordances": ["observe", "open", "close", "search", "move"],
+        "tags": ["container", "bulk_storage"],
+        "container": {
+          "capacity": { "amount": 40, "unit": "slot" },
+          "contents": []
+        },
+        "state": { "opened": false }
+      },
+      "furniture_storage": {
+        "physical": { "size": "large", "weight_kg": 25.0, "portable": false, "condition": "worn" },
+        "affordances": ["observe", "open", "close", "search"],
+        "tags": ["container", "furniture_storage"],
+        "container": {
+          "capacity": { "amount": 30, "unit": "slot" },
+          "contents": []
+        },
+        "state": { "opened": false }
+      },
+      "ceramic_storage": {
+        "physical": { "size": "medium", "weight_kg": 3.0, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "open", "close", "search", "pour"],
+        "tags": ["container", "ceramic_container"],
+        "container": {
+          "capacity": { "amount": 8, "unit": "slot" },
+          "contents": []
+        },
+        "state": { "opened": false }
+      },
+      "basket": {
+        "physical": { "size": "medium", "weight_kg": 0.8, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "open", "close", "search"],
+        "tags": ["container", "woven_container"],
+        "container": {
+          "capacity": { "amount": 10, "unit": "slot" },
+          "contents": []
+        },
+        "state": { "opened": true }
+      },
+      "document_case": {
+        "physical": { "size": "small", "weight_kg": 0.5, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "open", "close", "search"],
+        "tags": ["container", "document_container"],
+        "container": {
+          "capacity": { "amount": 3, "unit": "slot" },
+          "contents": []
+        },
+        "state": { "opened": false }
+      }
+    },
+    "entries": [
+      {
+        "catalog_id": "container_waterskin",
+        "name": "皮水囊",
+        "aliases": ["水囊", "皮囊", "装水皮囊"],
+        "description": "一只旧皮水囊，缝线处有反复补过的痕迹。",
+        "object_type": "container",
+        "category": "liquid_vessel",
+        "physical_override": { "weight_kg": 0.25 },
+        "container_override": { "capacity": { "amount": 1.2, "unit": "liter" }, "contents": [] },
+        "default_tags": ["leather", "water_container"]
+      },
+      {
+        "catalog_id": "container_flat_waterskin",
+        "name": "扁皮水袋",
+        "aliases": ["水袋", "扁水囊"],
+        "description": "一只贴身携带的扁皮水袋，容量不大但不太碍事。",
+        "object_type": "container",
+        "category": "liquid_vessel",
+        "physical_override": { "weight_kg": 0.18 },
+        "container_override": { "capacity": { "amount": 0.8, "unit": "liter" }, "contents": [] },
+        "default_tags": ["leather", "water_container"]
+      },
+      {
+        "catalog_id": "container_dented_kettle",
+        "name": "凹陷水壶",
+        "aliases": ["水壶", "旧水壶", "金属水壶"],
+        "description": "壶身被撞凹，壶嘴有干涸的水垢。",
+        "object_type": "container",
+        "category": "liquid_vessel",
+        "physical_override": { "weight_kg": 0.8, "condition": "worn" },
+        "container_override": { "capacity": { "amount": 1.5, "unit": "liter" }, "contents": [] },
+        "default_tags": ["metal", "water_container"]
+      },
+      {
+        "catalog_id": "container_ceramic_flask",
+        "name": "陶水瓶",
+        "aliases": ["陶瓶", "水瓶"],
+        "description": "一只窄口陶水瓶，瓶身有粗糙釉色。",
+        "object_type": "container",
+        "category": "liquid_vessel",
+        "physical_override": { "weight_kg": 0.7, "condition": "worn" },
+        "container_override": { "capacity": { "amount": 0.9, "unit": "liter" }, "contents": [] },
+        "default_tags": ["ceramic", "water_container"]
+      },
+      {
+        "catalog_id": "container_stoppered_bottle",
+        "name": "木塞玻璃瓶",
+        "aliases": ["玻璃瓶", "木塞瓶", "瓶子"],
+        "description": "一只带木塞的厚玻璃瓶，瓶底沉着一圈旧水垢。",
+        "object_type": "container",
+        "category": "liquid_vessel",
+        "physical_override": { "weight_kg": 0.45, "condition": "worn" },
+        "container_override": { "capacity": { "amount": 0.6, "unit": "liter" }, "contents": [] },
+        "default_tags": ["glass", "water_container"]
+      },
+      {
+        "catalog_id": "container_small_wine_flask",
+        "name": "小酒壶",
+        "aliases": ["酒壶", "扁酒壶"],
+        "description": "一只扁小酒壶，外壳被手掌磨得发亮。",
+        "object_type": "container",
+        "category": "liquid_vessel",
+        "physical_override": { "weight_kg": 0.3 },
+        "container_override": { "capacity": { "amount": 0.4, "unit": "liter" }, "contents": [] },
+        "default_tags": ["metal", "liquid_container"]
+      },
+      {
+        "catalog_id": "container_canvas_pouch",
+        "name": "粗布小袋",
+        "aliases": ["小布袋", "布袋", "粗布袋"],
+        "description": "一个粗布缝成的小袋，袋口用细绳收紧。",
+        "object_type": "container",
+        "category": "soft_bag",
+        "physical_override": { "weight_kg": 0.08 },
+        "container_override": { "capacity": { "amount": 3, "unit": "slot" }, "contents": [] },
+        "default_tags": ["cloth", "pouch"]
+      },
+      {
+        "catalog_id": "container_belt_pouch",
+        "name": "腰包",
+        "aliases": ["皮腰包", "小腰袋"],
+        "description": "一个能挂在腰带上的小皮包，盖扣已经磨松。",
+        "object_type": "container",
+        "category": "soft_bag",
+        "physical_override": { "weight_kg": 0.15 },
+        "container_override": { "capacity": { "amount": 4, "unit": "slot" }, "contents": [] },
+        "default_tags": ["leather", "pouch"]
+      },
+      {
+        "catalog_id": "container_coin_purse",
+        "name": "钱袋",
+        "aliases": ["钱囊", "小钱袋"],
+        "description": "一个旧钱袋，袋底有被铜币压出的圆痕。",
+        "object_type": "container",
+        "category": "soft_bag",
+        "physical_override": { "weight_kg": 0.08 },
+        "container_override": { "capacity": { "amount": 3, "unit": "slot" }, "contents": [] },
+        "default_tags": ["cloth", "money_container"]
+      },
+      {
+        "catalog_id": "container_herb_pouch",
+        "name": "药草袋",
+        "aliases": ["草药袋", "药袋"],
+        "description": "一个带淡淡草药味的小袋，布料已经被染成暗绿。",
+        "object_type": "container",
+        "category": "soft_bag",
+        "physical_override": { "weight_kg": 0.1 },
+        "container_override": { "capacity": { "amount": 4, "unit": "slot" }, "contents": [] },
+        "default_tags": ["cloth", "herb_container"]
+      },
+      {
+        "catalog_id": "container_leather_satchel",
+        "name": "皮挎包",
+        "aliases": ["挎包", "皮包"],
+        "description": "一个旧皮挎包，肩带被汗水浸得发暗。",
+        "object_type": "container",
+        "category": "travel_pack",
+        "physical_override": { "weight_kg": 0.9 },
+        "container_override": { "capacity": { "amount": 9, "unit": "slot" }, "contents": [] },
+        "default_tags": ["leather", "travel"]
+      },
+      {
+        "catalog_id": "container_travel_backpack",
+        "name": "旅行背包",
+        "aliases": ["背包", "行囊"],
+        "description": "一个结实的旅行背包，外侧有几处旧补丁。",
+        "object_type": "container",
+        "category": "travel_pack",
+        "physical_override": { "weight_kg": 1.6 },
+        "container_override": { "capacity": { "amount": 15, "unit": "slot" }, "contents": [] },
+        "default_tags": ["cloth", "leather", "travel"]
+      },
+      {
+        "catalog_id": "container_hunter_pack",
+        "name": "猎人背囊",
+        "aliases": ["猎人包", "背囊"],
+        "description": "一个猎人常用的背囊，侧边还缝着挂绳和小扣。",
+        "object_type": "container",
+        "category": "travel_pack",
+        "physical_override": { "weight_kg": 1.4 },
+        "container_override": { "capacity": { "amount": 12, "unit": "slot" }, "contents": [] },
+        "default_tags": ["leather", "hunter", "travel"]
+      },
+      {
+        "catalog_id": "container_roll_bundle",
+        "name": "卷布包",
+        "aliases": ["布卷包", "卷包"],
+        "description": "一卷用布条扎住的软包，摊开后能放一些扁平物件。",
+        "object_type": "container",
+        "category": "soft_bag",
+        "physical_override": { "size": "small", "weight_kg": 0.25 },
+        "container_override": { "capacity": { "amount": 5, "unit": "slot" }, "contents": [] },
+        "default_tags": ["cloth", "roll"]
+      },
+      {
+        "catalog_id": "container_small_wooden_box",
+        "name": "小木盒",
+        "aliases": ["木盒", "木匣"],
+        "description": "一个手掌大的小木盒，盒角被磕掉了一点。",
+        "object_type": "container",
+        "category": "rigid_box",
+        "physical_override": { "weight_kg": 0.5 },
+        "container_override": { "capacity": { "amount": 3, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "box"]
+      },
+      {
+        "catalog_id": "container_tin_box",
+        "name": "铁皮盒",
+        "aliases": ["铁盒", "小铁盒"],
+        "description": "一个薄铁皮盒，盖子开合时会发出轻响。",
+        "object_type": "container",
+        "category": "rigid_box",
+        "physical_override": { "weight_kg": 0.45, "condition": "worn" },
+        "container_override": { "capacity": { "amount": 3, "unit": "slot" }, "contents": [] },
+        "default_tags": ["metal", "box"]
+      },
+      {
+        "catalog_id": "container_tinder_box",
+        "name": "火绒盒",
+        "aliases": ["火盒", "引火盒"],
+        "description": "一个用来收纳火绒的小盒，内壁带着焦黑痕迹。",
+        "object_type": "container",
+        "category": "rigid_box",
+        "physical_override": { "weight_kg": 0.25 },
+        "container_override": { "capacity": { "amount": 2, "unit": "slot" }, "contents": [] },
+        "default_tags": ["metal", "fire_kit"]
+      },
+      {
+        "catalog_id": "container_needle_box",
+        "name": "针线盒",
+        "aliases": ["针盒", "缝补盒"],
+        "description": "一个薄木针线盒，盒盖上还有针尖划出的细痕。",
+        "object_type": "container",
+        "category": "rigid_box",
+        "physical_override": { "weight_kg": 0.2 },
+        "container_override": { "capacity": { "amount": 3, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "sewing"]
+      },
+      {
+        "catalog_id": "container_jewelry_box",
+        "name": "旧首饰盒",
+        "aliases": ["首饰盒", "小饰盒"],
+        "description": "一个旧首饰盒，绒布内衬已经褪色。",
+        "object_type": "container",
+        "category": "rigid_box",
+        "physical_override": { "weight_kg": 0.6 },
+        "container_override": { "capacity": { "amount": 4, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "valuables_container"]
+      },
+      {
+        "catalog_id": "container_bone_case",
+        "name": "骨制小盒",
+        "aliases": ["骨盒", "骨匣"],
+        "description": "一个由骨片拼成的小盒，缝隙里积着细灰。",
+        "object_type": "container",
+        "category": "rigid_box",
+        "physical_override": { "weight_kg": 0.35 },
+        "container_override": { "capacity": { "amount": 2, "unit": "slot" }, "contents": [] },
+        "default_tags": ["bone", "box"]
+      },
+      {
+        "catalog_id": "container_map_tube",
+        "name": "地图筒",
+        "aliases": ["卷轴筒", "皮筒"],
+        "description": "一个硬皮地图筒，两端用木塞封住。",
+        "object_type": "container",
+        "category": "document_case",
+        "physical_override": { "weight_kg": 0.45 },
+        "container_override": { "capacity": { "amount": 2, "unit": "slot" }, "contents": [] },
+        "default_tags": ["leather", "map_container"]
+      },
+      {
+        "catalog_id": "container_document_case",
+        "name": "文书匣",
+        "aliases": ["文书盒", "文件匣"],
+        "description": "一个扁平文书匣，边缘用铜片包着。",
+        "object_type": "container",
+        "category": "document_case",
+        "physical_override": { "size": "small", "weight_kg": 0.8 },
+        "container_override": { "capacity": { "amount": 4, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "document_container"]
+      },
+      {
+        "catalog_id": "container_wooden_chest",
+        "name": "木箱",
+        "aliases": ["箱子", "木头箱"],
+        "description": "一个厚木板钉成的箱子，箱盖边缘已经翘起。",
+        "object_type": "container",
+        "category": "storage_chest",
+        "physical_override": { "weight_kg": 7.5, "condition": "worn" },
+        "container_override": { "capacity": { "amount": 18, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "storage"]
+      },
+      {
+        "catalog_id": "container_iron_banded_chest",
+        "name": "铁箍箱",
+        "aliases": ["铁箍木箱", "加固箱"],
+        "description": "一个用铁箍加固的木箱，搬动时会拖出沉闷声。",
+        "object_type": "container",
+        "category": "storage_chest",
+        "physical_override": { "weight_kg": 12.0 },
+        "container_override": { "capacity": { "amount": 24, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "metal", "storage"]
+      },
+      {
+        "catalog_id": "container_travel_trunk",
+        "name": "旅行箱",
+        "aliases": ["行李箱", "旧旅行箱"],
+        "description": "一个旧旅行箱，皮面干裂，四角包着铜片。",
+        "object_type": "container",
+        "category": "storage_chest",
+        "physical_override": { "weight_kg": 6.0 },
+        "container_override": { "capacity": { "amount": 16, "unit": "slot" }, "contents": [] },
+        "default_tags": ["leather", "travel", "storage"]
+      },
+      {
+        "catalog_id": "container_cargo_box",
+        "name": "货箱",
+        "aliases": ["货物箱", "运输箱"],
+        "description": "一个用粗钉封边的货箱，箱面有褪色商记。",
+        "object_type": "container",
+        "category": "storage_chest",
+        "physical_override": { "size": "medium", "weight_kg": 9.0 },
+        "container_override": { "capacity": { "amount": 22, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "cargo"]
+      },
+      {
+        "catalog_id": "container_small_strongbox",
+        "name": "小铁匣",
+        "aliases": ["铁匣", "小保险匣"],
+        "description": "一个沉重的小铁匣，匣面有旧刮痕和发黑的边角。",
+        "object_type": "container",
+        "category": "rigid_box",
+        "physical_override": { "weight_kg": 2.0 },
+        "container_override": { "capacity": { "amount": 3, "unit": "slot" }, "contents": [] },
+        "default_tags": ["metal", "valuables_container"]
+      },
+      {
+        "catalog_id": "container_wooden_barrel",
+        "name": "木桶",
+        "aliases": ["桶", "旧木桶"],
+        "description": "一个用铁箍束住的木桶，桶缝间有旧污痕。",
+        "object_type": "container",
+        "category": "barrel_crate",
+        "physical_override": { "weight_kg": 10.0 },
+        "container_override": { "capacity": { "amount": 35, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "barrel"]
+      },
+      {
+        "catalog_id": "container_water_bucket",
+        "name": "水桶",
+        "aliases": ["提桶", "木水桶"],
+        "description": "一个带提手的水桶，桶底还残着潮湿水印。",
+        "object_type": "container",
+        "category": "liquid_vessel",
+        "physical_override": { "size": "medium", "weight_kg": 1.8 },
+        "container_override": { "capacity": { "amount": 8.0, "unit": "liter" }, "contents": [] },
+        "default_tags": ["wood", "water_container"]
+      },
+      {
+        "catalog_id": "container_salt_barrel",
+        "name": "盐桶",
+        "aliases": ["小盐桶", "盐木桶"],
+        "description": "一个矮盐桶，桶沿结着一圈白霜。",
+        "object_type": "container",
+        "category": "barrel_crate",
+        "physical_override": { "size": "medium", "weight_kg": 8.0 },
+        "container_override": { "capacity": { "amount": 20, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "salt_storage"]
+      },
+      {
+        "catalog_id": "container_apple_crate",
+        "name": "苹果筐",
+        "aliases": ["果筐", "木筐"],
+        "description": "一个粗木条钉成的果筐，边角还沾着干果皮。",
+        "object_type": "container",
+        "category": "basket",
+        "physical_override": { "size": "medium", "weight_kg": 1.1 },
+        "container_override": { "capacity": { "amount": 12, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "food_storage"]
+      },
+      {
+        "catalog_id": "container_wicker_basket",
+        "name": "柳条篮",
+        "aliases": ["篮子", "藤篮"],
+        "description": "一个柳条编成的篮子，提手有几处断裂。",
+        "object_type": "container",
+        "category": "basket",
+        "physical_override": { "weight_kg": 0.7, "condition": "damaged" },
+        "container_override": { "capacity": { "amount": 8, "unit": "slot" }, "contents": [] },
+        "default_tags": ["woven", "basket"]
+      },
+      {
+        "catalog_id": "container_reed_basket",
+        "name": "芦苇篮",
+        "aliases": ["草篮", "芦篮"],
+        "description": "一个用芦苇编成的轻篮，闻起来有淡淡水草味。",
+        "object_type": "container",
+        "category": "basket",
+        "physical_override": { "weight_kg": 0.45 },
+        "container_override": { "capacity": { "amount": 6, "unit": "slot" }, "contents": [] },
+        "default_tags": ["woven", "basket"]
+      },
+      {
+        "catalog_id": "container_broken_crate",
+        "name": "破板条箱",
+        "aliases": ["破箱", "板条箱"],
+        "description": "一个裂开的板条箱，箱壁缺了两根木条。",
+        "object_type": "container",
+        "category": "barrel_crate",
+        "physical_override": { "weight_kg": 6.0, "condition": "damaged" },
+        "container_override": { "capacity": { "amount": 14, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "damaged_storage"]
+      },
+      {
+        "catalog_id": "container_ceramic_jar",
+        "name": "陶罐",
+        "aliases": ["罐子", "陶缸"],
+        "description": "一个厚腹陶罐，罐口用旧布塞住。",
+        "object_type": "container",
+        "category": "ceramic_storage",
+        "physical_override": { "weight_kg": 2.5 },
+        "container_override": { "capacity": { "amount": 10, "unit": "slot" }, "contents": [] },
+        "default_tags": ["ceramic", "jar"]
+      },
+      {
+        "catalog_id": "container_small_clay_pot",
+        "name": "小陶钵",
+        "aliases": ["陶钵", "小陶罐"],
+        "description": "一个粗陶小钵，内壁有被勺子刮过的痕迹。",
+        "object_type": "container",
+        "category": "ceramic_storage",
+        "physical_override": { "size": "small", "weight_kg": 0.9 },
+        "container_override": { "capacity": { "amount": 4, "unit": "slot" }, "contents": [] },
+        "default_tags": ["ceramic", "bowl"]
+      },
+      {
+        "catalog_id": "container_oil_jar",
+        "name": "油罐",
+        "aliases": ["小油罐", "油陶罐"],
+        "description": "一个窄口油罐，罐口附近有发亮的油痕。",
+        "object_type": "container",
+        "category": "ceramic_storage",
+        "physical_override": { "weight_kg": 1.4 },
+        "container_override": { "capacity": { "amount": 1.2, "unit": "liter" }, "contents": [] },
+        "default_tags": ["ceramic", "liquid_container"]
+      },
+      {
+        "catalog_id": "container_cupboard",
+        "name": "橱柜",
+        "aliases": ["柜子", "木橱柜"],
+        "description": "一个靠墙放着的木橱柜，柜门有些歪斜。",
+        "object_type": "container",
+        "category": "furniture_storage",
+        "physical_override": { "size": "large", "weight_kg": 30.0 },
+        "container_override": { "capacity": { "amount": 35, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "furniture"]
+      },
+      {
+        "catalog_id": "container_wall_cabinet",
+        "name": "壁柜",
+        "aliases": ["墙柜", "小壁柜"],
+        "description": "一个嵌在墙上的壁柜，木门颜色比墙面更深。",
+        "object_type": "container",
+        "category": "furniture_storage",
+        "physical_override": { "size": "medium", "weight_kg": 18.0 },
+        "container_override": { "capacity": { "amount": 16, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "furniture"]
+      },
+      {
+        "catalog_id": "container_counter_drawer",
+        "name": "柜台抽屉",
+        "aliases": ["抽屉", "柜台下抽屉"],
+        "description": "一个藏在柜台下的抽屉，拉手被油污磨得发亮。",
+        "object_type": "container",
+        "category": "furniture_storage",
+        "physical_override": { "size": "small", "weight_kg": 4.0 },
+        "container_override": { "capacity": { "amount": 8, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "drawer"]
+      },
+      {
+        "catalog_id": "container_bedside_drawer",
+        "name": "床头抽屉",
+        "aliases": ["床边抽屉", "小抽屉"],
+        "description": "一个床头小抽屉，里面传出淡淡霉味。",
+        "object_type": "container",
+        "category": "furniture_storage",
+        "physical_override": { "size": "small", "weight_kg": 3.5 },
+        "container_override": { "capacity": { "amount": 6, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "drawer"]
+      },
+      {
+        "catalog_id": "container_linen_cabinet",
+        "name": "布草柜",
+        "aliases": ["布柜", "亚麻柜"],
+        "description": "一个放布草的高柜，柜缝里挤出一点灰白布角。",
+        "object_type": "container",
+        "category": "furniture_storage",
+        "physical_override": { "size": "large", "weight_kg": 28.0 },
+        "container_override": { "capacity": { "amount": 32, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "cloth_storage"]
+      },
+      {
+        "catalog_id": "container_underfloor_box",
+        "name": "地板暗盒",
+        "aliases": ["暗盒", "地板盒"],
+        "description": "一个藏在松动地板下的小盒，边缘沾着干土。",
+        "object_type": "container",
+        "category": "rigid_box",
+        "physical_override": { "weight_kg": 0.8 },
+        "container_override": { "capacity": { "amount": 4, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "hidden_container"]
+      },
+      {
+        "catalog_id": "container_stone_cache_pot",
+        "name": "石缝藏罐",
+        "aliases": ["藏罐", "石缝罐"],
+        "description": "一个塞在石缝里的小罐，外面涂着土色泥浆。",
+        "object_type": "container",
+        "category": "ceramic_storage",
+        "physical_override": { "size": "small", "weight_kg": 0.7 },
+        "container_override": { "capacity": { "amount": 3, "unit": "slot" }, "contents": [] },
+        "default_tags": ["ceramic", "hidden_container"]
+      },
+      {
+        "catalog_id": "container_merchant_sample_case",
+        "name": "商贩样品箱",
+        "aliases": ["样品箱", "商贩箱"],
+        "description": "一个分格样品箱，箱盖内侧还贴着模糊价签。",
+        "object_type": "container",
+        "category": "storage_chest",
+        "physical_override": { "weight_kg": 5.0 },
+        "container_override": { "capacity": { "amount": 12, "unit": "slot" }, "contents": [] },
+        "default_tags": ["wood", "trade"]
+      },
+      {
+        "catalog_id": "container_saddle_bag",
+        "name": "鞍袋",
+        "aliases": ["马鞍袋", "驮袋"],
+        "description": "一对搭在鞍侧的皮袋，袋口沾着路上的尘土。",
+        "object_type": "container",
+        "category": "travel_pack",
+        "physical_override": { "size": "medium", "weight_kg": 1.8 },
+        "container_override": { "capacity": { "amount": 14, "unit": "slot" }, "contents": [] },
+        "default_tags": ["leather", "travel", "mount_gear"]
+      }
+    ]
+  }
+}

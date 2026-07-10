@@ -260,15 +260,17 @@ WorldChunkGrid.bounds_chunk：这个区域内允许哪些 chunk 坐标存在。
     "z_range": { "min": 0, "max": 8 }
   },
   "grid_id": "grid_north_slope_wilds",
-  "climate": {
-    "temperature": "cold",
-    "rainfall": "moderate",
-    "season": "late_autumn"
+  "climate_profile": {
+    "climate_zone": "cold_temperate",
+    "temperature_band": "cold",
+    "rainfall_band": "wet",
+    "humidity": "medium",
+    "seasonality": "strong",
+    "prevailing_wind": "northwest",
+    "snow_months": ["winter"]
   },
-  "ecology": {
-    "dominant_biomes": ["pine_forest", "rocky_ridge", "cold_stream"],
-    "common_threats": ["night_wolf", "parasite_carrion"]
-  },
+  "biome_tags": ["cold_forest", "rocky_highland", "water_source_nearby", "predator_habitat"],
+  "danger_tags": ["night_wolf_activity"],
   "factions": [
     {
       "id": "graystone_hunters",
@@ -327,17 +329,31 @@ chunk 坐标从哪里到哪里？
   },
   "size_profile": "wilderness_100m",
   "terrain": {
-    "primary": "rocky_ridge",
-    "secondary": ["thin_pines", "loose_stone"],
+    "landform": "ridge",
+    "elevation_band": "highland",
     "slope": "steep",
-    "ground": "unstable"
+    "ground": "rocky_soil",
+    "soil": "thin",
+    "rock": "granite",
+    "water_presence": "none",
+    "vegetation_cover": "sparse_forest",
+    "visibility": "medium",
+    "cover": "medium",
+    "base_travel_cost_minutes": 35,
+    "terrain_tags": ["mountain", "forest_edge", "wind_exposed"]
   },
-  "environment": {
-    "visibility": "wide",
-    "cover": "sparse",
-    "water": "none",
-    "light": "dusk"
+  "base_fields": {
+    "elevation": 0.72,
+    "moisture": 0.35,
+    "temperature_offset": -0.15,
+    "rockiness": 0.8,
+    "soil_depth": 0.25,
+    "water_flow": 0.1,
+    "civilization_pressure": 0.15,
+    "danger_pressure": 0.55,
+    "abnormal_pressure": 0.05
   },
+  "biome_tags": ["cold_forest", "rocky_highland", "predator_habitat"],
   "site_slots": {
     "primary_site_id": "hunter_cabin_01",
     "secondary_site_ids": []
@@ -617,14 +633,14 @@ chunk 坐标从哪里到哪里？
 {
   "id": "kitchen_door_01",
   "name": "后厨门",
-  "type": "portal",
+  "object_type": "portal",
+  "visibility": "visible",
   "placement": {
     "kind": "zone",
     "node_id": "old_furnace_inn_front_hall",
     "zone_id": "front_counter_area",
     "local_position": "behind_counter_side",
     "relation": "at_edge",
-    "visibility": "visible",
     "reachability": "reachable"
   },
   "affordances": ["observe", "enter", "knock"]
@@ -657,14 +673,14 @@ chunk 坐标从哪里到哪里？
 {
   "id": "counter_01",
   "name": "旧木柜台",
-  "type": "fixture",
+  "object_type": "fixture",
+  "visibility": "visible",
   "placement": {
     "kind": "zone",
     "node_id": "old_furnace_inn_front_hall",
     "zone_id": "front_counter_area",
     "local_position": "north_side",
     "relation": "occupies",
-    "visibility": "visible",
     "reachability": "partially_reachable"
   },
   "spatial": {
@@ -683,13 +699,13 @@ chunk 坐标从哪里到哪里？
 {
   "id": "ridge_warning_post_01",
   "name": "歪斜的警示木牌",
-  "type": "clue",
+  "object_type": "clue",
+  "visibility": "visible",
   "placement": {
     "kind": "chunk",
     "chunk_id": "chunk_north_slope_12_08_02",
     "local_position": "west_edge",
     "relation": "standing",
-    "visibility": "visible",
     "reachability": "reachable"
   },
   "affordances": ["observe", "read"]
@@ -702,18 +718,19 @@ chunk 坐标从哪里到哪里？
 {
   "id": "stew_bowl_01",
   "name": "热炖菜一碗",
-  "type": "food",
+  "object_type": "food",
+  "visibility": "visible",
   "placement": {
     "kind": "on_object",
     "object_id": "counter_01",
     "surface": "customer_side",
     "relation": "on",
-    "visibility": "visible",
     "reachability": "reachable"
   },
   "ownership": {
-    "owner_actor_id": "innkeeper_01",
-    "requires_purchase": true
+    "owner_id": "innkeeper_01",
+    "faction_id": "graystone_town",
+    "legal_status": "for_sale"
   },
   "affordances": ["observe", "purchase", "eat_meal"]
 }
@@ -801,6 +818,270 @@ chunk 坐标从哪里到哪里？
 }
 ```
 
+## 字段说明
+
+本节解释本文件中出现的数据结构字段。实现时以本节为 schema 字段语义来源；JSON 示例只用于展示组合方式。
+
+### 命名约定
+
+| 字段 | 含义 |
+| --- | --- |
+| `type` | 只用于空间结构或非 WorldObject 实体的分类，例如 `Region.type`、`Site.type`、`LocationNode.type`、`Zone.type`、`CreatureGroup.type`。它回答“这个空间/实体是什么类别”。 |
+| `object_type` | 只用于 `WorldObject` 的规则分类，例如 `portal`、`fixture`、`food`、`clue`。它回答“这个对象按哪套对象规则结算”。 |
+| `id` | 稳定唯一标识。不能依赖中文名，不能因本地化、改名或玩家未知而改变。 |
+| `name` | 玩家可见或 DM 可使用的显示名。 |
+| `tags` | 非权威分类标签，只用于检索、生成权重、叙事和规则辅助判断。不能替代 `type`、`object_type` 或权威状态字段。 |
+| `known_to_player` | 玩家是否已经知道这个空间事实。未知不等于不存在，只是不应直接投影给玩家。 |
+
+### World 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 当前世界实例 ID。一个存档或一次冒险应只有一个当前权威 World。 |
+| `name` | 世界显示名。 |
+| `seed` | 世界生成用确定性随机种子。相同输入和相同规则版本下应生成一致结果。 |
+| `active_content_pack_ids` | 当前世界启用的内容包 ID 列表。世界生成、对象实例化、生态目录都只能引用启用内容包。 |
+| `chunk_size_profiles` | 区块尺寸配置表，key 是尺寸 profile ID，例如 `wilderness_100m`。 |
+| `chunk_size_profiles.*.width_meters` | 一个 chunk 在 x 方向代表的物理宽度。 |
+| `chunk_size_profiles.*.height_meters` | 一个 chunk 在 y 方向代表的物理高度。 |
+| `chunk_size_profiles.*.z_step_meters` | z 坐标每上升或下降 1 格代表的高度差。 |
+| `current_actor_locations` | 当前所有需要精确追踪位置的 actor 位置表。key 是 actor ID，例如 `player`。 |
+
+### Region 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 大区域 ID。 |
+| `name` | 大区域显示名。 |
+| `type` | 大区域类型，例如荒野、城镇区域、地下区域。 |
+| `world_id` | 所属 World ID。 |
+| `bounds_world` | Region 在世界米制坐标中的边界。它决定该 Region 覆盖的物理范围。 |
+| `bounds_world.origin_meters` | Region 网格原点对应的世界坐标。 |
+| `bounds_world.min_meters` | Region 覆盖范围的最小 x/y 米制坐标。 |
+| `bounds_world.max_meters` | Region 覆盖范围的最大 x/y 米制坐标。 |
+| `bounds_world.z_range` | Region 允许的 z 层范围。 |
+| `grid_id` | Region 使用的 `WorldChunkGrid` ID。 |
+| `climate_profile` | 长期气候包络。具体字段见气候地形形成规则文档。 |
+| `biome_tags` | 由气候、地形、水系、文明压力等推导出的生态标签。不能由 LLM 随意写入。 |
+| `danger_tags` | 区域危险倾向标签，用于生态、遭遇和风险时钟生成。 |
+| `factions` | 对该 Region 有影响力的势力列表。 |
+| `factions[].id` | 势力 ID。 |
+| `factions[].influence` | 势力在该 Region 的影响强度。 |
+| `risk_clocks` | 区域级风险时钟表，key 是风险 ID。 |
+| `risk_clocks.*.value` | 当前风险进度。 |
+| `risk_clocks.*.max` | 风险触发或升级阈值。 |
+
+### WorldChunkGrid 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 网格 ID。 |
+| `region_id` | 所属 Region ID。 |
+| `size_profile` | 该网格默认使用的 chunk 尺寸 profile。 |
+| `origin_chunk` | 网格原点 chunk 坐标。 |
+| `bounds_chunk` | 网格允许的 chunk 坐标范围。 |
+| `bounds_chunk.min` | 最小 x/y/z chunk 坐标。 |
+| `bounds_chunk.max` | 最大 x/y/z chunk 坐标。 |
+
+### WorldChunk 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | chunk ID。 |
+| `grid_id` | 所属 `WorldChunkGrid` ID。 |
+| `region_id` | 所属 Region ID。 |
+| `coord` | chunk 的 x/y/z 网格坐标。 |
+| `size_profile` | 该 chunk 使用的尺寸 profile。允许覆盖 grid 默认值，但必须引用已定义 profile。 |
+| `terrain` | chunk 的权威地形事实。字段含义见气候地形形成规则文档。 |
+| `base_fields` | 世界生成阶段产生的连续基础场。字段含义见气候地形形成规则文档。 |
+| `biome_tags` | 该 chunk 的生态标签。由 formation/validator 推导。 |
+| `site_slots` | chunk 上的 site 承载槽位。 |
+| `site_slots.primary_site_id` | 该 chunk 的主 Site。完整可进入建筑默认占用此槽。 |
+| `site_slots.secondary_site_ids` | 附属微型 Site 列表，例如井、告示牌、马槽。 |
+| `known_to_player` | 玩家是否知道该 chunk 或已进入/观察过该 chunk。 |
+| `tags` | chunk 的辅助标签。不能替代 `terrain` 或 `biome_tags`。 |
+
+### ChunkEdge 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | chunk 边 ID。 |
+| `source_chunk_id` | 出发 chunk。 |
+| `target_chunk_id` | 目标 chunk。 |
+| `direction` | 从 source 到 target 的方向描述。 |
+| `adjacent` | 两个 chunk 是否物理接壤。接壤不代表可通行。 |
+| `passability` | 通行状态。 |
+| `passability.state` | 通行枚举：`open` 可通行、`difficult` 可通行但代价高、`conditional` 满足条件后可通行、`blocked` 不可直接通行。 |
+| `passability.conditions` | `conditional` 状态需要满足的条件列表。 |
+| `passability.blocked_reason` | 不可通行或当前不可通行的原因。 |
+| `traversal` | 通行成本和风险。 |
+| `traversal.base_time_minutes` | 无额外修正时的基础耗时。不可通行时为 `null`。 |
+| `traversal.difficulty` | 移动难度，用于体力、失败率和叙事。 |
+| `traversal.movement_type` | 默认移动方式，例如步行、攀爬、游泳。 |
+| `traversal.risk_tags` | 移动过程可能触发的风险标签。 |
+| `visibility` | 玩家对这条边的认知。 |
+| `visibility.known_to_player` | 玩家是否知道这条可选路径或阻挡。 |
+| `visibility.line_of_sight` | 从当前位置是否能直接看见目标方向或阻挡。 |
+| `visibility.description` | DM 可用的路径/阻挡描述。 |
+
+### RegionFeature / Settlement / TerrainFeature 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 区域特征 ID。 |
+| `name` | 显示名。 |
+| `type` | 特征类型，例如 `terrain_feature` 或 `settlement`。 |
+| `region_id` | 所属 Region。 |
+| `chunk_ids` | 组成该特征的一组 chunk。 |
+| `dominant_terrain` | 主要地貌描述，用于叙事和生成权重。 |
+| `entry_chunk_ids` | 可作为进入该 settlement 或特征的入口 chunk。 |
+| `known_to_player` | 玩家是否知道该区域特征。 |
+
+### Site 与 site_relations 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | Site ID。 |
+| `name` | Site 显示名。 |
+| `type` | Site 类型，例如旅店、小屋、井、遗迹。 |
+| `parent_chunk_id` | Site 所在 chunk。Site 的空间父级必须是 chunk。 |
+| `local_position` | Site 在 chunk 内的粗略局部位置，例如中心、东侧、路边。 |
+| `footprint` | Site 占用的近似物理尺寸。 |
+| `footprint.width_meters` | Site 宽度。 |
+| `footprint.height_meters` | Site 高度。 |
+| `entry_node_ids` | 可进入 Site 时的入口 `LocationNode` 列表。 |
+| `tags` | Site 辅助标签。 |
+| `state` | Site 当前状态，例如是否开放、是否可进入、是否受宵禁影响。 |
+| `primary_site_id` | chunk 的主 Site。 |
+| `secondary_site_ids` | chunk 内附属 Site。 |
+| `site_relations` | 同一 chunk 内多个 Site 之间的局部关系。 |
+| `site_relations[].source_site_id` | 关系源 Site。 |
+| `site_relations[].target_site_id` | 关系目标 Site。 |
+| `site_relations[].relation` | 空间关系，例如 behind、across_street。 |
+| `site_relations[].distance_meters` | 两个 Site 的近似距离。 |
+| `site_relations[].base_time_minutes` | 两个 Site 之间移动的基础耗时。 |
+| `site_relations[].visibility` | 从源 Site 能否看到目标 Site。 |
+| `site_relations[].passability` | 两个 Site 之间的通行状态。 |
+
+### LocationNode / Zone 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 内部地点节点 ID。 |
+| `name` | 内部地点显示名。 |
+| `type` | 内部地点类型，例如房间、走廊、楼梯平台、入口。 |
+| `site_id` | 所属 Site。 |
+| `parent_id` | 父级空间 ID。简单建筑可直接指向 Site；复杂建筑可指向上层 LocationNode。 |
+| `display_path` | UI 和 DM 使用的显示路径，不作为权威空间父子关系。 |
+| `zones` | 该节点内的局部区域列表。Zone 不再继续嵌套。 |
+| `zones[].id` | Zone ID。 |
+| `zones[].name` | Zone 显示名。 |
+| `zones[].type` | Zone 类型，例如门口、柜台区、员工区。 |
+| `zones[].access` | Zone 访问限制。为空表示默认可接近。 |
+| `zones[].access.state` | 访问状态，例如 open、restricted、blocked。 |
+| `zones[].access.requires` | 进入或使用该 Zone 需要满足的状态/权限 ID。 |
+| `zones[].access.blocked_reason` | 当前无法接近时给 DM 使用的原因。 |
+| `environment` | 该 LocationNode 的环境状态。 |
+| `environment.light` | 光照水平。 |
+| `environment.noise` | 噪音水平。 |
+| `environment.crowding` | 拥挤程度。 |
+| `tags` | 内部地点辅助标签。 |
+
+### LocationEdge 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 内部地点边 ID。 |
+| `source_node_id` | 出发 LocationNode。 |
+| `target_node_id` | 目标 LocationNode。 |
+| `relation` | 两个节点的连接关系，例如 doorway、stairs、corridor。 |
+| `portal_object_id` | 表示这条连接的门、楼梯、破口等 `WorldObject` ID。 |
+| `direction` | 通行方向，例如 bidirectional、one_way。 |
+| `passability` | 通行状态，语义与 `ChunkEdge.passability` 一致。 |
+| `passability.conditions[].type` | 条件类型，例如 permission、key、state。 |
+| `passability.conditions[].required` | 需要满足的条件 ID。 |
+| `traversal.base_time_minutes` | 内部移动基础耗时。 |
+| `traversal.scope` | 移动范围，例如 indoor、town、wilderness。 |
+| `traversal.movement_type` | 移动方式。 |
+| `traversal.risk_delta` | 移动带来的风险增量。 |
+| `visibility.known_to_player` | 玩家是否知道这条内部路径。 |
+| `visibility.visible_from_source` | 从 source 是否可见。 |
+| `visibility.visible_from_target` | 从 target 是否可见。 |
+| `visibility.hint_text` | 未直接进入时可给出的提示文本。 |
+
+### ObjectPlacement 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `kind` | 对象位置类型，例如 `zone`、`chunk`、`on_object`、`inside_object`。 |
+| `chunk_id` | 当 `kind=chunk` 时，对象所在 chunk。 |
+| `node_id` | 当 `kind=zone` 时，对象所在 LocationNode。 |
+| `zone_id` | 当 `kind=zone` 时，对象所在 Zone。 |
+| `object_id` | 当对象在另一个对象上、内、下、旁或附着时，被引用的承载对象 ID。 |
+| `surface` | 当对象位于另一个对象表面时，表面名称。 |
+| `local_position` | 在 chunk、node 或 zone 内的粗略局部位置。 |
+| `relation` | 对象与承载空间或承载对象的空间关系。 |
+| `reachability` | 当前是否可触达。可见不等于可触达。 |
+
+对象是否可见由 `WorldObject.visibility` 决定，不写在 `placement` 内。
+
+### ActorLocation 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `actor_id` | 被定位的角色 ID。玩家使用 `player`。 |
+| `location.scope` | 位置范围：`world_chunk` 表示外部 chunk，`site_node` 表示 Site 内部节点。 |
+| `location.region_id` | 外部位置所属 Region。 |
+| `location.chunk_id` | 外部位置所在 chunk。 |
+| `location.site_id` | 内部位置所属 Site。 |
+| `location.node_id` | 内部位置所在 LocationNode。 |
+| `location.zone_id` | 内部位置所在 Zone。 |
+| `location.local_position` | 在当前 chunk/node/zone 内的粗略位置。 |
+
+### CreatureGroup 空间字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 生物群体 ID。 |
+| `name` | 玩家可见或 DM 可使用的名称。 |
+| `type` | 实体类型。生物群体不是 `WorldObject`，因此不用 `object_type`。 |
+| `disposition` | 对玩家的立场，例如 hostile、neutral、friendly。 |
+| `species` | 物种 ID 或物种名。正式生态系统中应引用 `AnimalSpecies.species_id`。 |
+| `count` | 群体数量。 |
+| `location` | 群体当前位置，结构与 ActorLocation 的 `location` 一致。 |
+| `visibility.state` | 玩家对该群体的可见状态，例如 unseen、hinted、visible。 |
+| `visibility.known_to_player` | 玩家是否知道该群体存在。 |
+| `visibility.last_known_chunk_id` | 玩家最后一次确认该群体所在 chunk。 |
+| `visibility.confidence` | 玩家对该位置信息的置信度。 |
+| `visibility.signs` | 玩家已发现的痕迹。 |
+| `behavior.state` | 群体当前行为状态。 |
+| `behavior.movement_intent` | 群体移动意图。 |
+| `behavior.route_chunk_ids` | 群体计划或巡逻路线。 |
+| `behavior.aggression` | 攻击倾向。 |
+
+### SpaceProjection 返回字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `location.scope` | 当前投影范围。 |
+| `location.display_name` | 玩家可见地点名。 |
+| `location.display_path` | 玩家可见路径，不作为权威层级。 |
+| `visible_sites` | 当前可见或可感知的 Site 列表。 |
+| `visible_sites[].type` | Site 类型。Site 不是 WorldObject，因此使用 `type`。 |
+| `visible_actors` | 当前可见或可感知的 NPC、角色或具名生物列表。 |
+| `visible_actors[].entity_type` | 非物品实体类型，例如 npc。它不是 `WorldObject.object_type`。 |
+| `visible_objects` | 当前可见或可交互的对象列表。 |
+| `visible_objects[].object_type` | 对象规则类型。只用于 WorldObject。 |
+| `visible_objects[].where` | 给玩家看的相对位置描述。 |
+| `visible_objects[].affordances` | 玩家可尝试的动作。 |
+| `exits` | 当前可见或已知出口/路径列表。 |
+| `exits[].passable` | 当前是否可直接通行。 |
+| `exits[].blocked_reason` | 不可通行时的原因。 |
+| `creature_awareness` | 玩家当前对生物/群体的感知投影。 |
+| `creature_awareness[].proximity_band` | 与玩家的距离分级。 |
+| `creature_awareness[].dm_hint` | DM 可用的感知描述。 |
+| `hidden_system_notes` | 不直接展示给玩家，但供 DM 和动作解析使用的隐藏事实。 |
+
 ## 空间不变量
 
 实现时必须加入 validator，保证以下规则成立：
@@ -828,7 +1109,7 @@ chunk 坐标从哪里到哪里？
 21. `cross_region` edge 必须连接两个 Region 边界 chunk。
 22. 坐标相邻不能自动生成通行结果，移动必须通过 `ChunkEdge`。
 23. `LocationEdge.source_node_id` 和 `target_node_id` 必须引用存在的 `LocationNode`。
-24. `LocationEdge.portal_object_id` 必须引用一个 `type=portal` 或具备 `enter/leave` 相关 affordance 的对象。
+24. `LocationEdge.portal_object_id` 必须引用一个 `object_type=portal` 或具备 `enter/leave` 相关 affordance 的对象。
 25. `Zone` 不能包含子 `Zone`。
 26. `Object` 不能通过 `parent_id` 进入空间层级，只能通过 `placement` 定位。
 27. `chunk` placement 必须引用存在的 `chunk_id`。
@@ -915,7 +1196,7 @@ SpaceProjectionService.query_current_space(actor_id, scope)
     {
       "id": "ridge_warning_post_01",
       "name": "歪斜的警示木牌",
-      "type": "clue",
+      "object_type": "clue",
       "where": "西侧岩路旁",
       "affordances": ["observe", "read"]
     }
@@ -963,25 +1244,27 @@ SpaceProjectionService.query_current_space(actor_id, scope)
     "display_name": "旧炉旅店前厅",
     "display_path": ["灰石镇", "旧炉旅店", "前厅"]
   },
-  "visible_objects": [
+  "visible_actors": [
     {
       "id": "innkeeper_01",
       "name": "店主",
-      "type": "npc",
+      "entity_type": "npc",
       "where": "柜台后",
       "affordances": ["talk", "negotiate", "purchase"]
-    },
+    }
+  ],
+  "visible_objects": [
     {
       "id": "counter_01",
       "name": "旧木柜台",
-      "type": "fixture",
+      "object_type": "fixture",
       "where": "柜台区",
       "affordances": ["observe"]
     },
     {
       "id": "stew_bowl_01",
       "name": "热炖菜一碗",
-      "type": "food",
+      "object_type": "food",
       "where": "旧木柜台上",
       "affordances": ["purchase", "eat_meal"]
     }

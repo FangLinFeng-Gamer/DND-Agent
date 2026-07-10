@@ -1,0 +1,936 @@
+{
+  "schema_version": 1,
+  "content_pack_id": "isekai_generic_items_p0",
+  "kind": "generic_item_catalog",
+  "generic_item_catalog": {
+    "category_defaults": {
+      "natural": {
+        "physical": { "size": "tiny", "weight_kg": 0.03, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "natural"]
+      },
+      "waste": {
+        "physical": { "size": "tiny", "weight_kg": 0.04, "portable": true, "condition": "damaged" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "debris"]
+      },
+      "domestic": {
+        "physical": { "size": "tiny", "weight_kg": 0.03, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "domestic"]
+      },
+      "cloth": {
+        "physical": { "size": "tiny", "weight_kg": 0.02, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "cloth"]
+      },
+      "animal_remain": {
+        "physical": { "size": "tiny", "weight_kg": 0.02, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "animal_remain"]
+      },
+      "metal_small": {
+        "physical": { "size": "tiny", "weight_kg": 0.04, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "metal"]
+      },
+      "wooden": {
+        "physical": { "size": "small", "weight_kg": 0.06, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "wood"]
+      },
+      "ceramic_glass": {
+        "physical": { "size": "tiny", "weight_kg": 0.04, "portable": true, "condition": "damaged" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "shard"]
+      },
+      "mark_symbol": {
+        "physical": { "size": "tiny", "weight_kg": 0.03, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "mark"]
+      },
+      "suspicious_trace": {
+        "physical": { "size": "tiny", "weight_kg": 0.02, "portable": true, "condition": "damaged" },
+        "affordances": ["observe", "take", "search"],
+        "tags": ["small_item", "suspicious_trace"]
+      },
+      "trade_trinket": {
+        "physical": { "size": "tiny", "weight_kg": 0.02, "portable": true, "condition": "worn" },
+        "affordances": ["observe", "take", "search", "trade"],
+        "tags": ["small_item", "trinket"]
+      }
+    },
+    "entries": [
+      {
+        "catalog_id": "generic_pebble",
+        "name": "石子",
+        "aliases": ["石头", "小石子"],
+        "description": "一颗普通石子，边缘被磨得发圆。",
+        "object_type": "item",
+        "category": "natural",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["stone"]
+      },
+      {
+        "catalog_id": "generic_flat_stone",
+        "name": "扁平石片",
+        "aliases": ["石片", "扁石"],
+        "description": "一片扁平石片，表面有水磨痕迹。",
+        "object_type": "item",
+        "category": "natural",
+        "physical_override": { "size": "small", "weight_kg": 0.12 },
+        "default_tags": ["stone"]
+      },
+      {
+        "catalog_id": "generic_sharp_flint",
+        "name": "尖锐燧石",
+        "aliases": ["燧石", "尖石片"],
+        "description": "一块边缘锋利的燧石，握起来有些硌手。",
+        "object_type": "item",
+        "category": "natural",
+        "physical_override": { "size": "small", "weight_kg": 0.08 },
+        "default_tags": ["stone", "sharp"]
+      },
+      {
+        "catalog_id": "generic_dry_twig",
+        "name": "干树枝",
+        "aliases": ["树枝", "枯枝"],
+        "description": "一截干树枝，轻轻一折就会断。",
+        "object_type": "item",
+        "category": "natural",
+        "physical_override": { "size": "small", "weight_kg": 0.05 },
+        "default_tags": ["wood"]
+      },
+      {
+        "catalog_id": "generic_pine_cone",
+        "name": "松果",
+        "aliases": ["干松果"],
+        "description": "一个干松果，鳞片间夹着灰尘。",
+        "object_type": "item",
+        "category": "natural",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["forest"]
+      },
+      {
+        "catalog_id": "generic_dead_leaf_clump",
+        "name": "枯叶团",
+        "aliases": ["枯叶", "叶团"],
+        "description": "一团发脆的枯叶，散着潮土味。",
+        "object_type": "item",
+        "category": "natural",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["leaves"]
+      },
+      {
+        "catalog_id": "generic_mud_clod",
+        "name": "泥块",
+        "aliases": ["干泥块", "泥团"],
+        "description": "一块半干的泥团，表面粘着草屑。",
+        "object_type": "item",
+        "category": "natural",
+        "physical_override": { "size": "small", "weight_kg": 0.15 },
+        "default_tags": ["earth"]
+      },
+      {
+        "catalog_id": "generic_shell",
+        "name": "贝壳",
+        "aliases": ["小贝壳"],
+        "description": "一枚暗淡贝壳，边缘缺了一角。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["natural"]
+      },
+      {
+        "catalog_id": "generic_feather",
+        "name": "羽毛",
+        "aliases": ["鸟羽", "干净羽毛"],
+        "description": "一根细长羽毛，羽轴还算完整。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["animal_trace"]
+      },
+      {
+        "catalog_id": "generic_animal_fur_clump",
+        "name": "兽毛团",
+        "aliases": ["毛团", "兽毛"],
+        "description": "一小团粗硬兽毛，颜色发灰。",
+        "object_type": "item",
+        "category": "natural",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["animal_trace"]
+      },
+      {
+        "catalog_id": "generic_pottery_shard",
+        "name": "碎陶片",
+        "aliases": ["陶片", "破陶片"],
+        "description": "一片粗陶碎片，断口还留着黑灰。",
+        "object_type": "item",
+        "category": "waste",
+        "physical_override": { "weight_kg": 0.04 },
+        "default_tags": ["ceramic"]
+      },
+      {
+        "catalog_id": "generic_bottle_cork",
+        "name": "破瓶塞",
+        "aliases": ["瓶塞", "旧瓶塞"],
+        "description": "一个破损瓶塞，闻起来有陈酒味。",
+        "object_type": "item",
+        "category": "waste",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["cork"]
+      },
+      {
+        "catalog_id": "generic_empty_vial",
+        "name": "空小瓶",
+        "aliases": ["小瓶", "空瓶"],
+        "description": "一只空小瓶，瓶口有细裂纹。",
+        "object_type": "item",
+        "category": "waste",
+        "physical_override": { "size": "small", "weight_kg": 0.08 },
+        "default_tags": ["glass"]
+      },
+      {
+        "catalog_id": "generic_wax_stub",
+        "name": "断蜡块",
+        "aliases": ["蜡块", "蜡头"],
+        "description": "一小截断蜡，芯线已经烧黑。",
+        "object_type": "item",
+        "category": "waste",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["wax"]
+      },
+      {
+        "catalog_id": "generic_crumpled_paper",
+        "name": "旧纸团",
+        "aliases": ["纸团", "废纸"],
+        "description": "一团皱巴巴的旧纸，字迹已经糊开。",
+        "object_type": "item",
+        "category": "waste",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["paper"]
+      },
+      {
+        "catalog_id": "generic_charred_wood_chip",
+        "name": "烧焦木片",
+        "aliases": ["焦木片", "黑木片"],
+        "description": "一片烧焦木片，指尖一碰就掉黑灰。",
+        "object_type": "item",
+        "category": "waste",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["wood", "burned"]
+      },
+      {
+        "catalog_id": "generic_torn_leather_thong",
+        "name": "破皮绳",
+        "aliases": ["皮绳", "断皮绳"],
+        "description": "一截断开的皮绳，边缘被磨得发毛。",
+        "object_type": "item",
+        "category": "waste",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["leather"]
+      },
+      {
+        "catalog_id": "generic_broken_arrow_shaft",
+        "name": "断箭杆",
+        "aliases": ["箭杆", "断箭"],
+        "description": "半截箭杆，尾羽已经脱落。",
+        "object_type": "item",
+        "category": "waste",
+        "physical_override": { "size": "small", "weight_kg": 0.06 },
+        "default_tags": ["wood", "arrow_debris"]
+      },
+      {
+        "catalog_id": "generic_bent_nail",
+        "name": "弯曲钉子",
+        "aliases": ["弯钉", "钉子", "旧钉子"],
+        "description": "一枚弯曲的旧钉子，钉身有些发黑。",
+        "object_type": "item",
+        "category": "metal_small",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["scrap"]
+      },
+      {
+        "catalog_id": "generic_rusty_metal_shard",
+        "name": "生锈铁片",
+        "aliases": ["铁片", "锈铁片"],
+        "description": "一小片生锈铁片，边缘钝而参差。",
+        "object_type": "item",
+        "category": "metal_small",
+        "physical_override": { "weight_kg": 0.05, "condition": "damaged" },
+        "default_tags": ["scrap"]
+      },
+      {
+        "catalog_id": "generic_old_button",
+        "name": "旧纽扣",
+        "aliases": ["纽扣", "破纽扣"],
+        "description": "一枚旧纽扣，孔眼里嵌着灰尘。",
+        "object_type": "item",
+        "category": "domestic",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["clothing"]
+      },
+      {
+        "catalog_id": "generic_copper_button",
+        "name": "铜扣",
+        "aliases": ["小铜扣", "铜纽扣"],
+        "description": "一枚发暗铜扣，边缘还有浅浅花纹。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["metal"]
+      },
+      {
+        "catalog_id": "generic_comb_tooth",
+        "name": "木梳齿",
+        "aliases": ["梳齿", "断梳齿"],
+        "description": "一截断掉的木梳齿，表面被磨得光滑。",
+        "object_type": "item",
+        "category": "domestic",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["wood"]
+      },
+      {
+        "catalog_id": "generic_pipe_mouthpiece",
+        "name": "破烟斗嘴",
+        "aliases": ["烟斗嘴", "斗嘴"],
+        "description": "一个破烟斗嘴，咬痕很深。",
+        "object_type": "item",
+        "category": "domestic",
+        "physical_override": { "weight_kg": 0.03, "condition": "damaged" },
+        "default_tags": ["personal"]
+      },
+      {
+        "catalog_id": "generic_small_cloth_pouch",
+        "name": "小布包",
+        "aliases": ["布包", "空布包"],
+        "description": "一个空小布包，束口绳已经松了。",
+        "object_type": "item",
+        "category": "domestic",
+        "physical_override": { "size": "small", "weight_kg": 0.04 },
+        "default_tags": ["cloth"]
+      },
+      {
+        "catalog_id": "generic_empty_spool",
+        "name": "空线轴",
+        "aliases": ["线轴", "木线轴"],
+        "description": "一个空线轴，木芯上还残着几圈细线。",
+        "object_type": "item",
+        "category": "domestic",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["wood"]
+      },
+      {
+        "catalog_id": "generic_needle_case",
+        "name": "针盒",
+        "aliases": ["空针盒", "旧针盒"],
+        "description": "一个小针盒，盖子有点松。",
+        "object_type": "item",
+        "category": "domestic",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["sewing"]
+      },
+      {
+        "catalog_id": "generic_bone_die",
+        "name": "骨骰子",
+        "aliases": ["骰子", "旧骰子"],
+        "description": "一枚骨骰子，点数刻得并不规整。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["bone"]
+      },
+      {
+        "catalog_id": "generic_wooden_cup",
+        "name": "木杯",
+        "aliases": ["旧木杯", "杯子"],
+        "description": "一个旧木杯，杯沿裂开一道细口。",
+        "object_type": "item",
+        "category": "domestic",
+        "physical_override": { "size": "small", "weight_kg": 0.1, "condition": "damaged" },
+        "default_tags": ["wood"]
+      },
+      {
+        "catalog_id": "generic_cracked_spoon",
+        "name": "裂开的勺子",
+        "aliases": ["勺子", "破勺子"],
+        "description": "一把裂开的旧勺子，柄端被火燎黑。",
+        "object_type": "item",
+        "category": "domestic",
+        "physical_override": { "size": "small", "weight_kg": 0.06, "condition": "damaged" },
+        "default_tags": ["utensil"]
+      },
+      {
+        "catalog_id": "generic_torn_cloth_strip",
+        "name": "破布条",
+        "aliases": ["布条", "破布"],
+        "description": "一条脏破布条，边缘起了毛。",
+        "object_type": "item",
+        "category": "cloth",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["scrap"]
+      },
+      {
+        "catalog_id": "generic_bloodstained_cloth",
+        "name": "染血布片",
+        "aliases": ["血布", "带血布片"],
+        "description": "一块染血布片，血迹已经发暗。",
+        "object_type": "item",
+        "category": "suspicious_trace",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["cloth", "blood"]
+      },
+      {
+        "catalog_id": "generic_coarse_thread",
+        "name": "粗麻线",
+        "aliases": ["麻线", "粗线"],
+        "description": "几缕粗麻线，缠成一个小结。",
+        "object_type": "item",
+        "category": "cloth",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["thread"]
+      },
+      {
+        "catalog_id": "generic_leather_offcut",
+        "name": "皮革边角",
+        "aliases": ["皮革碎片", "皮边角"],
+        "description": "一小块皮革边角，边缘参差。",
+        "object_type": "item",
+        "category": "cloth",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["leather"]
+      },
+      {
+        "catalog_id": "generic_old_glove",
+        "name": "旧手套",
+        "aliases": ["手套", "破手套"],
+        "description": "一只旧手套，指尖已经磨穿。",
+        "object_type": "item",
+        "category": "cloth",
+        "physical_override": { "size": "small", "weight_kg": 0.06, "condition": "damaged" },
+        "default_tags": ["clothing"]
+      },
+      {
+        "catalog_id": "generic_torn_cloak_corner",
+        "name": "撕裂斗篷角",
+        "aliases": ["斗篷角", "破斗篷布"],
+        "description": "一角撕裂的厚布，像是从斗篷上扯下来的。",
+        "object_type": "item",
+        "category": "cloth",
+        "physical_override": { "size": "small", "weight_kg": 0.05, "condition": "damaged" },
+        "default_tags": ["clothing"]
+      },
+      {
+        "catalog_id": "generic_shoelace",
+        "name": "鞋带",
+        "aliases": ["旧鞋带"],
+        "description": "一根旧鞋带，末端已经散开。",
+        "object_type": "item",
+        "category": "cloth",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["cord"]
+      },
+      {
+        "catalog_id": "generic_sewing_needle",
+        "name": "缝补针",
+        "aliases": ["针", "细针"],
+        "description": "一根缝补针，针尖略微发钝。",
+        "object_type": "item",
+        "category": "metal_small",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["sewing"]
+      },
+      {
+        "catalog_id": "generic_wool_thread_ball",
+        "name": "羊毛线团",
+        "aliases": ["线团", "毛线团"],
+        "description": "一小团羊毛线，混着草屑。",
+        "object_type": "item",
+        "category": "cloth",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["wool"]
+      },
+      {
+        "catalog_id": "generic_small_bone_chip",
+        "name": "小骨片",
+        "aliases": ["骨片", "碎骨"],
+        "description": "一小块骨片，断面已经发黄。",
+        "object_type": "item",
+        "category": "animal_remain",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["bone"]
+      },
+      {
+        "catalog_id": "generic_animal_tooth",
+        "name": "兽牙",
+        "aliases": ["牙", "小兽牙"],
+        "description": "一枚小兽牙，根部还带着干硬污垢。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["bone"]
+      },
+      {
+        "catalog_id": "generic_bird_bone",
+        "name": "鸟骨",
+        "aliases": ["细鸟骨"],
+        "description": "一根细鸟骨，轻得几乎没有分量。",
+        "object_type": "item",
+        "category": "animal_remain",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["bone"]
+      },
+      {
+        "catalog_id": "generic_fishbone",
+        "name": "鱼刺",
+        "aliases": ["细鱼刺"],
+        "description": "几根细鱼刺，已经干硬发白。",
+        "object_type": "item",
+        "category": "animal_remain",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["bone"]
+      },
+      {
+        "catalog_id": "generic_dried_skin_flake",
+        "name": "干硬皮屑",
+        "aliases": ["皮屑", "干皮片"],
+        "description": "一片干硬皮屑，边缘卷曲。",
+        "object_type": "item",
+        "category": "animal_remain",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["hide"]
+      },
+      {
+        "catalog_id": "generic_broken_horn_piece",
+        "name": "断角片",
+        "aliases": ["角片", "断角"],
+        "description": "一小片断角，表面有细密纹路。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.04 },
+        "default_tags": ["horn"]
+      },
+      {
+        "catalog_id": "generic_claw_shell",
+        "name": "爪壳",
+        "aliases": ["爪片", "兽爪壳"],
+        "description": "一片脱落的爪壳，尖端还很硬。",
+        "object_type": "item",
+        "category": "animal_remain",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["claw"]
+      },
+      {
+        "catalog_id": "generic_insect_shell",
+        "name": "虫壳",
+        "aliases": ["空虫壳"],
+        "description": "一枚空虫壳，背部泛着暗光。",
+        "object_type": "item",
+        "category": "animal_remain",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["insect"]
+      },
+      {
+        "catalog_id": "generic_quill_stem",
+        "name": "羽梗",
+        "aliases": ["羽轴", "羽梗"],
+        "description": "一截断掉的羽梗，中空而脆。",
+        "object_type": "item",
+        "category": "animal_remain",
+        "physical_override": { "weight_kg": 0.01, "condition": "damaged" },
+        "default_tags": ["feather"]
+      },
+      {
+        "catalog_id": "generic_iron_ring",
+        "name": "铁环",
+        "aliases": ["小铁环", "锈铁环"],
+        "description": "一个小铁环，内侧有磨损痕。",
+        "object_type": "item",
+        "category": "metal_small",
+        "physical_override": { "weight_kg": 0.04 },
+        "default_tags": ["scrap"]
+      },
+      {
+        "catalog_id": "generic_copper_wire",
+        "name": "铜线",
+        "aliases": ["细铜线"],
+        "description": "一小截铜线，被拧得有些变形。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["metal"]
+      },
+      {
+        "catalog_id": "generic_rusty_buckle",
+        "name": "生锈扣环",
+        "aliases": ["扣环", "锈扣"],
+        "description": "一个生锈扣环，扣舌已经卡住。",
+        "object_type": "item",
+        "category": "metal_small",
+        "physical_override": { "weight_kg": 0.05, "condition": "damaged" },
+        "default_tags": ["clothing"]
+      },
+      {
+        "catalog_id": "generic_broken_chain_link",
+        "name": "断链节",
+        "aliases": ["链节", "断铁链节"],
+        "description": "一枚断开的链节，裂口很旧。",
+        "object_type": "item",
+        "category": "metal_small",
+        "physical_override": { "weight_kg": 0.06, "condition": "damaged" },
+        "default_tags": ["scrap"]
+      },
+      {
+        "catalog_id": "generic_rivet",
+        "name": "铆钉",
+        "aliases": ["小铆钉"],
+        "description": "一枚脱落铆钉，帽面被磨平。",
+        "object_type": "item",
+        "category": "metal_small",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["scrap"]
+      },
+      {
+        "catalog_id": "generic_broken_bell",
+        "name": "破铃铛",
+        "aliases": ["铃铛", "坏铃铛"],
+        "description": "一个破铃铛，摇起来只有哑声。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.06, "condition": "damaged" },
+        "default_tags": ["metal"]
+      },
+      {
+        "catalog_id": "generic_bad_pin",
+        "name": "坏扣针",
+        "aliases": ["扣针", "断扣针"],
+        "description": "一枚坏扣针，针脚已经歪了。",
+        "object_type": "item",
+        "category": "metal_small",
+        "physical_override": { "weight_kg": 0.01, "condition": "damaged" },
+        "default_tags": ["clothing"]
+      },
+      {
+        "catalog_id": "generic_wooden_wedge",
+        "name": "木楔",
+        "aliases": ["楔子", "小木楔"],
+        "description": "一枚粗糙木楔，尖端有压痕。",
+        "object_type": "item",
+        "category": "wooden",
+        "physical_override": { "weight_kg": 0.08 },
+        "default_tags": ["wedge"]
+      },
+      {
+        "catalog_id": "generic_short_wood_chip",
+        "name": "短木片",
+        "aliases": ["木片", "碎木片"],
+        "description": "一截短木片，断口粗糙。",
+        "object_type": "item",
+        "category": "wooden",
+        "physical_override": { "weight_kg": 0.06, "condition": "damaged" },
+        "default_tags": ["scrap"]
+      },
+      {
+        "catalog_id": "generic_notched_wood_tag",
+        "name": "刻痕木牌",
+        "aliases": ["木牌", "刻痕牌"],
+        "description": "一块带刻痕的小木牌，纹路像是人为划出的。",
+        "object_type": "item",
+        "category": "wooden",
+        "physical_override": { "weight_kg": 0.05 },
+        "default_tags": ["mark"]
+      },
+      {
+        "catalog_id": "generic_broken_wooden_handle",
+        "name": "断木柄",
+        "aliases": ["木柄", "断柄"],
+        "description": "一截断掉的木柄，握痕还在。",
+        "object_type": "item",
+        "category": "wooden",
+        "physical_override": { "weight_kg": 0.12, "condition": "damaged" },
+        "default_tags": ["handle"]
+      },
+      {
+        "catalog_id": "generic_wooden_bead",
+        "name": "小木珠",
+        "aliases": ["木珠"],
+        "description": "一颗小木珠，表面被磨得发亮。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["wood"]
+      },
+      {
+        "catalog_id": "generic_charred_wooden_peg",
+        "name": "烧焦木钉",
+        "aliases": ["木钉", "焦木钉"],
+        "description": "一枚烧焦木钉，半边已经碳化。",
+        "object_type": "item",
+        "category": "wooden",
+        "physical_override": { "weight_kg": 0.02, "condition": "damaged" },
+        "default_tags": ["burned"]
+      },
+      {
+        "catalog_id": "generic_rough_wooden_plug",
+        "name": "粗糙木塞",
+        "aliases": ["木塞", "旧木塞"],
+        "description": "一个粗糙木塞，边缘削得不平。",
+        "object_type": "item",
+        "category": "wooden",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["plug"]
+      },
+      {
+        "catalog_id": "generic_spoon_handle",
+        "name": "木勺柄",
+        "aliases": ["勺柄", "断勺柄"],
+        "description": "一截木勺柄，尾端有烧痕。",
+        "object_type": "item",
+        "category": "wooden",
+        "physical_override": { "weight_kg": 0.03, "condition": "damaged" },
+        "default_tags": ["utensil"]
+      },
+      {
+        "catalog_id": "generic_white_pottery_shard",
+        "name": "白陶碎片",
+        "aliases": ["白陶片", "陶片"],
+        "description": "一片白陶碎片，釉面已经开裂。",
+        "object_type": "item",
+        "category": "ceramic_glass",
+        "physical_override": { "weight_kg": 0.04 },
+        "default_tags": ["ceramic"]
+      },
+      {
+        "catalog_id": "generic_black_glaze_shard",
+        "name": "黑釉陶片",
+        "aliases": ["黑陶片", "黑釉片"],
+        "description": "一片黑釉陶片，边缘锋利。",
+        "object_type": "item",
+        "category": "ceramic_glass",
+        "physical_override": { "weight_kg": 0.04 },
+        "default_tags": ["ceramic"]
+      },
+      {
+        "catalog_id": "generic_cracked_cup_shard",
+        "name": "裂杯片",
+        "aliases": ["杯片", "破杯片"],
+        "description": "一块裂杯片，还能看出杯沿弧度。",
+        "object_type": "item",
+        "category": "ceramic_glass",
+        "physical_override": { "weight_kg": 0.05 },
+        "default_tags": ["ceramic"]
+      },
+      {
+        "catalog_id": "generic_glass_bead",
+        "name": "玻璃珠",
+        "aliases": ["小玻璃珠", "珠子"],
+        "description": "一颗玻璃珠，里面有一道淡绿气泡。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["glass"]
+      },
+      {
+        "catalog_id": "generic_green_bottle_base",
+        "name": "绿色瓶底",
+        "aliases": ["瓶底", "绿玻璃底"],
+        "description": "一块绿色瓶底，厚重而浑浊。",
+        "object_type": "item",
+        "category": "ceramic_glass",
+        "physical_override": { "size": "small", "weight_kg": 0.1 },
+        "default_tags": ["glass"]
+      },
+      {
+        "catalog_id": "generic_mirror_shard",
+        "name": "镜片碎片",
+        "aliases": ["镜片", "破镜片"],
+        "description": "一片镜片碎片，映出的影子被裂纹切开。",
+        "object_type": "item",
+        "category": "ceramic_glass",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["glass", "reflective"]
+      },
+      {
+        "catalog_id": "generic_frosted_glass_piece",
+        "name": "磨砂玻璃片",
+        "aliases": ["磨砂片", "玻璃片"],
+        "description": "一块磨砂玻璃片，透光但看不清另一侧。",
+        "object_type": "item",
+        "category": "ceramic_glass",
+        "physical_override": { "weight_kg": 0.04 },
+        "default_tags": ["glass"]
+      },
+      {
+        "catalog_id": "generic_rune_pebble",
+        "name": "刻符石子",
+        "aliases": ["符石", "刻字石子"],
+        "description": "一颗刻着浅符号的石子，笔画很旧。",
+        "object_type": "item",
+        "category": "mark_symbol",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["stone"]
+      },
+      {
+        "catalog_id": "generic_tied_wood_tag",
+        "name": "系绳木牌",
+        "aliases": ["木牌", "挂牌"],
+        "description": "一块系着短绳的小木牌，牌面被雨水泡花。",
+        "object_type": "item",
+        "category": "mark_symbol",
+        "physical_override": { "size": "small", "weight_kg": 0.05 },
+        "default_tags": ["wood"]
+      },
+      {
+        "catalog_id": "generic_marked_cloth_strip",
+        "name": "带记号布条",
+        "aliases": ["记号布条", "布条"],
+        "description": "一条带记号的布条，颜料已经褪色。",
+        "object_type": "item",
+        "category": "mark_symbol",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["cloth"]
+      },
+      {
+        "catalog_id": "generic_painted_wood_chip",
+        "name": "涂漆木片",
+        "aliases": ["漆木片", "彩木片"],
+        "description": "一块涂漆木片，只剩半块颜色。",
+        "object_type": "item",
+        "category": "mark_symbol",
+        "physical_override": { "weight_kg": 0.03, "condition": "damaged" },
+        "default_tags": ["wood"]
+      },
+      {
+        "catalog_id": "generic_notched_bone_chip",
+        "name": "刻痕骨片",
+        "aliases": ["骨片", "刻痕骨"],
+        "description": "一片带刻痕的骨片，刻线很浅。",
+        "object_type": "item",
+        "category": "mark_symbol",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["bone"]
+      },
+      {
+        "catalog_id": "generic_old_wax_seal_fragment",
+        "name": "旧封蜡碎块",
+        "aliases": ["封蜡", "蜡封碎片"],
+        "description": "一块旧封蜡碎片，纹章只剩一角。",
+        "object_type": "item",
+        "category": "mark_symbol",
+        "physical_override": { "weight_kg": 0.02, "condition": "damaged" },
+        "default_tags": ["wax"]
+      },
+      {
+        "catalog_id": "generic_scored_stone_chip",
+        "name": "有划线的石片",
+        "aliases": ["划线石片", "石片"],
+        "description": "一片有划线的石片，像被人刻意记过数。",
+        "object_type": "item",
+        "category": "mark_symbol",
+        "physical_override": { "weight_kg": 0.03 },
+        "default_tags": ["stone"]
+      },
+      {
+        "catalog_id": "generic_muddy_shoelace",
+        "name": "带泥鞋带",
+        "aliases": ["泥鞋带", "鞋带"],
+        "description": "一根带泥鞋带，泥里夹着细草根。",
+        "object_type": "item",
+        "category": "suspicious_trace",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["clothing"]
+      },
+      {
+        "catalog_id": "generic_black_blood_cloth",
+        "name": "沾黑血的布片",
+        "aliases": ["黑血布片", "血布"],
+        "description": "一块沾着黑血的布片，血迹带着怪异腥味。",
+        "object_type": "item",
+        "category": "suspicious_trace",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["cloth", "blood"]
+      },
+      {
+        "catalog_id": "generic_odd_smell_feather",
+        "name": "带异味羽毛",
+        "aliases": ["异味羽毛", "羽毛"],
+        "description": "一根带异味的羽毛，闻起来像潮铁和腐叶。",
+        "object_type": "item",
+        "category": "suspicious_trace",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["feather"]
+      },
+      {
+        "catalog_id": "generic_chewed_bone_chip",
+        "name": "咬碎骨片",
+        "aliases": ["咬痕骨片", "碎骨"],
+        "description": "一块咬碎的骨片，齿痕细密。",
+        "object_type": "item",
+        "category": "suspicious_trace",
+        "physical_override": { "weight_kg": 0.02 },
+        "default_tags": ["bone"]
+      },
+      {
+        "catalog_id": "generic_burned_charm_paper",
+        "name": "烧焦符纸",
+        "aliases": ["符纸", "焦符纸"],
+        "description": "一角烧焦符纸，残留的墨线像符号。",
+        "object_type": "item",
+        "category": "suspicious_trace",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["paper"]
+      },
+      {
+        "catalog_id": "generic_wet_paper_corner",
+        "name": "湿透纸角",
+        "aliases": ["纸角", "湿纸片"],
+        "description": "一角湿透纸片，纤维快要散开。",
+        "object_type": "item",
+        "category": "suspicious_trace",
+        "physical_override": { "weight_kg": 0.01, "condition": "ruined" },
+        "default_tags": ["paper"]
+      },
+      {
+        "catalog_id": "generic_tooth_marked_wood",
+        "name": "带齿痕木片",
+        "aliases": ["齿痕木片", "木片"],
+        "description": "一块带齿痕木片，咬痕深得不正常。",
+        "object_type": "item",
+        "category": "suspicious_trace",
+        "physical_override": { "size": "small", "weight_kg": 0.05 },
+        "default_tags": ["wood"]
+      },
+      {
+        "catalog_id": "generic_medicinal_smell_pouch",
+        "name": "有药味的小布包",
+        "aliases": ["药味布包", "小布包"],
+        "description": "一个有药味的小布包，里面已经空了。",
+        "object_type": "item",
+        "category": "suspicious_trace",
+        "physical_override": { "size": "small", "weight_kg": 0.03 },
+        "default_tags": ["cloth"]
+      },
+      {
+        "catalog_id": "generic_tiny_silver_thread",
+        "name": "小银线",
+        "aliases": ["银线", "细银线"],
+        "description": "一小截细银线，在暗处也有微光。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.01 },
+        "default_tags": ["metal"]
+      },
+      {
+        "catalog_id": "generic_old_badge_fragment",
+        "name": "旧徽章碎片",
+        "aliases": ["徽章碎片", "旧徽章"],
+        "description": "一片旧徽章碎片，背面还有断针。",
+        "object_type": "item",
+        "category": "trade_trinket",
+        "physical_override": { "weight_kg": 0.03, "condition": "damaged" },
+        "default_tags": ["mark"]
+      }
+    ]
+  }
+}
