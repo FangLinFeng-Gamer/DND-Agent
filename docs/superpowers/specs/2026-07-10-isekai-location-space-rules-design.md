@@ -201,6 +201,17 @@ wilderness_100m: 100m x 100m，z_step 20m
 
 `display_path` 只用于叙事和 UI 展示，不参与移动、可达性、对象查询和状态结算。
 
+### Region 与 WorldChunkGrid 边界
+
+`Region` 必须定义世界坐标边界，`WorldChunkGrid` 必须定义 chunk 坐标边界。两者职责不同：
+
+```text
+Region.bounds_world：这个区域在世界米制坐标里占多大。
+WorldChunkGrid.bounds_chunk：这个区域内允许哪些 chunk 坐标存在。
+```
+
+`Region` 是地理、生态、势力和风险区域。`WorldChunkGrid` 是该 Region 的离散坐标尺。`WorldChunk` 必须落在某个 grid 的边界内。
+
 ## 数据模型
 
 ### World
@@ -242,6 +253,13 @@ wilderness_100m: 100m x 100m，z_step 20m
   "name": "北坡荒野",
   "type": "wilderness_region",
   "world_id": "isekai_world_001",
+  "bounds_world": {
+    "origin_meters": { "x": 0, "y": 0 },
+    "min_meters": { "x": 0, "y": 0 },
+    "max_meters": { "x": 5000, "y": 4000 },
+    "z_range": { "min": 0, "max": 8 }
+  },
+  "grid_id": "grid_north_slope_wilds",
   "climate": {
     "temperature": "cold",
     "rainfall": "moderate",
@@ -266,6 +284,33 @@ wilderness_100m: 100m x 100m，z_step 20m
 }
 ```
 
+### WorldChunkGrid
+
+`WorldChunkGrid` 表示某个 Region 内部的离散区块坐标系。它不是地点，也不是地貌本身，而是该区域的地图网格规则。
+
+```json
+{
+  "id": "grid_north_slope_wilds",
+  "region_id": "north_slope_wilds",
+  "size_profile": "wilderness_100m",
+  "origin_chunk": { "x": 0, "y": 0, "z": 0 },
+  "bounds_chunk": {
+    "min": { "x": 0, "y": 0, "z": 0 },
+    "max": { "x": 49, "y": 39, "z": 8 }
+  }
+}
+```
+
+它回答：
+
+```text
+这个 Region 切成多大的格子？
+chunk 坐标从哪里到哪里？
+一个 chunk 的物理尺寸是多少？
+某个 chunk 坐标的有效性。
+两个 chunk 的网格归属。
+```
+
 ### WorldChunk
 
 `WorldChunk` 是外部世界的基本定位单位。
@@ -273,6 +318,7 @@ wilderness_100m: 100m x 100m，z_step 20m
 ```json
 {
   "id": "chunk_north_slope_12_08_02",
+  "grid_id": "grid_north_slope_wilds",
   "region_id": "north_slope_wilds",
   "coord": {
     "x": 12,
@@ -761,30 +807,39 @@ wilderness_100m: 100m x 100m，z_step 20m
 
 1. 外部空间权威层级为 `World -> Region -> WorldChunk -> Site`。
 2. 内部空间权威层级为 `Site -> LocationNode -> Zone`。
-3. `WorldChunk.coord(x,y,z)` 在同一 Region 内唯一。
-4. `WorldChunk.size_profile` 必须引用已定义尺寸 profile。
-5. `Site.parent_chunk_id` 必须引用存在的 `WorldChunk`。
-6. `Region` 不能直接承载 `Site`。
-7. 一个 chunk 默认只能有一个 `primary_site`。
-8. `secondary_site` 只能是附属、小型、不可复杂进入的 site。
-9. chunk 内存在多个 site 时必须定义 `site_relations`。
-10. 两个完整可进入建筑不能放在同一个 chunk。
-11. 没有 `site_relations` 的多个 site 数据必须被 validator 拒绝。
-12. `ChunkEdge.source_chunk_id` 和 `target_chunk_id` 必须引用存在的 `WorldChunk`。
-13. 坐标相邻不能自动生成通行结果，移动必须通过 `ChunkEdge`。
-14. `LocationEdge.source_node_id` 和 `target_node_id` 必须引用存在的 `LocationNode`。
-15. `LocationEdge.portal_object_id` 必须引用一个 `type=portal` 或具备 `enter/leave` 相关 affordance 的对象。
-16. `Zone` 不能包含子 `Zone`。
-17. `Object` 不能通过 `parent_id` 进入空间层级，只能通过 `placement` 定位。
-18. `chunk` placement 必须引用存在的 `chunk_id`。
-19. `zone` placement 必须引用存在的 `node_id` 和 `zone_id`。
-20. `on_object`、`inside_object`、`under_object`、`attached_to_object`、`near_object` 必须引用存在的 `object_id`。
-21. 对象位置链不能形成循环。
-22. 可见/可互动对象的位置链必须能解析到当前 `WorldChunk`、当前 `LocationNode + Zone`，或当前空间内角色携带。
-23. 玩家外部移动只能通过 `ChunkEdge` 成功结算。
-24. 玩家内部移动只能通过 `LocationEdge` 成功结算。
-25. DM 最终旁白中的当前可见主要对象、site、出口、附近生物，必须在同轮返回前进入状态或对应空间记忆。
-26. 交易、拾取、消耗、破坏后，相关对象的 `placement` 必须同步变化。
+3. `Region.bounds_world` 必须存在，并且 `max_meters` 大于 `min_meters`。
+4. `Region.grid_id` 必须引用属于该 Region 的 `WorldChunkGrid`。
+5. `WorldChunkGrid.size_profile` 必须引用已定义尺寸 profile。
+6. `WorldChunkGrid.bounds_chunk` 必须能被 `Region.bounds_world` 和 size profile 容纳。
+7. `WorldChunk.grid_id` 必须引用存在的 `WorldChunkGrid`。
+8. `WorldChunk.region_id` 必须等于其 grid 所属 Region。
+9. `WorldChunk.coord(x,y,z)` 必须落在 `WorldChunkGrid.bounds_chunk` 内。
+10. `WorldChunk.coord(x,y,z)` 在同一 grid 内唯一。
+11. `WorldChunk.size_profile` 必须等于所属 grid 的 `size_profile`。
+12. `Site.parent_chunk_id` 必须引用存在的 `WorldChunk`。
+13. `Region` 不能直接承载 `Site`。
+14. 一个 chunk 默认只能有一个 `primary_site`。
+15. `secondary_site` 只能是附属、小型、不可复杂进入的 site。
+16. chunk 内存在多个 site 时必须定义 `site_relations`。
+17. 两个完整可进入建筑不能放在同一个 chunk。
+18. 没有 `site_relations` 的多个 site 数据必须被 validator 拒绝。
+19. `ChunkEdge.source_chunk_id` 和 `target_chunk_id` 必须引用存在的 `WorldChunk`。
+20. `ChunkEdge` 两端 chunk 必须属于同一个 grid，除非 edge 显式声明 `edge_scope=cross_region`。
+21. `cross_region` edge 必须连接两个 Region 边界 chunk。
+22. 坐标相邻不能自动生成通行结果，移动必须通过 `ChunkEdge`。
+23. `LocationEdge.source_node_id` 和 `target_node_id` 必须引用存在的 `LocationNode`。
+24. `LocationEdge.portal_object_id` 必须引用一个 `type=portal` 或具备 `enter/leave` 相关 affordance 的对象。
+25. `Zone` 不能包含子 `Zone`。
+26. `Object` 不能通过 `parent_id` 进入空间层级，只能通过 `placement` 定位。
+27. `chunk` placement 必须引用存在的 `chunk_id`。
+28. `zone` placement 必须引用存在的 `node_id` 和 `zone_id`。
+29. `on_object`、`inside_object`、`under_object`、`attached_to_object`、`near_object` 必须引用存在的 `object_id`。
+30. 对象位置链不能形成循环。
+31. 可见/可互动对象的位置链必须能解析到当前 `WorldChunk`、当前 `LocationNode + Zone`，或当前空间内角色携带。
+32. 玩家外部移动只能通过 `ChunkEdge` 成功结算。
+33. 玩家内部移动只能通过 `LocationEdge` 成功结算。
+34. DM 最终旁白中的当前可见主要对象、site、出口、附近生物，必须在同轮返回前进入状态或对应空间记忆。
+35. 交易、拾取、消耗、破坏后，相关对象的 `placement` 必须同步变化。
 
 ## 空间投影查询
 
@@ -1229,16 +1284,21 @@ ContentPack / LLM Proposal
 交付内容：
 
 - `WorldSpatialState` 数据结构。
-- `Region`、`WorldChunk`、`ChunkEdge`、`RegionFeature`、`Settlement`、`TerrainFeature` schema。
+- `Region`、`WorldChunkGrid`、`WorldChunk`、`ChunkEdge`、`RegionFeature`、`Settlement`、`TerrainFeature` schema。
 - `Site.parent_chunk_id` schema。
 - `SpatialGraphValidator`。
 
 验收：
 
+- Region 缺少 `bounds_world` 会被拒绝。
+- WorldChunkGrid 缺少 `bounds_chunk` 会被拒绝。
+- chunk 坐标超出 grid bounds 会被拒绝。
+- chunk 的 grid 和 region 不一致会被拒绝。
 - 重复 coord 会被拒绝。
 - `Site` 没有 `parent_chunk_id` 会被拒绝。
 - `Region` 直接承载 `Site` 会被拒绝。
 - `ChunkEdge` 引用不存在 chunk 会被拒绝。
+- 非 `cross_region` ChunkEdge 连接两个 grid 会被拒绝。
 - 没有 `ChunkEdge` 时，相邻 coord 不能自动通行。
 
 ### P0.2：chunk-site 基数规则
@@ -1362,10 +1422,16 @@ ContentPack / LLM Proposal
 
 新增测试覆盖：
 
-- `test_world_chunk_coord_unique_within_region`
+- `test_world_chunk_coord_unique_within_grid`
+- `test_region_requires_world_bounds`
+- `test_world_chunk_grid_requires_chunk_bounds`
+- `test_world_chunk_coord_must_be_inside_grid_bounds`
+- `test_world_chunk_grid_region_must_match_chunk_region`
 - `test_site_requires_parent_chunk`
 - `test_region_cannot_directly_contain_site`
 - `test_adjacent_chunks_are_not_passable_without_chunk_edge`
+- `test_non_cross_region_chunk_edge_cannot_cross_grid`
+- `test_cross_region_chunk_edge_requires_boundary_chunks`
 - `test_blocked_chunk_edge_does_not_change_current_chunk`
 - `test_chunk_rejects_multiple_primary_sites`
 - `test_chunk_multiple_sites_require_site_relations`
