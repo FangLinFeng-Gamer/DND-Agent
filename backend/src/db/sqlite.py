@@ -68,6 +68,7 @@ SCHEMA = [
     CREATE TABLE IF NOT EXISTS adventures (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'dnd',
         world_id TEXT NOT NULL,
         character_id INTEGER NOT NULL,
         status TEXT NOT NULL,
@@ -94,6 +95,53 @@ SCHEMA = [
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_adventure_characters_character ON adventure_characters(character_id)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS isekai_characters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        adventure_id INTEGER NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        race TEXT NOT NULL,
+        class_name TEXT NOT NULL,
+        background TEXT NOT NULL,
+        alignment TEXT NOT NULL,
+        level INTEGER NOT NULL,
+        hp_current INTEGER NOT NULL,
+        hp_max INTEGER NOT NULL,
+        armor_class INTEGER NOT NULL,
+        strength INTEGER NOT NULL,
+        dexterity INTEGER NOT NULL,
+        constitution INTEGER NOT NULL,
+        intelligence INTEGER NOT NULL,
+        wisdom INTEGER NOT NULL,
+        charisma INTEGER NOT NULL,
+        gold INTEGER NOT NULL,
+        inventory_json TEXT NOT NULL,
+        traits_json TEXT NOT NULL,
+        world_reaction_tags_json TEXT NOT NULL,
+        status_effects_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS isekai_survival_states (
+        adventure_id INTEGER PRIMARY KEY,
+        day INTEGER NOT NULL,
+        time_of_day TEXT NOT NULL,
+        hunger INTEGER NOT NULL,
+        thirst INTEGER NOT NULL,
+        fatigue INTEGER NOT NULL,
+        sleep_need INTEGER NOT NULL,
+        temperature_risk INTEGER NOT NULL,
+        morale INTEGER NOT NULL,
+        weather TEXT NOT NULL,
+        location TEXT NOT NULL,
+        shelter TEXT NOT NULL,
+        last_action_type TEXT NOT NULL,
+        state_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
     """,
     """
     CREATE TABLE IF NOT EXISTS messages (
@@ -360,6 +408,7 @@ class SQLiteStore:
         with self.connect() as conn:
             for statement in SCHEMA:
                 conn.execute(statement)
+            self._ensure_column(conn, "adventures", "mode", "TEXT NOT NULL DEFAULT 'dnd'")
             self._ensure_column(conn, "adventures", "story_id", "TEXT NOT NULL DEFAULT 'mistbell_tower'")
             self._ensure_column(conn, "adventures", "story_snapshot_json", "TEXT NOT NULL DEFAULT '{}'")
             self._ensure_column(conn, "adventures", "world_state_json", "TEXT NOT NULL DEFAULT '{}'")

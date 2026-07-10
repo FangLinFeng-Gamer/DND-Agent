@@ -4,7 +4,7 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from backend.src.agent.dm.memory import AgentMemoryManager
-from backend.src.agent.dm.output import chunk_text, extract_narration_text
+from backend.src.agent.dm.output import chunk_text
 from backend.src.agent.dm.prompts import (
     build_dm_messages,
     build_npc_combat_action_messages,
@@ -43,6 +43,7 @@ from backend.src.services.combat_log import append_combat_log_entry
 from backend.src.services.character_state import CharacterStateService
 from backend.src.services.context import ContextBundle
 from backend.src.services.maps import MapAttackRangeError, MapService
+from backend.src.services.model_gateway import ModelGateway
 from backend.src.services.world_state import WorldStateService
 
 
@@ -232,11 +233,17 @@ class DMService:
         self.combat = self.tools.combat
         self.maps = MapService(store)
         self.llm_client = llm_client or OpenAICompatibleClient()
+        self.model_gateway = ModelGateway(store, llm_client=self.llm_client)
         self.graph_runner = DMGraphRunner(store)
         self.workflows = DeterministicWorkflows(store, combat_service=self.combat)
         self.skill_registry = DMSkillRegistry.load_builtin()
 
     def create_adventure(self, request: AdventureCreate) -> AdventureOut:
+        if request.mode == "isekai_survival":
+            from backend.src.services.isekai import IsekaiSurvivalService
+
+            return IsekaiSurvivalService(self.store, llm_client=self.llm_client).create_adventure(request)
+
         locale = normalize_locale(request.locale)
         party = self.adventures.validate_party(request.effective_party_character_ids())
         character = party[0]
@@ -248,7 +255,7 @@ class DMService:
             story,
             locale,
         )
-        active_model = self.models.get_active_record()
+        active_model = self.model_gateway.active_model()
         if active_model:
             try:
                 scene, opening_message = self._opening_with_model(
@@ -286,7 +293,7 @@ class DMService:
         template_opening: str,
         locale: str,
     ) -> tuple[SceneState, str]:
-        raw_response = self.llm_client.chat(
+        raw_response = self.model_gateway.chat(
             model,
             build_opening_scene_messages(
                 character,
@@ -306,6 +313,11 @@ class DMService:
         locale = normalize_locale(message.locale)
         skill_context = self.skill_registry.match(message.content, locale=locale)
         adventure = self.adventures.get(adventure_id, include_messages=False)
+        if adventure.mode == "isekai_survival":
+            from backend.src.services.isekai import IsekaiSurvivalService
+
+            return IsekaiSurvivalService(self.store, llm_client=self.llm_client).advance(adventure_id, message)
+
         combat_state = self.adventures.get_combat_state(adventure_id)
         current_world_state = self.adventures.get_world_state(adventure_id)
         action_classification = self.world_state.classify_action(message.content)
@@ -328,7 +340,7 @@ class DMService:
             self._acting_character_metadata(acting_character),
         )
 
-        active_model = self.models.get_active_record()
+        active_model = self.model_gateway.active_model()
         if active_model:
             try:
                 context = self.workflows.run_memory(adventure_id, active_model.max_context_tokens)
@@ -414,6 +426,12 @@ class DMService:
         locale = normalize_locale(message.locale)
         skill_context = self.skill_registry.match(message.content, locale=locale)
         adventure = self.adventures.get(adventure_id, include_messages=False)
+        if adventure.mode == "isekai_survival":
+            from backend.src.services.isekai import IsekaiSurvivalService
+
+            yield from IsekaiSurvivalService(self.store, llm_client=self.llm_client).advance_stream(adventure_id, message)
+            return
+
         combat_state = self.adventures.get_combat_state(adventure_id)
         current_world_state = self.adventures.get_world_state(adventure_id)
         action_classification = self.world_state.classify_action(message.content)
@@ -438,7 +456,7 @@ class DMService:
         yield {"type": "status", "message": "dm_thinking"}
         yield {"type": "player_message", "message": player_message}
 
-        active_model = self.models.get_active_record()
+        active_model = self.model_gateway.active_model()
         if active_model:
             try:
                 context = self.workflows.run_memory(adventure_id, active_model.max_context_tokens)
@@ -926,7 +944,7 @@ class DMService:
         action_turn = int(state.get("turn_index", 0))
 
         decision = None
-        active_model = self.models.get_active_record()
+        active_model = self.model_gateway.active_model()
         if active_model:
             try:
                 decision = self._npc_decision_with_model(active_model, adventure_id, adventure.current_scene, state, actor, locale)
@@ -963,7 +981,7 @@ class DMService:
             agent="combat_agent",
             limit=3,
         )
-        raw_response = self.llm_client.chat(
+        raw_response = self.model_gateway.chat(
             model,
             build_npc_combat_action_messages(
                 self._npc_combat_context(adventure_id, scene, state, actor),
@@ -1334,7 +1352,7 @@ class DMService:
                     pending_check,
                 )
         if hasattr(self.llm_client, "chat"):
-            raw_response = self.llm_client.chat(model, messages)
+            raw_response = self.model_gateway.chat(model, messages)
             payload = json.loads(raw_response)
             next_scene, narration, dice_result, event_payloads, pending_check = self._model_payload_to_response(
                 adventure_id,
@@ -1359,17 +1377,7 @@ class DMService:
         model: LLMModelRecord,
         messages: list[dict[str, str]],
     ):
-        chunks: list[str] = []
-        emitted_narration_length = 0
-        for chunk in self.llm_client.stream_chat(model, messages):
-            chunks.append(chunk)
-            narration = extract_narration_text("".join(chunks))
-            if len(narration) > emitted_narration_length:
-                delta = narration[emitted_narration_length:]
-                emitted_narration_length = len(narration)
-                yield {"type": "delta", "content": delta}
-        raw_response = "".join(chunks)
-        return json.loads(raw_response), extract_narration_text(raw_response)
+        return (yield from self.model_gateway.stream_json_payload(model, messages))
 
     def _model_payload_to_response(
         self,
@@ -1466,7 +1474,7 @@ class DMService:
         action_classification: dict[str, Any] | None = None,
         use_narration_agent: bool = True,
     ) -> tuple[SceneState, str, dict[str, Any] | None, list[dict[str, Any]], dict[str, Any] | None]:
-        raw_response = self.llm_client.chat(
+        raw_response = self.model_gateway.chat(
             model,
             build_dm_messages(
                 context,

@@ -1,9 +1,20 @@
-import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260620-dm-streaming";
-import { apiBase, els, state } from "./state.js?v=20260620-dm-streaming";
-import { localizeCombatAction, localizeEquipmentName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260620-dm-streaming";
-import { localizedStoryText } from "./stories.js?v=20260620-dm-streaming";
-import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260620-dm-streaming";
-import { rollD20ForCheck } from "./dice.js?v=20260620-dm-streaming";
+import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260709-suggested-action";
+import { apiBase, els, state } from "./state.js?v=20260709-suggested-action";
+import { localizeClassName, localizeCombatAction, localizeEquipmentName, localizeRaceName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260709-suggested-action";
+import { localizedStoryText } from "./stories.js?v=20260709-suggested-action";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260709-suggested-action";
+import { rollD20ForCheck } from "./dice.js?v=20260709-suggested-action";
+
+const ISEKAI_CREATION_PROGRESS_KEYS = [
+  "isekaiProgressRace",
+  "isekaiProgressClass",
+  "isekaiProgressSurvival",
+  "isekaiProgressEnvironment",
+  "isekaiProgressSave",
+];
+const ISEKAI_SURVIVAL_MAX = 100;
+let isekaiCreationProgressTimer = null;
+let isekaiCreationProgressIndex = 0;
 
 export async function loadCharacters() {
   try {
@@ -49,6 +60,29 @@ export async function loadAdventures() {
   }
 }
 
+export function adventureMode(adventure) {
+  if (!adventure) {
+    return "dnd";
+  }
+  return adventure.mode || "dnd";
+}
+
+export function setSelectedGameMode(mode) {
+  state.selectedGameMode = mode === "isekai_survival" ? "isekai_survival" : "dnd";
+  renderGameModeSetup();
+  renderAdventureList();
+  renderAdventureDetail();
+}
+
+export function renderGameModeSetup() {
+  const isIsekai = state.selectedGameMode === "isekai_survival";
+  els.dndSetupContent?.classList.toggle("hidden", isIsekai);
+  els.isekaiSetupContent?.classList.toggle("hidden", !isIsekai);
+  els.gameModeSwitch?.querySelectorAll("[data-game-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.gameMode === state.selectedGameMode);
+  });
+}
+
 export async function createAdventure() {
   const partyIds = selectedPartyCharacterIds();
   const title = els.adventureTitle.value.trim();
@@ -86,12 +120,149 @@ export async function createAdventure() {
   }
 }
 
+export async function createIsekaiAdventure() {
+  if (state.isekaiCreating) {
+    return;
+  }
+  const title = els.isekaiAdventureTitle.value.trim();
+  if (!title) {
+    setStatus(t("adventureTitleRequired"), "error");
+    return;
+  }
+
+  state.isekaiCreating = true;
+  els.isekaiCreateButton.disabled = true;
+  startIsekaiCreationProgress();
+  try {
+    const [adventure] = await Promise.all([
+      api("/api/adventures", {
+        method: "POST",
+        body: JSON.stringify({ title, mode: "isekai_survival", locale: state.locale }),
+      }),
+      wait(1600),
+    ]);
+    stopIsekaiCreationProgress(true);
+    renderIsekaiGeneratedCharacter(
+      adventure.isekai_character,
+      adventure.survival_state,
+      adventure.world_state?.isekai_economy,
+    );
+    state.selectedGameMode = "isekai_survival";
+    state.selectedAdventureId = adventure.id;
+    state.selectedAdventure = adventure;
+    state.gameMode = "room";
+    await loadAdventures();
+    await selectAdventure(adventure.id);
+    setStatus(t("createdAdventure", { title: adventure.title }), "ok");
+  } catch (error) {
+    stopIsekaiCreationProgress(false);
+    showError(error);
+  } finally {
+    state.isekaiCreating = false;
+    els.isekaiCreateButton.disabled = false;
+  }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+export function startIsekaiCreationProgress() {
+  stopIsekaiCreationProgress(false, { clear: true });
+  isekaiCreationProgressIndex = 0;
+  renderIsekaiCreationProgress(isekaiCreationProgressIndex);
+  isekaiCreationProgressTimer = window.setInterval(() => {
+    isekaiCreationProgressIndex = Math.min(
+      isekaiCreationProgressIndex + 1,
+      ISEKAI_CREATION_PROGRESS_KEYS.length - 1,
+    );
+    renderIsekaiCreationProgress(isekaiCreationProgressIndex);
+  }, 360);
+}
+
+export function stopIsekaiCreationProgress(completed = false, options = {}) {
+  if (isekaiCreationProgressTimer) {
+    window.clearInterval(isekaiCreationProgressTimer);
+    isekaiCreationProgressTimer = null;
+  }
+  if (completed) {
+    renderIsekaiCreationProgress(ISEKAI_CREATION_PROGRESS_KEYS.length);
+  } else if (options.clear && els.isekaiCreateStatus) {
+    els.isekaiCreateStatus.replaceChildren();
+    els.isekaiCreateStatus.className = "map-action-message detail-empty";
+  }
+}
+
+export function renderIsekaiCreationProgress(activeIndex = 0) {
+  if (!els.isekaiCreateStatus) {
+    return;
+  }
+  els.isekaiCreateStatus.replaceChildren();
+  els.isekaiCreateStatus.className = "isekai-progress-panel";
+  const title = document.createElement("strong");
+  const currentStepKey = ISEKAI_CREATION_PROGRESS_KEYS[Math.min(activeIndex, ISEKAI_CREATION_PROGRESS_KEYS.length - 1)];
+  title.textContent = activeIndex >= ISEKAI_CREATION_PROGRESS_KEYS.length
+    ? t("isekaiCharacterCreated")
+    : t("isekaiProgressCurrent", { step: t(currentStepKey) });
+  const list = document.createElement("ol");
+  list.className = "isekai-progress-list";
+  ISEKAI_CREATION_PROGRESS_KEYS.forEach((key, index) => {
+    const item = document.createElement("li");
+    if (index < activeIndex || activeIndex >= ISEKAI_CREATION_PROGRESS_KEYS.length) {
+      item.className = "complete";
+    } else if (index === activeIndex) {
+      item.className = "active";
+    } else {
+      item.className = "pending";
+    }
+    item.textContent = t(key);
+    list.append(item);
+  });
+  els.isekaiCreateStatus.append(title, list);
+}
+
+export function renderIsekaiGeneratedCharacter(character, survival, economy = null) {
+  if (!els.isekaiGeneratedCharacter) {
+    return;
+  }
+  els.isekaiGeneratedCharacter.replaceChildren();
+  if (!character) {
+    return;
+  }
+  const rows = [
+    [t("isekaiGeneratedCharacter"), character.name],
+    [t("race"), localizeRaceName(character.race)],
+    [t("className"), localizeClassName(character.class_name)],
+    [t("hp"), `${character.hp_current}/${character.hp_max}`],
+    [t("isekaiCurrency"), formatIsekaiCurrency(Number(economy?.currency?.copper_total || 0))],
+  ];
+  if (survival) {
+    rows.push([t("isekaiSurvival"), `${t("hunger")} ${survival.hunger} | ${t("thirst")} ${survival.thirst} | ${t("fatigue")} ${survival.fatigue}`]);
+  }
+  rows.forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "summary-row";
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    const valueNode = document.createElement("strong");
+    valueNode.textContent = value;
+    row.append(labelNode, valueNode);
+    els.isekaiGeneratedCharacter.append(row);
+  });
+}
+
 export async function selectAdventure(id, options = {}) {
   try {
     state.selectedAdventureId = Number(id);
     state.gameMode = "room";
     state.selectedAdventure = await api(`/api/adventures/${state.selectedAdventureId}`);
-    state.selectedPartyCharacterIds = [...(state.selectedAdventure.party_character_ids || [state.selectedAdventure.character_id])];
+    state.selectedGameMode = adventureMode(state.selectedAdventure);
+    const partyIds = state.selectedAdventure.party_character_ids || [];
+    state.selectedPartyCharacterIds = partyIds.length
+      ? [...partyIds]
+      : (adventureMode(state.selectedAdventure) === "dnd" ? [state.selectedAdventure.character_id] : []);
     state.combat = await loadCombatState(state.selectedAdventureId);
     selectCurrentCombatantForRoom();
     state.combatResult = null;
@@ -175,15 +346,93 @@ export async function sendMessage() {
   }
 }
 
+export async function sendIsekaiMessage() {
+  if (state.dmBusy) {
+    setStatus(t("dmStillResponding"), "error");
+    return;
+  }
+  const content = els.isekaiMessageInput.value.trim();
+  if (!state.selectedAdventureId) {
+    setStatus(t("selectAdventureBeforeSending"), "error");
+    return;
+  }
+  if (!content) {
+    setStatus(t("messageContentRequired"), "error");
+    return;
+  }
+
+  const currentMessages = state.selectedAdventure?.messages || [];
+  const pendingDm = {
+    id: `pending-isekai-dm-${Date.now()}`,
+    adventure_id: state.selectedAdventureId,
+    role: "dm",
+    content: "",
+    metadata: { pending: true, mode: "isekai_survival" },
+    created_at: "",
+  };
+  const optimisticMessages = [
+    ...currentMessages,
+    {
+      id: `pending-isekai-player-${Date.now()}`,
+      adventure_id: state.selectedAdventureId,
+      role: "player",
+      content,
+      metadata: { mode: "isekai_survival" },
+      created_at: "",
+    },
+    pendingDm,
+  ];
+  renderMessageList(els.isekaiMessages, optimisticMessages);
+  setDmBusy(true);
+  setStatus(t("dmThinking"));
+
+  try {
+    const response = await readStreamingResponse(
+      state.selectedAdventureId,
+      content,
+      state.locale,
+      (delta) => {
+        pendingDm.content += delta;
+        pendingDm.metadata.pending = !pendingDm.content;
+        renderMessageList(els.isekaiMessages, optimisticMessages);
+      },
+    );
+    els.isekaiMessageInput.value = "";
+    state.selectedAdventure = response.adventure;
+    renderIsekaiAdventureDetail(response.adventure, response.messages);
+    setStatus(t("messageSent"), "ok");
+  } catch (error) {
+    showError(error);
+    if (!readErrorMessage(error.payload)) {
+      setStatus(t("dmResponseFailed"), "error");
+    }
+  } finally {
+    setDmBusy(false);
+  }
+}
+
 export function setDmBusy(isBusy) {
   state.dmBusy = isBusy;
   els.messageInput.disabled = isBusy;
   els.messageSend.disabled = isBusy;
   els.messageForm.classList.toggle("busy", isBusy);
+  if (els.isekaiMessageInput) {
+    els.isekaiMessageInput.disabled = isBusy;
+  }
+  if (els.isekaiMessageSend) {
+    els.isekaiMessageSend.disabled = isBusy;
+  }
+  els.isekaiMessageForm?.classList.toggle("busy", isBusy);
 }
 
 export async function loadCombatState(adventureId = state.selectedAdventureId) {
   if (!adventureId) {
+    return null;
+  }
+  const adventure = state.selectedAdventure?.id === Number(adventureId)
+    ? state.selectedAdventure
+    : state.adventures.find((entry) => entry.id === Number(adventureId));
+  if (adventure && adventureMode(adventure) !== "dnd") {
     return null;
   }
   return await api(`/api/adventures/${adventureId}/combat`);
@@ -550,9 +799,13 @@ function assetNameFromFile(filename) {
 }
 
 export function renderMessages(messages = []) {
-  els.messages.replaceChildren();
+  renderMessageList(els.messages, messages);
+}
+
+export function renderMessageList(target, messages = []) {
+  target.replaceChildren();
   if (!messages.length) {
-    els.messages.append(emptyNode(t("noMessagesYet")));
+    target.append(emptyNode(t("noMessagesYet")));
     return;
   }
 
@@ -576,9 +829,126 @@ export function renderMessages(messages = []) {
     if (pendingCheck) {
       article.append(pendingCheck);
     }
-    els.messages.append(article);
+    const isekaiExtras = renderIsekaiMessageExtras(message);
+    if (isekaiExtras) {
+      article.append(isekaiExtras);
+    }
+    target.append(article);
   });
-  els.messages.scrollTop = els.messages.scrollHeight;
+  target.scrollTop = target.scrollHeight;
+}
+
+function renderIsekaiMessageExtras(message) {
+  const metadata = message.metadata || {};
+  const isIsekaiMessage = metadata.mode === "isekai_survival" || state.selectedAdventure?.mode === "isekai_survival";
+  if (message.role !== "dm" || !isIsekaiMessage || metadata.pending) {
+    return null;
+  }
+  const interactables = Array.isArray(metadata.interactables) ? metadata.interactables : [];
+  const suggestedActions = Array.isArray(metadata.suggested_actions) ? metadata.suggested_actions : [];
+  const visibleEdges = Array.isArray(metadata.visible_edges) ? metadata.visible_edges : [];
+  if (!interactables.length && !suggestedActions.length && !visibleEdges.length) {
+    return null;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "isekai-message-extras";
+  if (interactables.length) {
+    const section = document.createElement("section");
+    section.className = "isekai-interactables";
+    const heading = document.createElement("h3");
+    heading.textContent = t("isekaiInteractables");
+    section.append(heading);
+    interactables.slice(0, 6).forEach((entry) => {
+      const item = document.createElement("div");
+      item.className = "isekai-interactable";
+      const title = document.createElement("strong");
+      title.textContent = entry.name || entry.id || t("notSet");
+      const detail = document.createElement("span");
+      detail.textContent = [
+        entry.type,
+        entry.state,
+        Array.isArray(entry.affordances) ? entry.affordances.join(" / ") : "",
+        entry.risk ? `${t("risk")}: ${entry.risk}` : "",
+      ].filter(Boolean).join(" · ");
+      item.append(title, detail);
+      section.append(item);
+    });
+    wrap.append(section);
+  }
+  if (visibleEdges.length) {
+    wrap.append(renderIsekaiVisibleExits(visibleEdges));
+  }
+  if (suggestedActions.length) {
+    const section = document.createElement("section");
+    section.className = "isekai-suggested-actions";
+    const heading = document.createElement("h3");
+    heading.textContent = t("isekaiSuggestedActions");
+    section.append(heading);
+    suggestedActions.slice(0, 5).forEach((entry) => {
+      const action = String(entry || "").trim();
+      if (!action) {
+        return;
+      }
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "isekai-suggested-action";
+      button.textContent = action;
+      button.addEventListener("click", () => {
+        applyIsekaiSuggestedAction(action);
+      });
+      section.append(button);
+    });
+    wrap.append(section);
+  }
+  return wrap;
+}
+
+function renderIsekaiVisibleExits(visibleEdges) {
+  const section = document.createElement("section");
+  section.className = "isekai-visible-exits";
+  const heading = document.createElement("h3");
+  heading.textContent = t("isekaiVisibleExits");
+  section.append(heading);
+  visibleEdges.slice(0, 6).forEach((edge) => {
+    const item = document.createElement("div");
+    item.className = "isekai-visible-exit";
+    const title = document.createElement("strong");
+    title.textContent = formatIsekaiEdgeLabel(edge);
+    const detail = document.createElement("span");
+    detail.textContent = [
+      edge?.kind || edge?.type || "",
+      edge?.access || "",
+      edge?.risk ? `${t("risk")}: ${edge.risk}` : "",
+    ].filter(Boolean).join(" · ");
+    item.append(title);
+    if (detail.textContent) {
+      item.append(detail);
+    }
+    section.append(item);
+  });
+  return section;
+}
+
+function formatIsekaiEdgeLabel(edge) {
+  if (!edge || typeof edge !== "object") {
+    return t("notSet");
+  }
+  return edge.label || edge.name || edge.to_name || edge.to_display_name || edge.to_node_id || edge.id || t("notSet");
+}
+
+function applyIsekaiSuggestedAction(action) {
+  const text = String(action || "").trim();
+  if (!text || !els.isekaiMessageInput) {
+    return;
+  }
+  els.isekaiMessageInput.value = text;
+  els.isekaiMessageInput.dispatchEvent(new Event("input", { bubbles: true }));
+  els.isekaiMessageInput.focus();
+  if (typeof els.isekaiMessageInput.scrollIntoView === "function") {
+    els.isekaiMessageInput.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  setStatus(t("isekaiSuggestedActionFilled"), "ok");
 }
 
 function renderPendingCheck(message) {
@@ -1366,13 +1736,19 @@ export async function deleteCharacter(id) {
 }
 
 export function renderAdventureList() {
-  els.adventureList.replaceChildren();
-  if (!state.adventures.length) {
-    els.adventureList.append(emptyNode(t("noAdventuresYet")));
+  const target = state.selectedGameMode === "isekai_survival" ? els.isekaiAdventureList : els.adventureList;
+  [els.adventureList, els.isekaiAdventureList].forEach((list) => list?.replaceChildren());
+  renderGameModeSetup();
+  if (!target) {
+    return;
+  }
+  const adventures = state.adventures.filter((adventure) => adventureMode(adventure) === state.selectedGameMode);
+  if (!adventures.length) {
+    target.append(emptyNode(t("noAdventuresYet")));
     return;
   }
 
-  state.adventures.forEach((adventure) => {
+  adventures.forEach((adventure) => {
     const item = document.createElement("div");
     item.className = `adventure-item ${adventure.id === state.selectedAdventureId ? "active" : ""}`;
     const summary = document.createElement("button");
@@ -1385,7 +1761,7 @@ export function renderAdventureList() {
       status: localizeStatus(adventure.status),
       characterId: adventure.character_id,
       party: partyNames,
-      count: adventure.party_character_ids?.length || 1,
+      count: adventureMode(adventure) === "isekai_survival" ? 1 : (adventure.party_character_ids?.length || 1),
     });
     summary.addEventListener("click", () => selectAdventure(adventure.id));
     const actions = document.createElement("div");
@@ -1397,7 +1773,7 @@ export function renderAdventureList() {
     remove.addEventListener("click", () => deleteAdventure(adventure.id));
     actions.append(remove);
     item.append(summary, actions);
-    els.adventureList.append(item);
+    target.append(item);
   });
 }
 
@@ -1424,6 +1800,7 @@ export async function deleteAdventure(id) {
 
 export function renderAdventureDetail(messages, scene, combat) {
   const adventure = state.selectedAdventure;
+  renderGameModeSetup();
   renderGameMode();
   renderPartySummary();
   renderRoomParty();
@@ -1442,6 +1819,11 @@ export function renderAdventureDetail(messages, scene, combat) {
     return;
   }
 
+  if (adventureMode(adventure) === "isekai_survival") {
+    renderIsekaiAdventureDetail(adventure, messages);
+    return;
+  }
+
   els.chatTitle.textContent = adventure.title;
   els.chatSubtitle.textContent = t("adventureSubtitle", {
     status: localizeStatus(adventure.status),
@@ -1457,6 +1839,711 @@ export function renderAdventureDetail(messages, scene, combat) {
   renderMapPreview(getSelectedMapScene());
   renderMapTokens();
   renderRoomHeader(adventure, scene || adventure.current_scene);
+}
+
+function renderIsekaiAdventureDetail(adventure, messages) {
+  renderGameMode();
+  const survival = adventure.survival_state || {};
+  if (els.isekaiRoomTitle) {
+    els.isekaiRoomTitle.textContent = adventure.title;
+  }
+  if (els.isekaiRoomSubtitle) {
+    els.isekaiRoomSubtitle.textContent = [
+      survival.day ? t("isekaiDay", { day: survival.day }) : "",
+      survival.time_of_day,
+      survival.location,
+    ].filter(Boolean).join(" · ") || t("isekaiRoomSubtitle");
+  }
+  if (els.isekaiRouteTag) {
+    els.isekaiRouteTag.textContent = `/game/${adventure.id}`;
+  }
+  renderIsekaiInfoTabs();
+  renderIsekaiCharacter(adventure.isekai_character, adventure.world_state?.isekai_economy);
+  renderIsekaiSurvival(survival);
+  renderIsekaiEconomyPanel(adventure);
+  renderIsekaiEvents(adventure);
+  const roomMessages = messages || adventure.messages || [];
+  renderMessageList(els.isekaiMessages, roomMessages);
+  renderIsekaiDmDebug(adventure, roomMessages);
+}
+
+function renderIsekaiInfoTabs() {
+  const tabs = ["character", "survival", "economy", "world"];
+  if (!tabs.includes(state.selectedIsekaiInfoTab)) {
+    state.selectedIsekaiInfoTab = "character";
+  }
+  els.isekaiInfoTabs?.querySelectorAll("[data-isekai-info-tab]").forEach((button) => {
+    const active = button.dataset.isekaiInfoTab === state.selectedIsekaiInfoTab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  [
+    ["character", els.isekaiCharacterPanel],
+    ["survival", els.isekaiSurvivalPanel],
+    ["economy", els.isekaiEconomyPanel],
+    ["world", els.isekaiEventsPanel],
+  ].forEach(([tab, panel]) => {
+    panel?.classList.toggle("active", state.selectedIsekaiInfoTab === tab);
+  });
+}
+
+function renderIsekaiPanel(target, title, rows) {
+  if (!target) {
+    return;
+  }
+  target.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = title;
+  target.append(heading);
+  if (!rows.length) {
+    target.append(emptyNode(t("notSet")));
+    return;
+  }
+  const list = document.createElement("div");
+  list.className = "isekai-stat-list";
+  rows.forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "isekai-stat-row";
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    const valueNode = document.createElement("strong");
+    valueNode.textContent = value;
+    row.append(labelNode, valueNode);
+    list.append(row);
+  });
+  target.append(list);
+}
+
+function renderIsekaiCharacter(character, economy = null) {
+  const inventory = character?.inventory || [];
+  renderIsekaiPanel(els.isekaiCharacterPanel, t("isekaiGeneratedCharacter"), character ? [
+    [t("name"), character.name],
+    [t("race"), localizeRaceName(character.race)],
+    [t("className"), localizeClassName(character.class_name)],
+    [t("hp"), `${character.hp_current}/${character.hp_max}`],
+    [t("isekaiCurrency"), formatIsekaiCurrency(Number(economy?.currency?.copper_total || 0))],
+  ] : []);
+  if (!character || !els.isekaiCharacterPanel) {
+    return;
+  }
+  const inventorySection = document.createElement("section");
+  inventorySection.className = "isekai-merged-section";
+  const heading = document.createElement("h3");
+  heading.textContent = t("isekaiInventory");
+  inventorySection.append(heading);
+  if (!inventory.length) {
+    inventorySection.append(emptyNode(t("notSet")));
+  } else {
+    const list = document.createElement("div");
+    list.className = "isekai-stat-list";
+    inventory.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.className = "isekai-stat-row";
+      const label = document.createElement("span");
+      label.textContent = String(index + 1);
+      const value = document.createElement("strong");
+      value.textContent = item;
+      row.append(label, value);
+      list.append(row);
+    });
+    inventorySection.append(list);
+  }
+  els.isekaiCharacterPanel.append(inventorySection);
+}
+
+function formatIsekaiTimeCost(minutes) {
+  const value = Number(minutes || 0);
+  if (!value) {
+    return t("noTimeCost");
+  }
+  if (value >= 60 && value % 60 === 0) {
+    return t("hoursShort", { hours: value / 60 });
+  }
+  if (value >= 60) {
+    return t("hoursMinutesShort", { hours: Math.floor(value / 60), minutes: value % 60 });
+  }
+  return t("minutesShort", { minutes: value });
+}
+
+function formatIsekaiClockTime(minutes) {
+  const numeric = Number(minutes);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  const totalMinutes = ((Math.trunc(numeric) % 1440) + 1440) % 1440;
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+  const minute = String(totalMinutes % 60).padStart(2, "0");
+  return `${hours}:${minute}`;
+}
+
+function formatIsekaiCurrentTime(survival) {
+  const day = t("isekaiDay", { day: survival?.day || 1 });
+  const label = survival?.time_of_day || t("notSet");
+  const clock = formatIsekaiClockTime(survival?.state?.elapsed_minutes);
+  return clock ? `${day} ${label} ${clock}` : `${day} ${label}`;
+}
+
+function localizeShelter(value) {
+  const key = `shelter.${value || "none"}`;
+  const localized = t(key);
+  return localized === key ? String(value || t("notSet")) : localized;
+}
+
+function formatIsekaiPositiveMeter(value, invert = false) {
+  const numeric = Number(value);
+  const clamped = Number.isFinite(numeric)
+    ? Math.max(0, Math.min(ISEKAI_SURVIVAL_MAX, Math.round(numeric)))
+    : 0;
+  const displayed = invert ? ISEKAI_SURVIVAL_MAX - clamped : clamped;
+  return `${displayed}/${ISEKAI_SURVIVAL_MAX}`;
+}
+
+function renderIsekaiSurvival(survival) {
+  const stateData = survival?.state || {};
+  const timeLabel = survival?.time_of_day || t("notSet");
+  renderIsekaiPanel(els.isekaiSurvivalPanel, t("isekaiSurvivalState"), survival ? [
+    [t("currentTime"), formatIsekaiCurrentTime(survival) || timeLabel],
+    [t("lastTimeCost"), formatIsekaiTimeCost(stateData.last_time_delta_minutes)],
+    [t("satiety"), formatIsekaiPositiveMeter(survival.hunger, true)],
+    [t("hydration"), formatIsekaiPositiveMeter(survival.thirst, true)],
+    [t("energy"), formatIsekaiPositiveMeter(survival.fatigue, true)],
+    [t("sleepSufficiency"), formatIsekaiPositiveMeter(survival.sleep_need, true)],
+    [t("morale"), formatIsekaiPositiveMeter(survival.morale, false)],
+    [t("survivalDisplayRule"), t("survivalDisplayHint")],
+    [t("weather"), survival.weather],
+    [t("shelter"), localizeShelter(survival.shelter)],
+  ] : []);
+}
+
+function renderIsekaiEconomyPanel(adventure) {
+  const target = els.isekaiEconomyPanel;
+  if (!target) {
+    return;
+  }
+  target.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = t("isekaiEconomy");
+  target.append(heading);
+
+  const scene = adventure.current_scene || {};
+  const locationPath = scene.location_path || {};
+  const locationRows = [
+    [t("isekaiCurrentLocation"), locationPath.display_name || scene.location || t("notSet")],
+    [t("region"), locationPath.region || t("notSet")],
+    [t("site"), locationPath.site || t("notSet")],
+    [t("sublocation"), locationPath.sublocation || t("notSet")],
+  ];
+  const locationBlock = document.createElement("section");
+  locationBlock.className = "isekai-economy-dashboard";
+  locationBlock.append(renderIsekaiEconomySection(t("isekaiCurrentLocation"), locationRows.map(([label, value]) => `${label}: ${value}`)));
+  target.append(locationBlock);
+
+  const economySummary = renderIsekaiEconomySummary(adventure.world_state?.isekai_economy || {});
+  if (economySummary) {
+    target.append(economySummary);
+  } else {
+    target.append(renderIsekaiEconomySection(t("isekaiCurrency"), [formatIsekaiCurrency(0)]));
+  }
+
+  const currentInteractables = Array.isArray(adventure.current_scene?.interactables)
+    ? adventure.current_scene.interactables
+    : [];
+  const currentSuggestedActions = Array.isArray(adventure.current_scene?.suggested_actions)
+    ? adventure.current_scene.suggested_actions
+    : [];
+  const currentVisibleEdges = currentVisibleEdgesForAdventure(adventure);
+  target.append(renderIsekaiCurrentInteractables(currentInteractables, currentSuggestedActions, currentVisibleEdges));
+}
+
+function currentVisibleEdgesForAdventure(adventure) {
+  const nodeId = String(adventure.current_scene?.location_path?.node_id || "").trim();
+  const edges = Array.isArray(adventure.world_state?.scene_graph?.edges)
+    ? adventure.world_state.scene_graph.edges
+    : [];
+  return edges.filter((edge) => {
+    if (!edge || typeof edge !== "object") {
+      return false;
+    }
+    if (edge.known_to_player === false || edge.access === "hidden") {
+      return false;
+    }
+    return nodeId ? String(edge.from_node_id || "") === nodeId : true;
+  });
+}
+
+function renderIsekaiCurrentInteractables(interactables, suggestedActions, visibleEdges = []) {
+  const section = document.createElement("section");
+  section.className = "isekai-current-interactables";
+  const heading = document.createElement("h3");
+  heading.textContent = t("isekaiCurrentInteractables");
+  section.append(heading);
+
+  if (!interactables.length && !visibleEdges.length) {
+    section.append(emptyNode(t("notSet")));
+  } else {
+    if (interactables.length) {
+      const list = document.createElement("div");
+      list.className = "isekai-current-interactable-list";
+      interactables.slice(0, 8).forEach((entry) => {
+        const item = document.createElement("article");
+        item.className = "isekai-current-interactable";
+        const name = document.createElement("strong");
+        name.textContent = entry.name || entry.id || t("notSet");
+        const details = [
+          entry.type || "",
+          entry.state || "",
+          Array.isArray(entry.affordances) && entry.affordances.length ? `${t("isekaiAffordances")}: ${entry.affordances.join("、")}` : "",
+          entry.risk ? `${t("risk")}: ${entry.risk}` : "",
+        ].filter(Boolean);
+        const meta = document.createElement("span");
+        meta.textContent = details.join(" · ");
+        item.append(name);
+        if (meta.textContent) {
+          item.append(meta);
+        }
+        list.append(item);
+      });
+      section.append(list);
+    }
+    if (visibleEdges.length) {
+      section.append(renderIsekaiVisibleExits(visibleEdges));
+    }
+  }
+
+  if (suggestedActions.length) {
+    const actions = document.createElement("div");
+    actions.className = "isekai-current-actions";
+    const actionTitle = document.createElement("h3");
+    actionTitle.textContent = t("isekaiSuggestedActions");
+    actions.append(actionTitle);
+    suggestedActions.slice(0, 5).forEach((action) => {
+      const text = String(action || "").trim();
+      if (!text) {
+        return;
+      }
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "isekai-suggested-action";
+      button.textContent = text;
+      button.addEventListener("click", () => {
+        applyIsekaiSuggestedAction(action);
+      });
+      actions.append(button);
+    });
+    section.append(actions);
+  }
+  return section;
+}
+
+function renderIsekaiEnvironmentSummary(adventure) {
+  const scene = adventure.current_scene || {};
+  const locationPath = scene.location_path || {};
+  const economy = adventure.world_state?.isekai_economy || {};
+  const pressureGoals = Array.isArray(adventure.world_state?.isekai_pressure_goals)
+    ? adventure.world_state.isekai_pressure_goals
+    : [];
+  const pressureClocks = Array.isArray(adventure.world_state?.pressure_clocks)
+    ? adventure.world_state.pressure_clocks
+    : [];
+  const card = document.createElement("article");
+  card.className = "isekai-environment-card";
+  const heading = document.createElement("h2");
+  heading.textContent = t("isekaiCurrentEnvironment");
+  const location = document.createElement("strong");
+  location.className = "isekai-location";
+  location.textContent = locationPath.display_name || scene.location || t("notSet");
+  const locationMeta = document.createElement("p");
+  locationMeta.className = "field-hint";
+  locationMeta.textContent = [
+    locationPath.region ? `${t("region")}: ${locationPath.region}` : "",
+    locationPath.site ? `${t("site")}: ${locationPath.site}` : "",
+    locationPath.sublocation ? `${t("sublocation")}: ${locationPath.sublocation}` : "",
+  ].filter(Boolean).join(" · ");
+  const body = document.createElement("p");
+  body.textContent = scene.environment || "";
+  const objective = document.createElement("p");
+  objective.className = "field-hint";
+  objective.textContent = scene.current_objective || "";
+  const currentLocationLabel = document.createElement("span");
+  currentLocationLabel.className = "isekai-section-label";
+  currentLocationLabel.textContent = t("isekaiCurrentLocation");
+  card.append(heading, currentLocationLabel, location);
+  if (locationMeta.textContent) {
+    card.append(locationMeta);
+  }
+  card.append(body, objective);
+  const economySummary = renderIsekaiEconomySummary(economy);
+  if (economySummary) {
+    card.append(economySummary);
+  }
+  const questSummary = renderIsekaiQuestSummary(adventure.world_state || {});
+  if (questSummary) {
+    card.append(questSummary);
+  }
+  if (pressureGoals.length) {
+    const pressure = document.createElement("div");
+    pressure.className = "isekai-pressure-goals";
+    const pressureTitle = document.createElement("h3");
+    pressureTitle.textContent = t("isekaiPressureGoals");
+    pressure.append(pressureTitle);
+    pressureGoals.slice(0, 4).forEach((goal) => {
+      const item = document.createElement("div");
+      item.className = "isekai-pressure-goal";
+      const label = document.createElement("strong");
+      label.textContent = goal.label || goal.id || t("notSet");
+      const detail = document.createElement("span");
+      detail.textContent = goal.detail || "";
+      item.append(label, detail);
+      pressure.append(item);
+    });
+    card.append(pressure);
+  }
+  const clocks = renderIsekaiPressureClocks(pressureClocks);
+  if (clocks) {
+    card.append(clocks);
+  }
+  return card;
+}
+
+function renderIsekaiQuestSummary(worldState) {
+  const quest = worldState?.isekai_quest || {};
+  const clues = Array.isArray(worldState?.isekai_clues) ? worldState.isekai_clues : [];
+  const pressureState = worldState?.isekai_pressure_events || {};
+  const pressureEvent = pressureState.last_event || null;
+  const risks = worldState?.isekai_risks || {};
+  const hasQuest = quest.active_quest_id === "night_wolf_line";
+  if (!hasQuest && !clues.length && !pressureEvent) {
+    return null;
+  }
+
+  const wrap = document.createElement("section");
+  wrap.className = "isekai-quest-summary";
+  const title = document.createElement("h3");
+  title.textContent = t("isekaiCurrentQuest");
+  wrap.append(title);
+
+  if (hasQuest) {
+    const questName = document.createElement("strong");
+    questName.textContent = localizeIsekaiQuestId(quest.active_quest_id);
+    const stage = document.createElement("span");
+    stage.textContent = localizeIsekaiQuestStage(quest.stage || "not_started");
+    wrap.append(questName, stage);
+  } else {
+    wrap.append(emptyNode(t("notSet")));
+  }
+
+  if (clues.length) {
+    const clueTitle = document.createElement("h3");
+    clueTitle.textContent = t("isekaiKnownClues");
+    const clueList = document.createElement("div");
+    clueList.className = "isekai-clue-list";
+    clues.slice(-5).forEach((clue) => {
+      const item = document.createElement("span");
+      item.textContent = String(clue);
+      clueList.append(item);
+    });
+    wrap.append(clueTitle, clueList);
+  }
+
+  if (pressureEvent?.visible_text) {
+    const pressureTitle = document.createElement("h3");
+    pressureTitle.textContent = t("isekaiLastPressureEvent");
+    const eventText = document.createElement("p");
+    eventText.textContent = pressureEvent.visible_text;
+    wrap.append(pressureTitle, eventText);
+  }
+
+  const riskRows = Object.entries(risks).filter(([, value]) => Number(value) !== 0);
+  if (riskRows.length) {
+    const riskText = document.createElement("p");
+    riskText.className = "field-hint";
+    riskText.textContent = riskRows.map(([key, value]) => `${key}: ${value}`).join(" · ");
+    wrap.append(riskText);
+  }
+
+  return wrap;
+}
+
+function localizeIsekaiQuestId(questId) {
+  if (questId === "night_wolf_line") {
+    return t("isekaiQuest.night_wolf_line");
+  }
+  return questId || t("notSet");
+}
+
+function localizeIsekaiQuestStage(stage) {
+  const key = `isekaiQuestStage.${stage}`;
+  const localized = t(key);
+  return localized === key ? stage : localized;
+}
+
+function renderIsekaiEconomySummary(economy) {
+  if (!economy || typeof economy !== "object") {
+    return null;
+  }
+  const hasEconomy = economy.currency || economy.entitlements || economy.transaction_log || economy.relationship_changes;
+  if (!hasEconomy) {
+    return null;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "isekai-economy-grid";
+  const currency = economy.currency || {};
+  wrap.append(renderIsekaiEconomySection(t("isekaiCurrency"), [
+    formatIsekaiCurrency(Number(currency.copper_total || 0)),
+  ]));
+  wrap.append(renderIsekaiEconomySection(
+    t("isekaiEntitlements"),
+    (Array.isArray(economy.entitlements) ? economy.entitlements : []).slice(-4).map((entry) => [
+      entry.name || entry.id || t("notSet"),
+      entry.valid_until ? `${t("validUntil")}: ${entry.valid_until}` : "",
+      entry.identity || "",
+    ].filter(Boolean).join(" · ")),
+  ));
+  wrap.append(renderIsekaiEconomySection(
+    t("isekaiTransactions"),
+    (Array.isArray(economy.transaction_log) ? economy.transaction_log : []).slice(-4).map((entry) => [
+      entry.lost ? `${t("lost")}: ${entry.lost}` : "",
+      entry.gained ? `${t("gained")}: ${entry.gained}` : "",
+      entry.reason || "",
+    ].filter(Boolean).join(" · ")),
+  ));
+  wrap.append(renderIsekaiEconomySection(
+    t("isekaiRelationships"),
+    (Array.isArray(economy.relationship_changes) ? economy.relationship_changes : []).slice(-4).map((entry) => [
+      entry.name || entry.npc_id || t("notSet"),
+      entry.attitude || "",
+      Number.isFinite(Number(entry.delta)) ? `${entry.delta > 0 ? "+" : ""}${entry.delta}` : "",
+    ].filter(Boolean).join(" · ")),
+  ));
+  return wrap;
+}
+
+function renderIsekaiEconomySection(titleText, rows) {
+  const section = document.createElement("section");
+  section.className = "isekai-economy-section";
+  const title = document.createElement("h3");
+  title.textContent = titleText;
+  section.append(title);
+  const list = document.createElement("div");
+  list.className = "isekai-economy-list";
+  const values = rows.filter((row) => String(row || "").trim());
+  if (!values.length) {
+    list.append(emptyNode(t("notSet")));
+  } else {
+    values.forEach((row) => {
+      const item = document.createElement("span");
+      item.textContent = row;
+      list.append(item);
+    });
+  }
+  section.append(list);
+  return section;
+}
+
+function formatIsekaiCurrency(copperTotal) {
+  const total = Math.max(0, Math.round(Number(copperTotal || 0)));
+  const gold = Math.floor(total / 100);
+  const silver = Math.floor((total % 100) / 10);
+  const copper = total % 10;
+  const parts = [];
+  if (gold) {
+    parts.push(`${gold} ${t("goldShort")}`);
+  }
+  if (silver) {
+    parts.push(`${silver} ${t("silverShort")}`);
+  }
+  parts.push(`${copper} ${t("copperShort")}`);
+  return `${parts.join(" ")} (${total} ${t("copperTotal")})`;
+}
+
+function renderIsekaiPressureClocks(pressureClocks) {
+  if (!Array.isArray(pressureClocks) || !pressureClocks.length) {
+    return null;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "isekai-pressure-clocks";
+  const title = document.createElement("h3");
+  title.textContent = t("isekaiPressureClocks");
+  wrap.append(title);
+  pressureClocks.slice(0, 6).forEach((clock) => {
+    const max = Math.max(1, Number(clock.max || 100));
+    const value = Math.max(0, Math.min(max, Number(clock.value || 0)));
+    const item = document.createElement("div");
+    item.className = "isekai-pressure-clock";
+    const head = document.createElement("div");
+    head.className = "isekai-pressure-clock-head";
+    const label = document.createElement("strong");
+    label.textContent = clock.label || clock.id || t("notSet");
+    const amount = document.createElement("span");
+    amount.textContent = `${Math.round(value)}/${Math.round(max)}`;
+    head.append(label, amount);
+    const track = document.createElement("div");
+    track.className = "isekai-pressure-clock-track";
+    const bar = document.createElement("span");
+    bar.className = "isekai-pressure-clock-bar";
+    bar.style.width = `${Math.round((value / max) * 100)}%`;
+    track.append(bar);
+    const description = document.createElement("p");
+    description.textContent = clock.description || "";
+    item.append(head, track);
+    if (description.textContent) {
+      item.append(description);
+    }
+    wrap.append(item);
+  });
+  return wrap;
+}
+
+function findLatestIsekaiDmMessage(messages = []) {
+  return [...messages].reverse().find((message) => message.role === "dm" && !message.metadata?.pending) || null;
+}
+
+function formatIsekaiDebugBoolean(value) {
+  return value ? t("debugYes") : t("debugNo");
+}
+
+function renderIsekaiDmDebug(adventure, messages = []) {
+  const target = els.isekaiDmDebug;
+  if (!target) {
+    return;
+  }
+  target.replaceChildren();
+  const latestDm = findLatestIsekaiDmMessage(messages || adventure.messages || []);
+  const metadata = latestDm?.metadata || {};
+  const debug = metadata.debug || {};
+  const survival = adventure.survival_state || {};
+  const visible = debug.visible_survival || metadata.visible_survival || {};
+  const raw = debug.raw_survival || survival;
+  const satiety = visible.satiety ?? (Number.isFinite(Number(survival.hunger)) ? 100 - Number(survival.hunger) : null);
+  const hydration = visible.hydration ?? (Number.isFinite(Number(survival.thirst)) ? 100 - Number(survival.thirst) : null);
+  const sceneUpdateApplied = typeof metadata.scene_update_applied === "boolean"
+    ? metadata.scene_update_applied
+    : Boolean(debug.scene_update_applied);
+  const modelErrors = Array.isArray(metadata.model_errors)
+    ? metadata.model_errors.map((error) => `${error.stage || "model"}: ${error.message || error}`).join(" | ")
+    : "";
+  const details = document.createElement("details");
+  details.className = "isekai-dm-debug-details";
+  const summary = document.createElement("summary");
+  summary.textContent = t("isekaiDmDebug");
+  const rows = [
+    [t("mode"), debug.mode || metadata.mode || adventure.mode || t("notSet")],
+    [t("debugSource"), debug.source || metadata.source || t("notSet")],
+    [t("debugActionType"), debug.action_type || metadata.action_type || t("notSet")],
+    [t("debugRawHungerThirst"), `${raw.hunger ?? t("notSet")} / ${raw.thirst ?? t("notSet")}`],
+    [t("debugVisibleSatietyHydration"), `${satiety ?? t("notSet")} / ${hydration ?? t("notSet")}`],
+    [t("debugSceneUpdateApplied"), formatIsekaiDebugBoolean(sceneUpdateApplied)],
+    [t("debugModelErrors"), modelErrors || t("notSet")],
+  ];
+  const list = document.createElement("div");
+  list.className = "isekai-dm-debug-grid";
+  rows.forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "isekai-dm-debug-row";
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    const valueNode = document.createElement("strong");
+    valueNode.textContent = String(value);
+    row.append(labelNode, valueNode);
+    list.append(row);
+  });
+  details.append(summary, list);
+  target.append(details);
+}
+
+export function getIsekaiKnownWorldEvents(adventure) {
+  return Array.isArray(adventure?.world_events) ? adventure.world_events : [];
+}
+
+export function summarizeIsekaiWorldEvent(event) {
+  const metadata = event?.metadata || {};
+  const scope = String(metadata.scope || "unknown");
+  const channel = String(metadata.knowledge_channel || "unknown");
+  const source = String(metadata.source || "unknown");
+  const importance = Number.isFinite(Number(event?.importance)) ? Number(event.importance) : 0;
+  return {
+    title: event?.title || t("isekaiEventUntitled"),
+    description: event?.description || "",
+    meta: [
+      translateIsekaiEventEnum("isekaiEventScope", scope),
+      translateIsekaiEventEnum("isekaiEventChannel", channel),
+      translateIsekaiEventEnum("isekaiEventSource", source),
+      t("isekaiEventImportance", { importance }),
+    ],
+    affectedArea: metadata.affected_area || metadata.location || "",
+    tags: Array.isArray(metadata.preference_tags) ? metadata.preference_tags.filter(Boolean).slice(0, 4) : [],
+  };
+}
+
+function translateIsekaiEventEnum(prefix, value) {
+  const key = `${prefix}.${value || "unknown"}`;
+  const localized = t(key);
+  return localized === key ? t(`${prefix}.unknown`) : localized;
+}
+
+function renderIsekaiEvents(adventure) {
+  const target = els.isekaiEventsPanel;
+  if (!target) {
+    return;
+  }
+  target.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = t("isekaiWorldEvents");
+  target.append(renderIsekaiEnvironmentSummary(adventure), heading);
+
+  const events = getIsekaiKnownWorldEvents(adventure).slice(-6).reverse();
+  if (!events.length) {
+    target.append(emptyNode(t("isekaiNoWorldEventsYet")));
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "isekai-event-list";
+  events.forEach((event) => {
+    const summary = summarizeIsekaiWorldEvent(event);
+    const card = document.createElement("article");
+    card.className = "isekai-event-card";
+    const title = document.createElement("h3");
+    title.textContent = summary.title;
+    const meta = document.createElement("div");
+    meta.className = "isekai-event-meta";
+    summary.meta.forEach((item) => {
+      const chip = document.createElement("span");
+      chip.textContent = item;
+      meta.append(chip);
+    });
+    const body = document.createElement("p");
+    body.textContent = summary.description;
+    card.append(title, meta, body);
+
+    if (summary.affectedArea) {
+      const affected = document.createElement("div");
+      affected.className = "isekai-event-detail";
+      const label = document.createElement("span");
+      label.textContent = t("isekaiEventAffectedArea");
+      const value = document.createElement("strong");
+      value.textContent = summary.affectedArea;
+      affected.append(label, value);
+      card.append(affected);
+    }
+
+    if (summary.tags.length) {
+      const tags = document.createElement("div");
+      tags.className = "isekai-event-tags";
+      const label = document.createElement("span");
+      label.textContent = t("isekaiEventTags");
+      tags.append(label);
+      summary.tags.forEach((tag) => {
+        const chip = document.createElement("strong");
+        chip.textContent = tag;
+        tags.append(chip);
+      });
+      card.append(tags);
+    }
+
+    list.append(card);
+  });
+  target.append(list);
 }
 
 export function renderMapAssets() {
@@ -1802,9 +2889,14 @@ function renderGameMode() {
   if (!gameView) {
     return;
   }
-  const roomMode = state.gameMode === "room" && Boolean(state.selectedAdventureId);
-  gameView.classList.toggle("setup-mode", !roomMode);
-  gameView.classList.toggle("room-mode", roomMode);
+  const isRoom = state.gameMode === "room" && Boolean(state.selectedAdventureId);
+  const isIsekaiRoom = isRoom && adventureMode(state.selectedAdventure) === "isekai_survival";
+  gameView.classList.toggle("setup-mode", !isRoom);
+  gameView.classList.toggle("room-mode", isRoom && !isIsekaiRoom);
+  gameView.classList.toggle("isekai-room-mode", isIsekaiRoom);
+  els.gameSetup?.classList.toggle("hidden", isRoom);
+  els.gameRoom?.classList.toggle("hidden", !isRoom || isIsekaiRoom);
+  els.isekaiRoom?.classList.toggle("hidden", !isIsekaiRoom);
 }
 
 function renderRoomHeader(adventure, scene) {
@@ -1869,6 +2961,9 @@ function isCurrentPartyMember(character) {
 }
 
 function partyNamesForAdventure(adventure) {
+  if (adventureMode(adventure) === "isekai_survival") {
+    return adventure.isekai_character?.name || t("isekaiGeneratedCharacter");
+  }
   const party = adventure.party_characters || [];
   if (party.length) {
     return party.map((character) => character.name).join(", ");

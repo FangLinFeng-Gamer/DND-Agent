@@ -1,4 +1,4 @@
-import { apiBase } from "./state.js?v=20260620-dm-streaming";
+import { apiBase } from "./state.js?v=20260709-suggested-action";
 
 export async function api(path, options = {}) {
   const headers = {

@@ -1,8 +1,8 @@
 from sqlite3 import Row
 
+from backend.src.core.errors import api_error
 from backend.src.db.sqlite import SQLiteStore, decode_json, encode_json
 from backend.src.schemas.world_event import WorldEventCreate, WorldEventOut
-from backend.src.services.adventures import AdventureService
 
 
 class WorldEventService:
@@ -10,7 +10,7 @@ class WorldEventService:
         self.store = store
 
     def create(self, adventure_id: int, event: WorldEventCreate) -> WorldEventOut:
-        AdventureService(self.store).get(adventure_id, include_messages=False)
+        self._ensure_adventure_exists(adventure_id)
         with self.store.connect() as conn:
             cursor = conn.execute(
                 """
@@ -34,7 +34,7 @@ class WorldEventService:
         return self._map_row(row)
 
     def list_for_adventure(self, adventure_id: int, min_importance: int = 0) -> list[WorldEventOut]:
-        AdventureService(self.store).get(adventure_id, include_messages=False)
+        self._ensure_adventure_exists(adventure_id)
         with self.store.connect() as conn:
             rows = conn.execute(
                 """
@@ -45,6 +45,22 @@ class WorldEventService:
                 (adventure_id, min_importance),
             ).fetchall()
         return [self._map_row(row) for row in rows]
+
+    def list_known_for_adventure(self, adventure_id: int, limit: int = 10) -> list[WorldEventOut]:
+        events = self.list_for_adventure(adventure_id)
+        known = [
+            event
+            for event in events
+            if event.metadata.get("mode") == "isekai_survival"
+            and event.metadata.get("known_to_character") is True
+        ]
+        return known[-limit:]
+
+    def _ensure_adventure_exists(self, adventure_id: int) -> None:
+        with self.store.connect() as conn:
+            row = conn.execute("SELECT id FROM adventures WHERE id = ?", (adventure_id,)).fetchone()
+        if row is None:
+            raise api_error(404, "adventure_not_found", "Adventure not found.")
 
     def _map_row(self, row: Row) -> WorldEventOut:
         return WorldEventOut(

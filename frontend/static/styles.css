@@ -1419,6 +1419,72 @@ select:focus {
   background: rgba(233, 214, 154, .34);
 }
 
+.isekai-message-extras {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.isekai-interactables,
+.isekai-visible-exits,
+.isekai-suggested-actions {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid rgba(169, 140, 84, .22);
+  padding-top: 9px;
+}
+
+.isekai-interactables h3,
+.isekai-visible-exits h3,
+.isekai-suggested-actions h3 {
+  margin: 0;
+  color: #d8c28d;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.isekai-interactable,
+.isekai-visible-exit {
+  display: grid;
+  gap: 3px;
+  border-left: 2px solid rgba(220, 179, 87, .45);
+  padding-left: 8px;
+}
+
+.isekai-interactable strong,
+.isekai-visible-exit strong {
+  color: #f0e2bb;
+  font-size: 13px;
+}
+
+.isekai-interactable span,
+.isekai-visible-exit span {
+  color: #a89669;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.isekai-suggested-actions {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.isekai-suggested-actions h3 {
+  grid-column: 1 / -1;
+}
+
+.isekai-suggested-action {
+  border-color: rgba(169, 140, 84, .36);
+  background: rgba(0, 0, 0, .18);
+  color: #f0e2bb;
+  line-height: 1.35;
+  min-height: 34px;
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+  text-align: left;
+  white-space: normal;
+}
+
 /* illuminated drop cap on the DM's narration */
 .message.dm p::first-letter {
   float: left;
@@ -2182,8 +2248,19 @@ select:focus {
   padding: 0;
 }
 
+.workspace.isekai-room-mode {
+  display: block;
+  min-height: calc(100vh - 128px);
+  overflow: auto;
+  padding: 0;
+}
+
 .workspace.setup-mode .game-frame > #game-room,
-.workspace.room-mode .game-frame > #game-setup {
+.workspace.setup-mode .game-frame > #isekai-room,
+.workspace.room-mode .game-frame > #game-setup,
+.workspace.room-mode .game-frame > #isekai-room,
+.workspace.isekai-room-mode .game-frame > #game-setup,
+.workspace.isekai-room-mode .game-frame > #game-room {
   display: none;
 }
 
@@ -2213,17 +2290,530 @@ select:focus {
   box-shadow: none;
 }
 
+.workspace.isekai-room-mode .game-frame {
+  max-width: none;
+  min-height: calc(100vh - 92px);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .game-setup,
-.game-room {
+.game-room,
+.isekai-room {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
   min-height: 860px;
 }
 
-.workspace.room-mode .game-room {
+.workspace.room-mode .game-room,
+.workspace.isekai-room-mode .isekai-room {
   height: 100%;
   min-height: 0;
+}
+
+.isekai-room-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(520px, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas:
+    "info chat";
+  gap: 14px;
+  min-height: 0;
+  padding: 18px 20px 20px;
+}
+
+.isekai-info-panel {
+  display: grid;
+  grid-area: info;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.isekai-info-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.isekai-info-tabs button {
+  min-width: 0;
+  border: 1px solid rgba(169, 140, 84, .25);
+  border-radius: 7px;
+  background: rgba(14, 13, 10, .7);
+  color: #bda878;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  padding: 9px 8px;
+  white-space: normal;
+}
+
+.isekai-info-tabs button.active {
+  border-color: rgba(244, 221, 154, .55);
+  background: rgba(77, 62, 31, .62);
+  color: #f4dd9a;
+}
+
+.isekai-info-page {
+  display: none;
+  min-height: 0;
+  overflow: auto;
+}
+
+.isekai-info-page.active {
+  display: block;
+}
+
+#isekai-events-panel {
+  min-height: 0;
+}
+
+.isekai-chat-panel {
+  grid-area: chat;
+  min-height: 0;
+}
+
+.isekai-dm-debug {
+  margin-top: 10px;
+}
+
+.isekai-dm-debug-details {
+  border: 1px dashed rgba(169, 140, 84, .36);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .18);
+  color: #a89669;
+  font-size: 12px;
+}
+
+.isekai-dm-debug-details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1;
+  padding: 9px 10px;
+}
+
+.isekai-dm-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.isekai-dm-debug-row {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.isekai-dm-debug-row span {
+  color: #8f805f;
+}
+
+.isekai-dm-debug-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #d8c28d;
+  font-family: var(--font-body);
+}
+
+.isekai-location {
+  color: #f0e2bb;
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.isekai-section-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #bda878;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.isekai-economy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.isekai-economy-dashboard {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.isekai-economy-section {
+  min-width: 0;
+  border: 1px solid rgba(169, 140, 84, .24);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .2);
+  padding: 9px 10px;
+}
+
+.isekai-economy-section h3 {
+  margin: 0 0 7px;
+  color: #f4dd9a;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.isekai-economy-list {
+  display: grid;
+  gap: 5px;
+}
+
+.isekai-economy-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #d8cba6;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.isekai-current-interactables {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  border-top: 1px solid rgba(169, 140, 84, .22);
+  padding-top: 12px;
+}
+
+.isekai-current-interactables > h3,
+.isekai-current-actions > h3 {
+  margin: 0;
+  color: #f4dd9a;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.isekai-current-interactable-list {
+  display: grid;
+  gap: 7px;
+}
+
+.isekai-current-interactable {
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgba(169, 140, 84, .24);
+  border-left: 3px solid rgba(220, 179, 87, .48);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .18);
+  padding: 8px 9px;
+}
+
+.isekai-current-interactable strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #f0e2bb;
+  font-size: 13px;
+}
+
+.isekai-current-interactable span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #a89669;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.isekai-current-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.isekai-stat-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.isekai-stat-row {
+  display: grid;
+  grid-template-columns: minmax(72px, .44fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(169, 140, 84, .24);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .22);
+  padding: 9px 10px;
+}
+
+.isekai-stat-row span {
+  overflow: hidden;
+  color: #bda878;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.isekai-stat-row strong {
+  overflow: hidden;
+  color: #f0e2bb;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.isekai-merged-section {
+  margin-top: 16px;
+  border-top: 1px solid rgba(169, 140, 84, .22);
+  padding-top: 14px;
+}
+
+.isekai-merged-section h3 {
+  margin: 0;
+  color: #f4dd9a;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.isekai-environment-card {
+  border: 1px solid rgba(169, 140, 84, .28);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .28);
+  margin-bottom: 14px;
+  padding: 13px 14px;
+}
+
+.isekai-environment-card h2 {
+  margin: 0 0 10px;
+}
+
+.isekai-environment-card p {
+  margin: 10px 0 0;
+  color: #f0e2bb;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.isekai-pressure-goals {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.isekai-pressure-goals h3 {
+  margin: 0;
+  color: #d8c28d;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.isekai-pressure-goal {
+  display: grid;
+  gap: 3px;
+  border-left: 2px solid rgba(220, 179, 87, .55);
+  padding-left: 9px;
+}
+
+.isekai-pressure-goal strong {
+  color: #f0e2bb;
+  font-size: 13px;
+}
+
+.isekai-pressure-goal span {
+  color: #a89669;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.isekai-quest-summary {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  border-top: 1px solid rgba(169, 140, 84, .22);
+  padding-top: 12px;
+}
+
+.isekai-quest-summary h3 {
+  margin: 0;
+  color: #d8c28d;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.isekai-quest-summary strong {
+  color: #f0e2bb;
+  font-size: 13px;
+}
+
+.isekai-quest-summary span,
+.isekai-quest-summary p {
+  margin: 0;
+  color: #a89669;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.isekai-clue-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.isekai-clue-list span {
+  border: 1px solid rgba(220, 179, 87, .26);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, .18);
+  padding: 5px 7px;
+}
+
+.isekai-pressure-clocks {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.isekai-pressure-clocks h3 {
+  margin: 0;
+  color: #d8c28d;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.isekai-pressure-clock {
+  display: grid;
+  gap: 5px;
+}
+
+.isekai-pressure-clock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #f0e2bb;
+  font-size: 12px;
+}
+
+.isekai-pressure-clock-track {
+  overflow: hidden;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .32);
+}
+
+.isekai-pressure-clock-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7ca982, #dcb357);
+}
+
+.isekai-pressure-clock p {
+  margin: 0;
+  color: #a89669;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.isekai-event-list {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-height: 0;
+  max-height: none;
+  margin-top: 12px;
+  padding-right: 4px;
+}
+
+.isekai-event-card {
+  border: 1px solid rgba(169, 140, 84, .24);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .22);
+  padding: 11px 12px;
+}
+
+.isekai-event-card h3 {
+  margin: 0;
+  color: #f4dd9a;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.isekai-event-meta,
+.isekai-event-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.isekai-event-meta span,
+.isekai-event-tags strong {
+  border: 1px solid rgba(169, 140, 84, .26);
+  border-radius: 999px;
+  background: rgba(49, 43, 26, .72);
+  color: #d9c48a;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  padding: 5px 7px;
+}
+
+.isekai-event-card p {
+  margin: 9px 0 0;
+  overflow-wrap: anywhere;
+  color: #f0e2bb;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.isekai-event-detail {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 10px;
+  color: rgba(240, 226, 187, .86);
+  font-size: 12px;
+}
+
+.isekai-event-detail span,
+.isekai-event-tags > span {
+  color: #bda878;
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.isekai-event-detail strong {
+  overflow-wrap: anywhere;
+  color: #f0e2bb;
+  font-weight: 600;
+}
+
+.isekai-event-tags {
+  align-items: center;
 }
 
 .screen-title {
@@ -2259,6 +2849,45 @@ select:focus {
   display: none;
 }
 
+.game-setup-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+
+.game-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  border: 1px solid rgba(240, 208, 96, .24);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .24);
+  padding: 3px;
+}
+
+.game-mode-switch button {
+  min-height: 28px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: #cdbb96;
+  font-size: 12px;
+  padding: 0 10px;
+  text-shadow: none;
+}
+
+.game-mode-switch button:hover:not(:disabled),
+.game-mode-switch button.active {
+  border-color: rgba(240, 208, 96, .38);
+  background: linear-gradient(180deg, rgba(240, 208, 96, .18), rgba(87, 58, 18, .42));
+  box-shadow: inset 0 1px 0 rgba(255, 225, 150, .12);
+  color: var(--gold-bright);
+  filter: none;
+}
+
 .route-tag {
   flex: 0 0 auto;
   border: 1px solid rgba(240, 208, 96, .24);
@@ -2278,6 +2907,18 @@ select:focus {
   gap: 16px;
   min-height: 0;
   padding: 18px 20px 20px;
+}
+
+.isekai-setup-content {
+  display: grid;
+  grid-template-columns: minmax(360px, .86fr) minmax(360px, 1.14fr);
+  gap: 16px;
+  min-height: 0;
+  padding: 18px 20px 20px;
+}
+
+.isekai-setup-content.hidden {
+  display: none;
 }
 
 .panel-inner {
@@ -2531,6 +3172,67 @@ button.choice-card,
   border: 0;
   background: transparent;
   padding: 0;
+}
+
+.isekai-progress-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(240, 208, 96, .26);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .24);
+  color: #e8dcc0;
+  padding: 10px;
+}
+
+.isekai-progress-panel strong {
+  color: var(--gold-bright);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: .04em;
+}
+
+.isekai-progress-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.isekai-progress-list li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: #bda878;
+  font-size: 13px;
+}
+
+.isekai-progress-list li::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(240, 208, 96, .42);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .2);
+}
+
+.isekai-progress-list li.active {
+  color: #f0e2bb;
+}
+
+.isekai-progress-list li.active::before {
+  background: var(--gold-bright);
+  box-shadow: 0 0 10px rgba(240, 208, 96, .55);
+}
+
+.isekai-progress-list li.complete {
+  color: var(--good);
+}
+
+.isekai-progress-list li.complete::before {
+  border-color: var(--good);
+  background: var(--good);
 }
 
 .summary-row {
@@ -3679,6 +4381,7 @@ button.choice-card,
   }
 
   .setup-layout,
+  .isekai-setup-content,
   .story-choice-grid,
   .party-character-list {
     grid-template-columns: 1fr;
@@ -3695,6 +4398,14 @@ button.choice-card,
       "dock";
     height: auto;
     min-height: 0;
+  }
+
+  .isekai-room-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-template-areas:
+      "chat"
+      "info";
   }
 
   .room-status,

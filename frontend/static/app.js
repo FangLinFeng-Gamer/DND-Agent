@@ -1,14 +1,16 @@
-import { api } from "./js/api.js?v=20260620-dm-streaming";
-import { bindElements, els, state } from "./js/state.js?v=20260620-dm-streaming";
-import { applyTranslations, setLocale, t } from "./js/i18n.js?v=20260620-dm-streaming";
-import { renderCapabilities, setStatus, showError, showView, viewFromPath } from "./js/ui.js?v=20260620-dm-streaming";
+import { api } from "./js/api.js?v=20260709-suggested-action";
+import { bindElements, els, state } from "./js/state.js?v=20260709-suggested-action";
+import { applyTranslations, setLocale, t } from "./js/i18n.js?v=20260709-suggested-action";
+import { renderCapabilities, setStatus, showError, showView, viewFromPath } from "./js/ui.js?v=20260709-suggested-action";
 import {
   deleteAdventure,
   getSelectedCharacter,
   loadAdventures,
   createAdventure,
+  createIsekaiAdventure,
   renderAdventureDetail,
   renderAdventureList,
+  renderGameModeSetup,
   renderCharacter,
   renderCharacterList,
   renderMapAssets,
@@ -18,6 +20,8 @@ import {
   renderRules,
   searchRules,
   selectAdventure,
+  setSelectedGameMode,
+  sendIsekaiMessage,
   sendMessage,
   performCombatAction,
   endCombat,
@@ -28,13 +32,13 @@ import {
   uploadMapAsset,
   createMapScene,
   syncMapTokens,
-} from "./js/game.js?v=20260620-dm-streaming";
+} from "./js/game.js?v=20260709-suggested-action";
 import {
   confirmCharacterCreation,
   ensureCharacterCreationSession,
   renderCharacterCreation,
   sendCharacterCreationMessage,
-} from "./js/character-creation.js?v=20260620-dm-streaming";
+} from "./js/character-creation.js?v=20260709-suggested-action";
 import {
   createStory,
   loadStories,
@@ -43,10 +47,10 @@ import {
   renderStoryList,
   renderStorySelect,
   resetStoryForm,
-} from "./js/stories.js?v=20260620-dm-streaming";
-import { loadModels, renderModelList, resetModelForm, saveModel, testModelConnection } from "./js/models.js?v=20260620-dm-streaming";
-import { loadRaces, renderRaceDetail, renderRaceList, renderRaceOptions } from "./js/races.js?v=20260620-dm-streaming";
-import { initDiceTray, renderDiceTray } from "./js/dice.js?v=20260620-dm-streaming";
+} from "./js/stories.js?v=20260709-suggested-action";
+import { loadModels, renderModelList, resetModelForm, saveModel, testModelConnection } from "./js/models.js?v=20260709-suggested-action";
+import { loadRaces, renderRaceDetail, renderRaceList, renderRaceOptions } from "./js/races.js?v=20260709-suggested-action";
+import { initDiceTray, renderDiceTray } from "./js/dice.js?v=20260709-suggested-action";
 
 async function loadCapabilities() {
   try {
@@ -71,6 +75,7 @@ function renderLocalizedViews() {
   renderCharacterList();
   renderCharacter(getSelectedCharacter());
   renderAdventureList();
+  renderGameModeSetup();
   renderAdventureDetail();
   renderMapAssets();
   renderMapScenes();
@@ -90,6 +95,7 @@ async function openView(view, options = {}) {
     state.selectedAdventure = null;
     state.routeAdventureId = null;
     state.combat = null;
+    state.selectedGameMode = "dnd";
   }
   showView(view, options);
   if (view === "character-create") {
@@ -160,9 +166,31 @@ function wireEvents() {
     event.preventDefault();
     createAdventure();
   });
+  els.gameModeSwitch.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-game-mode]");
+    if (button) {
+      setSelectedGameMode(button.dataset.gameMode);
+    }
+  });
+  els.isekaiAdventureForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createIsekaiAdventure();
+  });
+  els.isekaiInfoTabs?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-isekai-info-tab]");
+    if (!button) {
+      return;
+    }
+    state.selectedIsekaiInfoTab = button.dataset.isekaiInfoTab;
+    renderAdventureDetail();
+  });
   els.messageForm.addEventListener("submit", (event) => {
     event.preventDefault();
     sendMessage();
+  });
+  els.isekaiMessageForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    sendIsekaiMessage();
   });
   els.messageInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -172,6 +200,16 @@ function wireEvents() {
         return;
       }
       sendMessage();
+    }
+  });
+  els.isekaiMessageInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (state.dmBusy) {
+        setStatus(t("dmStillResponding"), "error");
+        return;
+      }
+      sendIsekaiMessage();
     }
   });
   els.combatActionAttack.addEventListener("click", () => performCombatAction("attack"));

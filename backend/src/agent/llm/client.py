@@ -7,6 +7,8 @@ from backend.src.schemas.llm import LLMModelRecord
 
 
 class OpenAICompatibleClient:
+    supports_intent_interpretation = True
+
     def chat(self, model: LLMModelRecord, messages: list[dict[str, str]]) -> str:
         payload = {
             "model": model.model_name,

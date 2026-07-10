@@ -4,10 +4,12 @@ from pydantic import BaseModel, Field
 
 from backend.src.schemas.character import CharacterOut
 from backend.src.schemas.combat import CombatActionRequest, CombatParticipantInput, CombatStateOut
+from backend.src.schemas.world_event import WorldEventOut
 
 
 class AdventureCreate(BaseModel):
     title: str = Field(min_length=1)
+    mode: str = "dnd"
     character_id: int | None = None
     party_character_ids: list[int] | None = None
     world_id: str = "default"
@@ -24,11 +26,15 @@ class AdventureCreate(BaseModel):
 
 class SceneState(BaseModel):
     location: str
+    location_path: dict[str, Any] = Field(default_factory=dict)
     environment: str
     important_objects: list[str] = Field(default_factory=list)
     npcs: list[str] = Field(default_factory=list)
     current_objective: str
     world_changes: list[str] = Field(default_factory=list)
+    interactables: list[dict[str, Any]] = Field(default_factory=list)
+    suggested_actions: list[str] = Field(default_factory=list)
+    npc_states: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class MessageCreate(BaseModel):
@@ -55,6 +61,7 @@ class MessageOut(BaseModel):
 class AdventureOut(BaseModel):
     id: int
     title: str
+    mode: str = "dnd"
     world_id: str
     story_id: str
     character_id: int
@@ -64,6 +71,9 @@ class AdventureOut(BaseModel):
     summary: str
     current_scene: SceneState
     world_state: dict[str, Any] = Field(default_factory=dict)
+    isekai_character: dict[str, Any] | None = None
+    survival_state: dict[str, Any] | None = None
+    world_events: list[WorldEventOut] = Field(default_factory=list)
     messages: list[MessageOut] = Field(default_factory=list)
 
 
