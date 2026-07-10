@@ -49,11 +49,11 @@ class IsekaiNarrationComposer:
             return ""
         parts = [action_text]
         if time_text and time_text != "没有推进时间。":
-            parts.append(time_text)
+            parts.append(f"时间变化：{time_text}")
         if resource_text and resource_text != "没有明显资源变化。":
-            parts.append(f"身体反馈：{resource_text}。")
+            parts.append(f"资源变化：{resource_text}。")
         if risk_text and risk_text != "风险没有明显变化。":
-            parts.append(f"{risk_text}")
+            parts.append(f"风险变化：{risk_text}")
         if interactable_text:
             parts.append(f"现在你可以继续查看：{interactable_text}。")
         return " ".join(part.strip() for part in parts if part.strip())

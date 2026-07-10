@@ -116,14 +116,48 @@ class IsekaiWorldEventDirector:
 
     def _knowledge_channel(self, turn: dict[str, Any], scope: str) -> str | None:
         scene = turn.get("scene")
-        text = f"{getattr(scene, 'location', '')} {getattr(scene, 'environment', '')}".lower()
         if scope == "local":
             return "direct_observation" if turn.get("action_type") != "talk" else "environment_sign"
-        if any(keyword in text for keyword in ("集市", "市场", "商队", "商人", "旅人", "酒馆", "城", "镇", "村", "market", "merchant", "town")):
+        text = self._scene_channel_text(scene).lower()
+        if self._has_settlement_news_channel(scene, text):
             return "merchant_news"
         if any(keyword in text for keyword in ("神殿", "法师塔", "预言", "temple", "mage")):
             return "dream_omen"
         return None
+
+    def _has_settlement_news_channel(self, scene: Any, text: str) -> bool:
+        location_text = self._scene_location_text(scene).lower()
+        settlement_markers = ("集市", "市场", "商队", "商人", "旅人", "酒馆", "旅店", "城", "镇", "村", "market", "merchant", "town")
+        if any(marker in location_text for marker in ("集市", "市场", "酒馆", "旅店", "城", "镇", "村", "market", "town")):
+            return True
+        if self._negates_settlement_channel(text):
+            return False
+        return any(marker in text for marker in settlement_markers)
+
+    def _negates_settlement_channel(self, text: str) -> bool:
+        markers = ("城镇", "城", "镇", "村", "商路", "商队", "商人", "旅人", "旅店", "酒馆", "集市", "市场")
+        negations = ("没有", "无", "不见", "看不见", "没有任何")
+        return any(f"{negation}{marker}" in text for negation in negations for marker in markers)
+
+    def _scene_channel_text(self, scene: Any) -> str:
+        parts = [
+            getattr(scene, "location", ""),
+            getattr(scene, "environment", ""),
+            getattr(scene, "current_objective", ""),
+        ]
+        parts.extend(str(item) for item in getattr(scene, "npcs", []) or [])
+        parts.extend(str(item) for item in getattr(scene, "important_objects", []) or [])
+        for entry in getattr(scene, "interactables", []) or []:
+            if isinstance(entry, dict):
+                parts.extend(str(entry.get(key) or "") for key in ("type", "name", "state"))
+        return " ".join(parts)
+
+    def _scene_location_text(self, scene: Any) -> str:
+        path = getattr(scene, "location_path", None) or {}
+        parts = [getattr(scene, "location", "")]
+        if isinstance(path, dict):
+            parts.extend(str(path.get(key) or "") for key in ("region", "site", "sublocation", "display_name"))
+        return " ".join(parts)
 
     def _to_create(self, candidate: dict[str, Any], turn: dict[str, Any]) -> WorldEventCreate:
         scope = candidate["scope"]

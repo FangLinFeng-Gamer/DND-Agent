@@ -198,7 +198,7 @@ def test_parser_recognizes_inn_negotiation_purchase_repair_and_meal_actions():
     assert negotiate.action_type == "negotiate"
     assert negotiate.arguments["scope"] == "indoor"
     assert purchase.action_type == "purchase"
-    assert purchase.arguments["item_id"] == "inn_bed"
+    assert purchase.arguments.get("item_id", "") == ""
     assert repair.action_type == "repair"
     assert repair.target_id == "broken_pot_handle"
     assert repair.arguments["scope"] == "indoor"
@@ -260,6 +260,15 @@ def test_parser_enter_location_binds_place_target_without_trailing_clause():
     assert action.target_name == "小屋"
     assert action.arguments["caution"] is True
     assert "翻东西" not in action.target_name
+
+
+def test_parser_recognizes_leave_current_scene_as_leave_location():
+    parser = IsekaiActionParser(IsekaiTimeService())
+
+    action = parser.parse("离开这里")
+
+    assert action.action_type == "leave_location"
+    assert action.matched_rules == ["intent:leave_location"]
 
 
 def test_parser_secure_shelter_binds_barricade_target():

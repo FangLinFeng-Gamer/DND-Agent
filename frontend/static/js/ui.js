@@ -1,6 +1,6 @@
-import { apiBase, els, state } from "./state.js?v=20260706-isekai-clock";
-import { readErrorMessage } from "./api.js?v=20260706-isekai-clock";
-import { localizeFeature, t } from "./i18n.js?v=20260706-isekai-clock";
+import { apiBase, els, state } from "./state.js?v=20260709-suggested-action";
+import { readErrorMessage } from "./api.js?v=20260709-suggested-action";
+import { localizeFeature, t } from "./i18n.js?v=20260709-suggested-action";
 
 export const VIEW_ROUTES = {
   home: "/home",

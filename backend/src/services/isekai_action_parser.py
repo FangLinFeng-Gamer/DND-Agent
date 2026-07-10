@@ -59,6 +59,10 @@ class IsekaiActionParser:
         if target:
             matched_rules = [*matched_rules, f"target:{target['id']}"]
         arguments = self._arguments(text, action_type)
+        if action_type == "enter_location" and target and not arguments.get("scope"):
+            scope = self._scope_for_target(scene)
+            if scope:
+                arguments["scope"] = scope
         return self._build(
             action_type,
             target_id=str(target.get("id") or ""),
@@ -103,6 +107,8 @@ class IsekaiActionParser:
             return "avoid", ["intent:avoid"], ""
         if self._is_approach(text):
             return "approach", ["intent:approach"], ""
+        if self._is_leave_location(text):
+            return "leave_location", ["intent:leave_location"], ""
         if self._is_enter_location(text):
             return "enter_location", ["intent:enter_location"], ""
         if self._is_seek_shelter(text):
@@ -194,7 +200,7 @@ class IsekaiActionParser:
         return loose_matches
 
     def _implicit_affordance_targets(self, scene: SceneState | None, action_type: str) -> list[dict[str, Any]]:
-        if scene is None or action_type not in {"refill_water"}:
+        if scene is None or action_type not in {"refill_water", "force_open", "repair", "secure_shelter"}:
             return []
         return [
             self._candidate(entry)
@@ -243,53 +249,25 @@ class IsekaiActionParser:
             return False
         if name in text:
             return True
-        for token in [
-            "浆果",
-            "木箱",
-            "箱",
-            "水囊",
-            "水桶",
-            "雨水桶",
-            "小屋",
-            "门板",
-            "门",
-            "马车",
-            "车厢",
-            "车厢门",
-            "锁",
-            "门锁",
-            "货袋",
-            "暗格",
-            "破口",
-            "麋鹿",
-            "骸骨",
-            "铁头箭",
-            "折断的箭",
-            "血迹",
-            "溪流",
-            "哨塔",
-            "旧火堆",
-            "地基缝隙",
-            "避风角落",
-            "缺口",
-            "猎网",
-            "燧石",
-            "伐木工",
-            "摊主",
-            "守卫",
-            "店主",
-            "后厨",
-            "厨房",
-            "锅把",
-            "热炖菜",
-            "炖菜",
-            "床位",
-            "客房",
-            "前厅",
-        ]:
-            if token in text and token in name:
+        clean_name = "".join(ch for ch in name if not ch.isspace())
+        for token in self._name_fragments(clean_name):
+            if token in text:
                 return True
         return False
+
+    def _name_fragments(self, name: str) -> list[str]:
+        fragments: set[str] = set()
+        length = len(name)
+        for size in range(min(4, length), 1, -1):
+            for start in range(0, length - size + 1):
+                fragment = name[start : start + size]
+                if self._meaningful_fragment(fragment):
+                    fragments.add(fragment)
+        return sorted(fragments, key=len, reverse=True)
+
+    def _meaningful_fragment(self, fragment: str) -> bool:
+        stop_chars = {"的", "了", "着", "和", "与", "及", "在", "里", "内", "外"}
+        return bool(fragment) and not all(ch in stop_chars for ch in fragment)
 
     def _confidence_reasons(self, action_type: str, target: dict[str, Any]) -> list[str]:
         reasons = [f"intent:{action_type}"]
@@ -331,13 +309,20 @@ class IsekaiActionParser:
         return {}
 
     def _scope(self, text: str, action_type: str) -> str:
-        if any(word in text for word in ["后厨", "厨房", "前厅", "客房", "旅店", "屋内", "室内", "店主", "床位", "炖菜", "锅把"]):
+        if any(word in text for word in ["屋内", "室内", "房内", "建筑内", "店内"]):
             return "indoor"
-        if any(word in text for word in ["镇内", "镇上", "灰石镇", "镇门", "街"]):
+        if any(word in text for word in ["镇内", "镇上", "镇门", "街"]):
             return "town"
         if any(word in text for word in ["镇外", "荒野", "森林", "赶路"]):
             return "wilderness"
         if action_type in {"negotiate", "purchase", "repair", "eat_meal"}:
+            return "indoor"
+        return ""
+
+    def _scope_for_target(self, scene: SceneState | None) -> str:
+        if not scene or not isinstance(scene.location_path, dict):
+            return ""
+        if scene.location_path.get("sublocation") or scene.location_path.get("parent_id"):
             return "indoor"
         return ""
 
@@ -349,30 +334,16 @@ class IsekaiActionParser:
         return "normal"
 
     def _target_node_id(self, text: str) -> str:
-        if "灰石镇" in text and "旅店" not in text:
-            return "graystone_town"
-        if "旧炉旅店" in text or "旅店前厅" in text or "前厅" in text:
-            return "inn_front_hall"
-        if "后厨" in text or "厨房" in text:
-            return "inn_kitchen"
-        if "客房" in text or "床位" in text or "三号房" in text:
-            return "inn_room_3"
-        if "马厩" in text:
-            return "inn_stable"
         return ""
 
     def _negotiate_topic(self, text: str) -> str:
-        if any(word in text for word in ["住宿", "床位", "房"]):
+        if any(word in text for word in ["住宿", "住处", "过夜", "房"]):
             return "lodging"
-        if any(word in text for word in ["炖菜", "饭", "吃"]):
+        if any(word in text for word in ["饭", "吃", "餐"]):
             return "meal"
         return "general"
 
     def _purchase_item_id(self, text: str) -> str:
-        if any(word in text for word in ["床位", "住宿", "钥匙", "房"]):
-            return "inn_bed"
-        if any(word in text for word in ["炖菜", "热食", "饭"]):
-            return "stew_meal"
         return ""
 
     def _style(self, text: str, action_type: str) -> str:
@@ -519,7 +490,10 @@ class IsekaiActionParser:
         return any(word in text for word in ["装水", "取水", "补水", "灌满水囊", "把水囊装满"])
 
     def _is_enter_location(self, text: str) -> bool:
-        return any(word in text for word in ["进入", "进到", "走进", "钻进", "回前厅", "回到前厅"])
+        return any(word in text for word in ["进入", "进到", "走进", "钻进", "回到", "回"])
+
+    def _is_leave_location(self, text: str) -> bool:
+        return any(word in text for word in ["离开这里", "离开此处", "退出这里", "退出此处", "出去", "从这里离开"])
 
     def _is_secure_shelter(self, text: str) -> bool:
         return any(word in text for word in ["堵门", "封门", "加固门", "把门堵上", "封堵入口"])
@@ -528,13 +502,13 @@ class IsekaiActionParser:
         return any(word in text for word in ["讨价还价", "讲价", "谈住宿", "打听价格", "询问价格", "问价格"])
 
     def _is_purchase(self, text: str) -> bool:
-        return any(word in text for word in ["支付", "付钱", "付铜币", "买床位", "买住宿", "买炖菜", "购买"])
+        return any(word in text for word in ["支付", "付钱", "付铜币", "购买"]) or ("买" in text and not self._is_eat_food(text))
 
     def _is_repair(self, text: str) -> bool:
-        return any(word in text for word in ["修锅把", "修好锅把", "修理", "维修", "修好"])
+        return any(word in text for word in ["修理", "维修", "修好", "修整", "修补"]) or ("修" in text and not self._is_table_talk(text))
 
     def _is_eat_meal(self, text: str) -> bool:
-        return any(word in text for word in ["吃已购买", "吃炖菜", "吃热食", "吃饭"]) or ("吃" in text and "炖菜" in text)
+        return any(word in text for word in ["吃已购买", "吃热食", "吃饭", "用餐"])
 
     def _is_approach(self, text: str) -> bool:
         return any(word in text for word in ["靠近", "接近", "凑近", "靠过去", "走近"])
@@ -554,7 +528,7 @@ class IsekaiActionParser:
     def _is_search(self, text: str) -> bool:
         if any(word in text for word in ["搜索", "搜寻", "调查", "仔细找", "寻找", "检查", "翻找", "研究", "解读", "search"]):
             return True
-        if "打开" in text and any(word in text for word in ["箱", "木箱", "盒", "柜", "包", "袋"]):
+        if "打开" in text and any(word in text for word in ["箱", "盒", "柜", "包", "袋"]):
             return True
         if any(word in text for word in ["看看", "找找", "看一下"]) and any(
             word in text for word in ["有什么", "可以拿", "可拿", "能拿", "东西", "物资", "补给"]

@@ -285,16 +285,38 @@ def test_isekai_dm_messages_render_interactables_and_suggestions():
     assert "renderIsekaiMessageExtras" in game_js
     assert "isekai-interactables" in game_js
     assert "isekai-suggested-actions" in game_js
+    assert "isekai-visible-exits" in game_js
     assert "interactables" in game_js
     assert "suggested_actions" in game_js
-    assert "els.isekaiMessageInput.value = action" in game_js
+    assert "visible_edges" in game_js
+    assert "applyIsekaiSuggestedAction(action)" in game_js
     assert 'addEventListener("click"' in game_js
     assert ".isekai-interactables" in css
     assert ".isekai-suggested-actions" in css
+    assert ".isekai-visible-exits" in css
     assert '"isekaiInteractables": "Interactables"' in i18n
     assert '"isekaiInteractables": "可互动内容"' in i18n
+    assert '"isekaiVisibleExits": "Visible Exits"' in i18n
+    assert '"isekaiVisibleExits": "可见出口"' in i18n
     assert '"isekaiSuggestedActions": "Try"' in i18n
     assert '"isekaiSuggestedActions": "可尝试行动"' in i18n
+    assert '"isekaiSuggestedActionFilled": "Suggested action copied to the input."' in i18n
+    assert '"isekaiSuggestedActionFilled": "已填入输入框，可编辑后发送。"' in i18n
+
+
+def test_isekai_suggested_action_clicks_use_shared_fill_helper_with_visible_feedback():
+    game_js = (FRONTEND_DIR / "js/game.js").read_text(encoding="utf-8")
+
+    assert "function applyIsekaiSuggestedAction(action)" in game_js
+    helper_block = game_js.split("function applyIsekaiSuggestedAction(action)", 1)[1].split("function renderPendingCheck", 1)[0]
+    assert "els.isekaiMessageInput.value = text" in helper_block
+    assert "dispatchEvent(new Event(\"input\", { bubbles: true }))" in helper_block
+    assert "scrollIntoView" in helper_block
+    assert "setStatus(t(\"isekaiSuggestedActionFilled\"), \"ok\")" in helper_block
+
+    assert game_js.count("applyIsekaiSuggestedAction(action)") >= 2
+    assert "els.isekaiMessageInput.value = action" not in game_js
+    assert "els.isekaiMessageInput.value = String(action)" not in game_js
 
 
 def test_isekai_suggested_action_buttons_wrap_long_text():
@@ -315,6 +337,7 @@ def test_isekai_message_extras_do_not_fallback_to_current_scene_for_history():
     assert "scene.suggested_actions" not in extras_block
     assert "Array.isArray(metadata.interactables) ? metadata.interactables : []" in extras_block
     assert "Array.isArray(metadata.suggested_actions) ? metadata.suggested_actions : []" in extras_block
+    assert "Array.isArray(metadata.visible_edges) ? metadata.visible_edges : []" in extras_block
 
 
 def test_isekai_world_panel_renders_pressure_clocks():

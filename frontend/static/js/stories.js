@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=20260706-isekai-clock";
-import { els, state } from "./state.js?v=20260706-isekai-clock";
-import { t } from "./i18n.js?v=20260706-isekai-clock";
-import { emptyNode, setStatus, showError, showView } from "./ui.js?v=20260706-isekai-clock";
+import { api } from "./api.js?v=20260709-suggested-action";
+import { els, state } from "./state.js?v=20260709-suggested-action";
+import { t } from "./i18n.js?v=20260709-suggested-action";
+import { emptyNode, setStatus, showError, showView } from "./ui.js?v=20260709-suggested-action";
 
 export async function loadStories() {
   try {

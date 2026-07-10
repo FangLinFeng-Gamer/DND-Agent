@@ -13,15 +13,21 @@ from test.backend.src.services.test_isekai_survival import (
 )
 
 
+def p1_world_state(**extra):
+    state = {"isekai_content": {"active_packs": ["old_furnace_inn_p1"], "activation": "explicit"}}
+    state.update(extra)
+    return state
+
+
 def test_quest_service_keeps_only_night_wolf_line():
     service = IsekaiQuestService()
-    world_state = {
-        "isekai_quest": {
+    world_state = p1_world_state(
+        isekai_quest={
             "active_quest_id": "merchant_guild_line",
             "stage": "rumor_heard",
             "flags": {"foreign": True},
         }
-    }
+    )
 
     next_state, applied = service.ensure_single_quest(world_state)
 
@@ -37,7 +43,7 @@ def test_quest_service_keeps_only_night_wolf_line():
 
 def test_quest_service_blocks_second_quest_proposal():
     service = IsekaiQuestService()
-    world_state = service.initial_world_state({})
+    world_state = service.initial_world_state(p1_world_state())
 
     next_state, applied = service.apply_quest_proposals(
         world_state,
@@ -54,10 +60,10 @@ def test_quest_service_blocks_second_quest_proposal():
 
 def test_pressure_event_fires_once_and_respects_cooldown():
     service = IsekaiPressureEventService()
-    world_state = {
-        "isekai_quest": {"active_quest_id": "night_wolf_line", "stage": "not_started", "flags": {}},
-        "isekai_economy": {"entitlements": [], "currency": {"copper_total": 10}},
-    }
+    world_state = p1_world_state(
+        isekai_quest={"active_quest_id": "night_wolf_line", "stage": "not_started", "flags": {}},
+        isekai_economy={"entitlements": [], "currency": {"copper_total": 10}},
+    )
     turn = {"survival": {"time_of_day": "夜晚"}, "time": {"advances_time": True}, "action_type": "travel"}
 
     fired_state, event = service.evaluate(world_state, turn)
@@ -74,10 +80,10 @@ def test_pressure_event_fires_once_and_respects_cooldown():
 
 def test_pressure_event_does_not_repeat_for_five_cooldown_turns():
     service = IsekaiPressureEventService()
-    world_state = {
-        "isekai_quest": {"active_quest_id": "night_wolf_line", "stage": "not_started", "flags": {}},
-        "isekai_economy": {"entitlements": [], "currency": {"copper_total": 10}},
-    }
+    world_state = p1_world_state(
+        isekai_quest={"active_quest_id": "night_wolf_line", "stage": "not_started", "flags": {}},
+        isekai_economy={"entitlements": [], "currency": {"copper_total": 10}},
+    )
     turn = {"survival": {"time_of_day": "夜晚"}, "time": {"advances_time": True}, "action_type": "travel"}
 
     world_state, first = service.evaluate(world_state, turn)
@@ -204,7 +210,7 @@ def test_model_proposals_are_blocked_in_non_resolution_turn(store):
 
     state = response.adventure.world_state
     blocked = response.dm_message.metadata["state_changes_applied"]["blocked"]
-    assert state["isekai_quest"]["active_quest_id"] == "night_wolf_line"
+    assert state["isekai_quest"]["active_quest_id"] is None
     assert state["isekai_quest"]["stage"] == before_world["isekai_quest"]["stage"]
     assert "二楼三号房钥匙" not in response.adventure.isekai_character["inventory"]
     assert state["isekai_economy"]["currency"] == before_world["isekai_economy"]["currency"]
@@ -212,7 +218,7 @@ def test_model_proposals_are_blocked_in_non_resolution_turn(store):
     assert blocked["item_rewards"] == ["二楼三号房钥匙"]
 
 
-def test_existing_isekai_adventure_read_migrates_missing_p1_world_state(store):
+def test_existing_isekai_adventure_read_migrates_missing_world_state_without_p1_content(store):
     service = IsekaiSurvivalService(store)
     adventure = service.create_adventure(AdventureCreate(title="Legacy P1 Fields", mode="isekai_survival"))
     world_state = service.adventures.get_world_state(adventure.id)
@@ -224,11 +230,7 @@ def test_existing_isekai_adventure_read_migrates_missing_p1_world_state(store):
 
     migrated = service.adventures.get(adventure.id, include_messages=False)
 
-    assert migrated.world_state["isekai_quest"] == {
-        "active_quest_id": "night_wolf_line",
-        "stage": "not_started",
-        "flags": {},
-    }
+    assert migrated.world_state["isekai_quest"] == {"active_quest_id": None, "stage": "none", "flags": {}}
     assert migrated.world_state["isekai_clues"] == []
     assert migrated.world_state["isekai_pressure_events"]["cooldowns"] == {}
     assert migrated.world_state["isekai_pressure_events"]["last_event"] is None
@@ -240,7 +242,9 @@ def test_night_wolf_line_vertical_slice_records_quest_clues_and_reward(store):
     adventure = service.create_adventure(AdventureCreate(title="Night Wolf Line", mode="isekai_survival"))
     set_character_state(store, adventure.id, gold=0, inventory=["水囊(2/3)", "干粮 x1"])
     world_state = dict(adventure.world_state)
+    world_state["isekai_content"] = {"active_packs": ["old_furnace_inn_p1"], "activation": "explicit"}
     world_state["isekai_economy"] = {"currency": {"copper_total": 10}, "entitlements": [], "transaction_log": []}
+    world_state = service.quests.initial_world_state(world_state)
     service.adventures.update_world_state(adventure.id, world_state)
 
     service.advance(adventure.id, MessageCreate(content="进入灰石镇", locale="zh-CN"))

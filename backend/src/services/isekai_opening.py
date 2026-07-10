@@ -90,6 +90,7 @@ class IsekaiOpeningGenerator:
                     f"{self.worldview.STYLE_GUIDANCE}"
                     "生成 DND 风格奇幻生存开局，只输出 JSON 对象。"
                     "不得设置 HP、金币、物品、饥饿、口渴、疲劳或睡眠需求。"
+                    "character.inventory 是后端权威背包；opening_narration 不得宣称这些物品遗失、丢失、不见、耗尽、损坏或不可使用。"
                     "格式为 {\"location\":\"...\",\"environment\":\"...\","
                     "\"important_objects\":[\"...\"],\"current_objective\":\"...\","
                     "\"weather\":\"...\",\"opening_narration\":\"...\"}。"

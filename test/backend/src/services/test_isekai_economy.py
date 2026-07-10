@@ -1,6 +1,10 @@
 from backend.src.services.isekai_economy import IsekaiEconomyService
 
 
+def p1_world_state():
+    return {"isekai_content": {"active_packs": ["old_furnace_inn_p1"]}}
+
+
 def test_economy_does_not_convert_character_gold_into_real_currency():
     state = IsekaiEconomyService().ensure_state({}, {"gold": 13})
 
@@ -34,6 +38,7 @@ def test_purchase_bed_deducts_copper_records_transaction_and_entitlement():
         item_id="inn_bed",
         buyer_note="住宿费",
         valid_until="第1天清晨",
+        world_state=p1_world_state(),
     )
 
     assert result.success is True
@@ -57,7 +62,13 @@ def test_purchase_fails_when_copper_is_insufficient():
     service = IsekaiEconomyService()
     state = service.ensure_state({"currency": {"copper_total": 1}}, {"gold": 0})
 
-    result = service.purchase(state, item_id="inn_bed", buyer_note="住宿费", valid_until="第1天清晨")
+    result = service.purchase(
+        state,
+        item_id="inn_bed",
+        buyer_note="住宿费",
+        valid_until="第1天清晨",
+        world_state=p1_world_state(),
+    )
 
     assert result.success is False
     assert result.state["currency"]["copper_total"] == 1
@@ -70,7 +81,7 @@ def test_repair_reward_grants_lodging_entitlement_without_charging_money():
     service = IsekaiEconomyService()
     state = service.ensure_state({"currency": {"copper_total": 1}}, {"gold": 0})
 
-    result = service.grant_repair_reward(state, valid_until="第1天清晨")
+    result = service.grant_repair_reward(state, valid_until="第1天清晨", world_state=p1_world_state())
 
     assert result.success is True
     assert result.state["currency"]["copper_total"] == 1

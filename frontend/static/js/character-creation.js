@@ -1,14 +1,14 @@
-import { api } from "./api.js?v=20260706-isekai-clock";
-import { els, state } from "./state.js?v=20260706-isekai-clock";
+import { api } from "./api.js?v=20260709-suggested-action";
+import { els, state } from "./state.js?v=20260709-suggested-action";
 import {
   localizeBackgroundName,
   localizeClassName,
   localizeEquipmentName,
   localizeRaceName,
   t,
-} from "./i18n.js?v=20260706-isekai-clock";
-import { loadCharacters } from "./game.js?v=20260706-isekai-clock";
-import { setStatus, showError, showView, typingIndicatorNode } from "./ui.js?v=20260706-isekai-clock";
+} from "./i18n.js?v=20260709-suggested-action";
+import { loadCharacters } from "./game.js?v=20260709-suggested-action";
+import { setStatus, showError, showView, typingIndicatorNode } from "./ui.js?v=20260709-suggested-action";
 
 
 const POINT_BUY_COSTS = {

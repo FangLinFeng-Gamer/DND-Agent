@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import random
-from dataclasses import asdict, is_dataclass
+import re
+from dataclasses import asdict, is_dataclass, replace
 from typing import Any
 
 from backend.src.agent.dm.output import chunk_text, extract_narration_text
@@ -34,6 +35,8 @@ from backend.src.services.isekai_quests import IsekaiQuestService
 from backend.src.services.isekai_rewards import IsekaiRewardService
 from backend.src.services.isekai_resources import IsekaiResourceService
 from backend.src.services.isekai_risk import IsekaiRiskService
+from backend.src.services.isekai_scene_generation import IsekaiSceneGenerationAgent, apply_scene_generation_payload
+from backend.src.services.isekai_scene_navigation import IsekaiSceneNavigationService
 from backend.src.services.isekai_state_changes import IsekaiStateChangeService
 from backend.src.services.isekai_time import IsekaiActionResolution, IsekaiTimeService
 from backend.src.services.isekai_time_cost import IsekaiTimeCostService
@@ -70,12 +73,14 @@ class IsekaiSurvivalService:
         self.interactable_projector = IsekaiInteractableProjector()
         self.fallback_narrator = IsekaiFallbackNarrator()
         self.risk = IsekaiRiskService()
-        self.quests = IsekaiQuestService()
-        self.pressure_events = IsekaiPressureEventService()
+        self.quests = IsekaiQuestService(self.content)
+        self.pressure_events = IsekaiPressureEventService(self.content)
         self.rewards = IsekaiRewardService()
         self.consequences = IsekaiConsequenceResolver(self.rewards, self.quests)
         self.locations = IsekaiLocationService(self.content)
-        self.economy = IsekaiEconomyService()
+        self.navigation = IsekaiSceneNavigationService()
+        self.scene_generation_agent = IsekaiSceneGenerationAgent(self.model_gateway)
+        self.economy = IsekaiEconomyService(self.content)
         self.time_cost = IsekaiTimeCostService()
         self.narration_composer = IsekaiNarrationComposer()
         self.action_resolution = IsekaiActionResolutionEngine(
@@ -88,6 +93,7 @@ class IsekaiSurvivalService:
             self.economy,
             self.time_cost,
             self.content,
+            self.navigation,
         )
 
     def generate_character(self) -> IsekaiCharacterOut:
@@ -184,8 +190,8 @@ class IsekaiSurvivalService:
     def initialize_scene_facts(self, adventure_id: int, scene: SceneState) -> None:
         world_state = self.adventures.get_world_state(adventure_id)
         world_state["confirmed_location"] = scene.location
-        world_state["isekai_pressure_goals"] = self.worldview.pressure_goals()
-        world_state["pressure_clocks"] = self.ensure_pressure_clocks(world_state.get("pressure_clocks"))
+        world_state["isekai_pressure_goals"] = self.worldview.pressure_goals(scene, world_state)
+        world_state["pressure_clocks"] = self.ensure_pressure_clocks(world_state.get("pressure_clocks"), scene, world_state)
         world_state.setdefault("location_history", [])
         world_state = self.content.ensure_world_state(world_state)
         world_state = self.quests.initial_world_state(world_state)
@@ -206,11 +212,65 @@ class IsekaiSurvivalService:
         copper_total: int | None = None,
     ) -> str:
         opening = narration or f"{character.name}，{character.race} {character.class_name}，在{scene.location}醒来。{scene.environment}"
+        opening = self._repair_opening_inventory_contradictions(opening, character, scene)
         currency_text = self.currency_text(copper_total if copper_total is not None else 0)
+        inventory_text = "、".join(character.inventory) if character.inventory else "无"
         return self.worldview.normalize_text(
             f"{opening} 当前目标：{scene.current_objective}"
+            f" 随身物品：{inventory_text}。"
             f" 你的随身钱币为 {currency_text}，饥饿 {survival.hunger}，口渴 {survival.thirst}，疲劳 {survival.fatigue}。"
         )
+
+    def _repair_opening_inventory_contradictions(
+        self,
+        opening: str,
+        character: IsekaiCharacterOut,
+        scene: SceneState,
+    ) -> str:
+        if not self._opening_conflicts_with_inventory(opening, character.inventory):
+            return opening
+        return f"{character.name}在{scene.location}醒来。{scene.environment}"
+
+    def _opening_conflicts_with_inventory(self, opening: str, inventory: list[str]) -> bool:
+        text = str(opening or "")
+        if not text:
+            return False
+        item_names = self._opening_inventory_item_names(inventory)
+        negative_words = (
+            "遗失",
+            "丢失",
+            "丢了",
+            "弄丢",
+            "失去",
+            "不见",
+            "没有",
+            "没了",
+            "空了",
+            "耗尽",
+            "用尽",
+            "只剩",
+        )
+        for item in item_names:
+            if item not in text:
+                continue
+            pattern = rf"({re.escape(item)}.{{0,12}}({'|'.join(map(re.escape, negative_words))})|({'|'.join(map(re.escape, negative_words))}).{{0,12}}{re.escape(item)})"
+            if re.search(pattern, text):
+                return True
+        return False
+
+    def _opening_inventory_item_names(self, inventory: list[str]) -> list[str]:
+        names: list[str] = []
+        aliases = {
+            "水囊": ["水囊", "水袋", "饮水", "清水"],
+            "干粮": ["干粮", "口粮", "食物"],
+        }
+        for raw in inventory:
+            name = re.sub(r"[\(（].*?[\)）]", "", str(raw or ""))
+            name = re.sub(r"\s*x\s*\d+\s*$", "", name, flags=re.IGNORECASE).strip()
+            for item_name in aliases.get(name, [name]):
+                if item_name and item_name not in names:
+                    names.append(item_name)
+        return names
 
     def currency_text(self, copper_total: int) -> str:
         display = self.economy.display_currency(copper_total)
@@ -286,6 +346,7 @@ class IsekaiSurvivalService:
             {"mode": "isekai_survival"},
         )
         scene = self.repair_legacy_scene_if_needed(adventure_id, self.adventures.get_scene(adventure_id))
+        scene, scene_structure = self.ensure_scene_structured(adventure_id, scene, message.content)
         llm_intent_turn = self.prepare_llm_intent_turn(
             adventure_id,
             message,
@@ -294,10 +355,12 @@ class IsekaiSurvivalService:
             learn_preferences=learn_preferences,
         )
         if llm_intent_turn is not None:
+            if scene_structure:
+                llm_intent_turn["scene_structure"] = scene_structure
             return llm_intent_turn
         plan = self.intent_planner.plan(message.content, scene)
         if self.should_resolve_action_plan(plan, self.adventures.get_world_state(adventure_id), scene):
-            return self.prepare_resolved_turn(
+            turn = self.prepare_resolved_turn(
                 adventure_id,
                 message,
                 player_message,
@@ -305,6 +368,9 @@ class IsekaiSurvivalService:
                 plan,
                 learn_preferences=learn_preferences,
             )
+            if scene_structure:
+                turn["scene_structure"] = scene_structure
+            return turn
         action = self.preconditions.check(self.action_parser.parse(message.content, scene), scene)
         delta, survival = self.apply_delta(adventure_id, action)
         character = self.get_character(adventure_id)
@@ -332,6 +398,8 @@ class IsekaiSurvivalService:
             "recent_messages": [],
             "fallback": fallback,
         }
+        if scene_structure:
+            turn["scene_structure"] = scene_structure
         turn["world_state"] = self.advance_world_context(adventure_id, turn, learn_preferences=learn_preferences)
         model = self.active_model()
         reserved_payload = self.build_model_payload(turn, message.locale, recent_messages=[])
@@ -341,6 +409,213 @@ class IsekaiSurvivalService:
             reserved_payload=reserved_payload,
         )
         return turn
+
+    def ensure_scene_structured(self, adventure_id: int, scene: SceneState, player_action: str) -> tuple[SceneState, dict[str, Any]]:
+        if self._scene_is_structured(scene) or not self._input_needs_scene_structure(player_action, scene):
+            return scene, {}
+        world_state = self.adventures.get_world_state(adventure_id)
+        next_scene, next_world_state, metadata = self.generate_scene_structure(
+            adventure_id,
+            scene,
+            player_action,
+            world_state,
+            generation_reason="repair_current",
+        )
+        if metadata.get("success"):
+            self.adventures.update_scene(adventure_id, next_scene)
+            self.adventures.update_world_state(adventure_id, next_world_state)
+            return next_scene, metadata
+        return scene, metadata
+
+    def generate_scene_structure(
+        self,
+        adventure_id: int,
+        scene: SceneState,
+        player_action: str,
+        world_state: dict[str, Any],
+        *,
+        generation_reason: str,
+    ) -> tuple[SceneState, dict[str, Any], dict[str, Any]]:
+        model = self.active_model()
+        result = self.scene_generation_agent.generate(
+            adventure_id=adventure_id,
+            scene=scene,
+            world_state=world_state,
+            model=model,
+            generation_reason=generation_reason,
+            player_action=player_action,
+        )
+        if not result.success:
+            return scene, world_state, {"source": "scene_generation_agent", "success": False, "errors": result.errors}
+        next_scene, next_world_state, metadata = apply_scene_generation_payload(scene, world_state, result.payload)
+        return next_scene, next_world_state, {**metadata, "success": True, "generation_reason": generation_reason}
+
+    def _input_needs_scene_structure(self, player_action: str, scene: SceneState) -> bool:
+        if self._text_has_concrete_exploration_cue(player_action, scene):
+            return True
+        action = self.action_parser.parse(player_action, scene)
+        if action.action_type in {"table_talk", "status_check", "clarification"}:
+            return False
+        if action.action_type == "observe":
+            return self._has_concrete_observation_target(player_action)
+        if action.action_type in {"search", "gather", "force_open", "refill_water", "secure_shelter"}:
+            return self._has_concrete_scene_interaction_target(player_action, scene)
+        if action.action_type == "enter_location":
+            return self._has_concrete_local_entry_target(player_action)
+        return False
+
+    def _llm_plan_needs_scene_structure(self, plan: LLMIntentPlan, scene: SceneState) -> bool:
+        if self._scene_is_structured(scene):
+            return False
+        for step in plan.steps:
+            action_type = str(step.action_type or "").strip()
+            target_text = str(step.target_text or "").strip() or plan.raw_text
+            if action_type == "observe" and self._has_concrete_observation_target(target_text):
+                return True
+            if action_type in {"search", "gather", "force_open", "refill_water", "secure_shelter"} and self._has_concrete_scene_interaction_target(
+                target_text
+            ):
+                return True
+        return False
+
+    def _text_has_concrete_exploration_cue(self, player_action: str, scene: SceneState | None = None) -> bool:
+        text = str(player_action or "").strip().lower()
+        if not text:
+            return False
+        if any(word in text for word in ["状态", "属性", "背包", "金币", "多少钱"]):
+            return False
+        observe_verbs = [
+            "观察",
+            "查看",
+            "检查",
+            "研究",
+            "解读",
+            "辨认",
+            "翻看",
+            "摸",
+            "看看",
+        ]
+        search_verbs = [
+            "搜索",
+            "搜查",
+            "调查",
+            "寻找",
+        ]
+        if any(verb in text for verb in observe_verbs) and self._has_concrete_observation_target(text):
+            return True
+        return any(verb in text for verb in search_verbs) and self._has_concrete_scene_interaction_target(text, scene)
+
+    def _has_concrete_scene_interaction_target(self, player_action: str, scene: SceneState | None = None) -> bool:
+        text = str(player_action or "").strip().lower()
+        if not text:
+            return False
+        generic_targets = ["周围", "四周", "附近", "这里", "环境", "情况", "一圈", "一下"]
+        if any(word in text for word in generic_targets) and len(text) <= 8:
+            return False
+        generic_resource_terms = ["食材", "食物", "水源", "饮水", "补给", "材料"]
+        if any(word in text for word in generic_resource_terms) and scene and not self._mentions_scene_specific_target(text, scene):
+            return False
+        return len(self._scene_interaction_residue(text)) >= 2
+
+    def _mentions_scene_specific_target(self, text: str, scene: SceneState) -> bool:
+        candidates: list[str] = []
+        candidates.extend(str(item) for item in scene.important_objects)
+        for entry in scene.interactables:
+            if not isinstance(entry, dict):
+                continue
+            candidates.append(str(entry.get("name") or ""))
+            candidates.extend(str(item) for item in entry.get("aliases", []) if str(item).strip())
+        for candidate in candidates:
+            clean = str(candidate or "").strip().lower()
+            if len(clean) >= 2 and (clean in text or any(fragment in text for fragment in self._scene_target_fragments(clean))):
+                return True
+        return False
+
+    def _scene_target_fragments(self, text: str) -> list[str]:
+        fragments: set[str] = set()
+        for size in range(min(5, len(text)), 1, -1):
+            for start in range(0, len(text) - size + 1):
+                fragment = text[start : start + size]
+                if not any(ch in fragment for ch in ["的", "了", "着", "和", "与", "及"]):
+                    fragments.add(fragment)
+        return sorted(fragments, key=len, reverse=True)[:8]
+
+    def _has_concrete_observation_target(self, player_action: str) -> bool:
+        text = str(player_action or "").strip().lower()
+        residue = self._scene_interaction_residue(text)
+        ambient_targets = {"雾", "雾气", "空气", "天色", "天气", "光线", "声音", "风", "风声", "气味"}
+        if residue in ambient_targets:
+            return False
+        concrete_verbs = ["检查", "查看", "翻看", "对照", "解读", "研究", "辨认", "摸", "看看", "寻找"]
+        if any(verb in text for verb in concrete_verbs):
+            return len(residue) >= 2
+        list_markers = ["、", "，", ",", "和", "并", "以及", "再"]
+        if any(marker in text for marker in list_markers):
+            return len(residue) >= 4
+        return len(residue) >= 4
+
+    def _scene_interaction_residue(self, text: str) -> str:
+        residue = text
+        for word in [
+            "我",
+            "想",
+            "要",
+            "先",
+            "然后",
+            "搜索",
+            "搜查",
+            "调查",
+            "查看",
+            "检查",
+            "辨认",
+            "翻看",
+            "摸一摸",
+            "摸",
+            "看看",
+            "寻找",
+            "观察",
+            "打开",
+            "撬开",
+            "强行",
+            "采集",
+            "摘",
+            "捡",
+            "拿起",
+            "装水",
+            "取水",
+            "堵门",
+            "加固",
+            "使用",
+            "一下",
+            "一点",
+            "周围",
+            "四周",
+            "附近",
+            "这里",
+            "环境",
+        ]:
+            residue = residue.replace(word, "")
+        return residue.strip(" ，。,.!?！？")
+
+    def _has_concrete_local_entry_target(self, player_action: str) -> bool:
+        text = str(player_action or "").strip().lower()
+        if not text:
+            return False
+        if any(word in text for word in ["回城", "回到城镇", "回镇", "去白石镇", "前往", "赶路"]):
+            return False
+        local_entry_words = ["进入", "钻进", "走进", "进到", "进屋", "门", "洞", "缝", "车厢", "小屋", "房间", "走廊", "通道"]
+        return any(word in text for word in local_entry_words) and len(self._scene_interaction_residue(text)) >= 2
+
+    def _scene_is_structured(self, scene: SceneState) -> bool:
+        if not scene.interactables:
+            return False
+        names = {str(entry.get("name") or "").strip() for entry in scene.interactables if isinstance(entry, dict)}
+        return bool(names) and not names <= {"", "门口", "周围环境"}
+
+    def _resolved_scene_needs_generation(self, scene: SceneState, steps: list[Any]) -> bool:
+        if self._scene_is_structured(scene):
+            return False
+        return any(getattr(step.action, "action_type", "") in {"enter_location", "travel", "leave_location"} for step in steps)
 
     def prepare_llm_intent_turn(
         self,
@@ -370,6 +645,20 @@ class IsekaiSurvivalService:
                     intent_error=interpretation.error,
                     learn_preferences=learn_preferences,
                 )
+            scene_structure: dict[str, Any] = {}
+            if self._llm_plan_needs_scene_structure(plan, scene):
+                world_state = self.adventures.get_world_state(adventure_id)
+                structured_scene, structured_world_state, scene_structure = self.generate_scene_structure(
+                    adventure_id,
+                    scene,
+                    message.content,
+                    world_state,
+                    generation_reason="repair_current_from_intent",
+                )
+                if scene_structure.get("success"):
+                    self.adventures.update_scene(adventure_id, structured_scene)
+                    self.adventures.update_world_state(adventure_id, structured_world_state)
+                    scene = structured_scene
             grounded = self.action_grounder.ground(plan, scene)
             if grounded.steps and grounded.steps[0].action.requires_clarification:
                 return self.prepare_intent_clarification_turn(
@@ -394,6 +683,8 @@ class IsekaiSurvivalService:
                 )
                 turn["intent_source"] = "active_model"
                 turn["intent_plan"] = plan.payload()
+                if scene_structure:
+                    turn["scene_structure"] = scene_structure
                 if interpretation.raw_response:
                     turn["intent_raw_response"] = interpretation.raw_response
                 return turn
@@ -488,6 +779,7 @@ class IsekaiSurvivalService:
             "avoid",
             "force_open",
             "enter_location",
+            "leave_location",
             "negotiate",
             "purchase",
             "repair",
@@ -504,9 +796,21 @@ class IsekaiSurvivalService:
             return True
         if any(step.action.action_type == "travel" for step in plan.steps) and any(marker in plan.original_text for marker in ["连夜", "夜里", "夜晚"]):
             return True
-        if "暗夜狼" in plan.original_text:
+        if self.plan_mentions_active_quest(plan, world_state or {}):
             return True
         return False
+
+    def plan_mentions_active_quest(self, plan: IsekaiIntentPlan, world_state: dict[str, Any]) -> bool:
+        quest = world_state.get("isekai_quest") if isinstance(world_state.get("isekai_quest"), dict) else {}
+        quest_id = str(quest.get("active_quest_id") or "")
+        line = self.content.quest_line(quest_id, world_state)
+        markers: list[str] = []
+        for transition in line.get("transitions", []):
+            if not isinstance(transition, dict):
+                continue
+            trigger = transition.get("trigger") if isinstance(transition.get("trigger"), dict) else {}
+            markers.extend(str(item) for item in trigger.get("text_contains_any", []) if str(item).strip())
+        return bool(markers) and any(marker in plan.original_text for marker in markers)
 
     def plan_has_scene_scoped_discovery(
         self,
@@ -561,6 +865,19 @@ class IsekaiSurvivalService:
         character = self.get_character(adventure_id)
         world_state = self.adventures.get_world_state(adventure_id)
         result = self.action_resolution.resolve(plan, scene, survival, character, world_state)
+        post_scene_structure: dict[str, Any] = {}
+        if self._resolved_scene_needs_generation(result.scene, result.steps):
+            expanded_scene, expanded_world_state, post_scene_structure = self.generate_scene_structure(
+                adventure_id,
+                result.scene,
+                message.content,
+                result.world_state,
+                generation_reason="enter_stub",
+            )
+            if post_scene_structure.get("success"):
+                expanded_survival = dict(result.survival)
+                expanded_survival["location"] = expanded_scene.location
+                result = replace(result, scene=expanded_scene, world_state=expanded_world_state, survival=expanded_survival)
         self.persist_survival_snapshot(adventure_id, result.survival)
         character = self.update_character_resources(adventure_id, result.character)
         self.adventures.update_scene(adventure_id, result.scene)
@@ -602,6 +919,8 @@ class IsekaiSurvivalService:
             },
             "state_changes_applied": {},
         }
+        if post_scene_structure:
+            turn["scene_structure"] = post_scene_structure
         turn["world_state"] = self.advance_world_context(adventure_id, turn, learn_preferences=learn_preferences)
         return turn
 
@@ -677,10 +996,11 @@ class IsekaiSurvivalService:
 
     def repair_legacy_scene_if_needed(self, adventure_id: int, scene: SceneState) -> SceneState:
         repaired_payload = self.worldview.repair_scene_state_payload(scene.model_dump())
-        if repaired_payload == scene.model_dump():
-            return scene
         repaired_scene = SceneState.model_validate(repaired_payload)
-        self.adventures.update_scene(adventure_id, repaired_scene)
+        world_state = self.adventures.get_world_state(adventure_id)
+        repaired_scene, _metadata = self.content.materialize_scene_from_content(repaired_scene, world_state)
+        if repaired_scene.model_dump() != scene.model_dump():
+            self.adventures.update_scene(adventure_id, repaired_scene)
         return repaired_scene
 
     def advance_world_context(
@@ -693,9 +1013,10 @@ class IsekaiSurvivalService:
         world_state = self.quests.initial_world_state(world_state)
         world_state = self.pressure_events.ensure_state(world_state)
         world_state["turn_count"] = int(world_state.get("turn_count", 0)) + 1
-        world_state["isekai_pressure_goals"] = self.worldview.pressure_goals()
-        world_state["pressure_clocks"] = self.ensure_pressure_clocks(world_state.get("pressure_clocks"))
-        world_state = self.advance_pressure_clocks(world_state, turn)
+        pressure_scene = turn.get("resolved_scene") or turn.get("scene")
+        world_state["isekai_pressure_goals"] = self.worldview.pressure_goals(pressure_scene, world_state)
+        world_state["pressure_clocks"] = self.ensure_pressure_clocks(world_state.get("pressure_clocks"), pressure_scene, world_state)
+        world_state = self.advance_pressure_clocks(world_state, turn, pressure_scene)
         world_state, pressure_event = self.pressure_events.evaluate(world_state, turn)
         turn["pressure_event"] = pressure_event
         turn["pressure_event_fired"] = bool(pressure_event)
@@ -731,15 +1052,13 @@ class IsekaiSurvivalService:
     ) -> dict[str, Any]:
         character = dict(turn.get("character") or self.get_character(adventure_id))
         reward_payload: dict[str, Any] = {"clues_added": list((turn.get("delta") or {}).get("clues") or [])}
-        if quest_update.get("before") == "tracking" and quest_update.get("after") == "resolved":
+        quest = world_state.get("isekai_quest") if isinstance(world_state.get("isekai_quest"), dict) else {}
+        quest_id = str(quest.get("active_quest_id") or "")
+        stage_reward = self.content.quest_reward_for_stage(quest_id, str(quest_update.get("after") or ""), world_state)
+        if stage_reward and quest_update.get("changed"):
             reward_payload = {
-                "items_added": ["暗夜狼牙 x1"],
-                "currency_delta": 8,
-                "relationship_delta": [
-                    {"npc_id": "old_furnace_keeper", "name": "旧炉旅店店主", "trust": 10, "attitude": "更信任"}
-                ],
-                "clues_added": [*reward_payload["clues_added"], "暗夜狼惧怕梦魇草燃烟"],
-                "entitlements_added": [],
+                **stage_reward,
+                "clues_added": [*reward_payload["clues_added"], *list(stage_reward.get("clues_added") or [])],
             }
         if not any(reward_payload.get(key) for key in ["items_added", "currency_delta", "relationship_delta", "clues_added", "entitlements_added"]):
             return world_state
@@ -748,7 +1067,7 @@ class IsekaiSurvivalService:
             character,
             world_state,
             reward_payload,
-            reason="暗夜狼任务线" if quest_update.get("after") == "resolved" else "行动线索",
+            reason=str(stage_reward.get("reason") or "quest_reward") if stage_reward else "行动线索",
         )
         turn["reward_applied"] = applied
         turn["character"] = self.update_character_resources(adventure_id, next_character)
@@ -833,6 +1152,9 @@ class IsekaiSurvivalService:
         if isinstance(model_payload.get("suggested_actions"), list):
             metadata["suggested_actions"] = model_payload["suggested_actions"]
             metadata["suggested_action_details"] = self.suggested_action_details(turn)
+        visible_edges = self.visible_scene_edges(turn.get("world_state") or {}, applied_scene or turn.get("resolved_scene") or turn.get("scene"))
+        if visible_edges:
+            metadata["visible_edges"] = visible_edges
         if turn.get("state_changes_applied"):
             metadata["state_changes_applied"] = turn["state_changes_applied"]
         if turn.get("resolved_steps"):
@@ -868,7 +1190,27 @@ class IsekaiSurvivalService:
             metadata["scene_object_source"] = turn["scene_object_source"]
         if turn.get("scene_objects_applied"):
             metadata["scene_objects_applied"] = turn["scene_objects_applied"]
+        if turn.get("scene_structure"):
+            metadata["scene_structure"] = turn["scene_structure"]
         return metadata
+
+    def visible_scene_edges(self, world_state: dict[str, Any], scene: SceneState | None) -> list[dict[str, Any]]:
+        if scene is None:
+            return []
+        node_id = str((scene.location_path or {}).get("node_id") or "")
+        if not node_id:
+            return []
+        graph = world_state.get("scene_graph") if isinstance(world_state.get("scene_graph"), dict) else {}
+        edges = []
+        for edge in graph.get("edges", []) if isinstance(graph.get("edges"), list) else []:
+            if not isinstance(edge, dict):
+                continue
+            if str(edge.get("from_node_id") or "") != node_id:
+                continue
+            if edge.get("known_to_player", True) is False or str(edge.get("access") or "") == "hidden":
+                continue
+            edges.append(dict(edge))
+        return edges[:6]
 
     def parsed_action_payload(self, action: Any) -> dict[str, Any]:
         if is_dataclass(action):
@@ -905,70 +1247,27 @@ class IsekaiSurvivalService:
             details.append({**self.parsed_action_payload(action), "text": text, "risk": "" if action.advances_time else "当前分类不会推进时间"})
         return details
 
-    def ensure_pressure_clocks(self, clocks: Any) -> list[dict[str, Any]]:
-        current = [dict(clock) for clock in clocks] if isinstance(clocks, list) else []
-        by_id = {str(clock.get("id") or ""): clock for clock in current if isinstance(clock, dict)}
-        for clock in self.default_pressure_clocks():
-            existing = by_id.get(clock["id"])
-            if existing is None:
-                by_id[clock["id"]] = dict(clock)
-                continue
-            merged = {**clock, **existing}
-            merged["value"] = self._clamp_clock(int(merged.get("value", clock["value"])), int(merged.get("max", 100)))
-            by_id[clock["id"]] = merged
-        ordered_ids = [clock["id"] for clock in self.default_pressure_clocks()]
-        return [by_id[clock_id] for clock_id in ordered_ids if clock_id in by_id]
+    def ensure_pressure_clocks(
+        self,
+        clocks: Any,
+        scene: SceneState | None = None,
+        world_state: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.worldview.pressure_clocks(clocks, scene, world_state)
 
-    def default_pressure_clocks(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "id": "sunset",
-                "label": "日落倒计时",
-                "value": 55,
-                "max": 100,
-                "visible": True,
-                "trend": "rising",
-                "description": "天色越暗，寻找安全落脚点越困难。",
-            },
-            {
-                "id": "outsider_suspicion",
-                "label": "外来者怀疑",
-                "value": 20,
-                "max": 100,
-                "visible": True,
-                "trend": "rising",
-                "description": "当地人越怀疑异界来客，交涉和交易越困难。",
-            },
-            {
-                "id": "curfew_patrol",
-                "label": "宵禁巡逻",
-                "value": 10,
-                "max": 100,
-                "visible": True,
-                "trend": "rising",
-                "description": "夜色和守卫巡逻会限制公开行动。",
-            },
-            {
-                "id": "beast_activity",
-                "label": "野兽活动",
-                "value": 15,
-                "max": 100,
-                "visible": True,
-                "trend": "rising",
-                "description": "荒野里的声响和气味会吸引危险生物。",
-            },
-            {
-                "id": "weather_thirst",
-                "label": "天气与口渴",
-                "value": 20,
-                "max": 100,
-                "visible": True,
-                "trend": "rising",
-                "description": "潮湿、闷热或寒冷天气会加重补水和保暖压力。",
-            },
-        ]
+    def default_pressure_clocks(
+        self,
+        scene: SceneState | None = None,
+        world_state: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.worldview.default_pressure_clocks(scene, world_state)
 
-    def advance_pressure_clocks(self, world_state: dict[str, Any], turn: dict[str, Any]) -> dict[str, Any]:
+    def advance_pressure_clocks(
+        self,
+        world_state: dict[str, Any],
+        turn: dict[str, Any],
+        scene: SceneState | None = None,
+    ) -> dict[str, Any]:
         action_type = str(turn.get("action_type") or "")
         time_state = turn.get("time") or {}
         if not time_state.get("advances_time"):
@@ -977,7 +1276,7 @@ class IsekaiSurvivalService:
 
         minutes = int(time_state.get("time_cost_minutes") or 0)
         base_delta = max(1, minutes // 30)
-        clocks = self.ensure_pressure_clocks(world_state.get("pressure_clocks"))
+        clocks = self.ensure_pressure_clocks(world_state.get("pressure_clocks"), scene, world_state)
         affected: list[dict[str, Any]] = []
         threshold_events: list[dict[str, Any]] = []
         visible_events = [str(event) for event in world_state.get("visible_events", []) if str(event).strip()]
@@ -1017,7 +1316,12 @@ class IsekaiSurvivalService:
         if action_type == "sleep":
             set_clock("sunset", 8)
             set_clock("curfew_patrol", 5)
-            visible_events.append("你熬过夜色，新一天的日落与宵禁压力重新计时。")
+            set_clock("shelter_security", 20)
+            has_curfew_clock = any(clock.get("id") == "curfew_patrol" for clock in clocks)
+            if has_curfew_clock:
+                visible_events.append("你熬过夜色，新一天的日落与宵禁压力重新计时。")
+            else:
+                visible_events.append("你熬过夜色，新一天的日落与庇护压力重新计时。")
             world_state["pressure_clocks"] = clocks
             world_state["visible_events"] = visible_events[-12:]
             world_state["last_pressure_advance"] = {
@@ -1034,10 +1338,14 @@ class IsekaiSurvivalService:
         bump("weather_thirst", max(1, minutes // 60))
         if action_type in {"gather", "forage", "search", "travel"}:
             bump("beast_activity", 2)
+        if action_type in {"observe", "search", "gather", "forage", "travel", "enter_location", "leave_location"}:
+            bump("environmental_hazard", 1)
         if action_type in {"short_dialogue", "seek_shelter"}:
             bump("outsider_suspicion", 1)
+            bump("shelter_security", 1)
         if str(turn.get("survival", {}).get("time_of_day") or "") in {"夜晚", "深夜"}:
             bump("curfew_patrol", base_delta)
+            bump("shelter_security", base_delta)
 
         world_state["pressure_clocks"] = clocks
         world_state["visible_events"] = visible_events[-12:]
@@ -1056,11 +1364,13 @@ class IsekaiSurvivalService:
 
     def pressure_threshold_event(self, clock_id: str) -> str:
         return {
-            "sunset": "日落压力达到临界点，安全落脚处开始关门，守卫会盘查无身份的外来者。",
+            "sunset": "日落压力达到临界点，安全庇护点变少，继续拖延会让下一次移动和休息更危险。",
             "outsider_suspicion": "外来者怀疑达到临界点，附近 NPC 会提高价格、拒绝帮助或要求证明身份。",
             "curfew_patrol": "宵禁巡逻达到临界点，公开行动可能立刻遭遇巡逻盘查。",
             "beast_activity": "野兽活动达到临界点，附近留下新鲜爪印和低吼声，继续采集或赶路可能触发袭击。",
             "weather_thirst": "天气与口渴压力达到临界点，缺水和温差开始影响判断与行动效率。",
+            "shelter_security": "庇护安全达到临界点，当前休息点不再可靠，需要加固、转移或承担夜间危险。",
+            "environmental_hazard": "环境危险达到临界点，异常痕迹和地形风险开始限制搜索、采集和移动。",
         }.get(clock_id, "")
 
     def apply_structured_state_changes(
@@ -1315,7 +1625,7 @@ class IsekaiSurvivalService:
                 "known_clues": (turn.get("world_state") or {}).get("isekai_clues", []),
                 "pressure_event_fired": bool(turn.get("pressure_event_fired")),
                 "pressure_event": turn.get("pressure_event") or None,
-                "pressure_goals": self.worldview.pressure_goals(),
+                "pressure_goals": self.worldview.pressure_goals(turn.get("resolved_scene") or turn.get("scene"), turn.get("world_state") or {}),
                 "day": turn["survival"].get("day"),
                 "time_of_day": turn["survival"].get("time_of_day"),
                 "survival_state_json": turn["survival"].get("state", {}),
@@ -1360,9 +1670,9 @@ class IsekaiSurvivalService:
                     "你必须区分用户信息、系统状态和工具结果，不要把系统状态当成玩家发言。"
                     "recent_messages 是本局真实对话历史，必须用于保持地点、NPC、目标和剧情连续性。"
                     "如果 recent_messages 与 system_state.scene、confirmed_location 或 event_impacts 冲突，以 system_state 为准。"
-                    "system_state.pressure_goals 是本阶段必须维持的生存压力：落脚身份、外来者怀疑、异族税和宵禁巡逻都要影响 NPC 与选择后果。"
+                    "system_state.pressure_goals 是当前场景必须维持的生存压力；按其中的 label 和 detail 影响 NPC、探索、资源与选择后果。"
                     "压力事件只能在 system_state.pressure_event_fired=true 时写进旁白；否则不要重复写“宵禁压力”“外来者被排斥”“异族税压力”等系统解释句。"
-                    "当前 P1 只能运行 night_wolf_line 一条任务线；禁止创建第二条任务线、第二城镇主线或多阵营主线。"
+                    "任务线以 system_state.active_quest 为准；如果 active_quest_id 为空，不要创建、推进或提及任务线。"
                     "回复内部必须满足：状态是否变化、场景可交互对象、NPC 态度、生存压力是否合理，并给玩家 2-3 个自然行动钩子。"
                     "如果叙事导致角色位置、环境、可交互物或当前目标改变，必须输出 scene_update。"
                     "只输出 JSON 对象，格式为 {\"narration\":\"...\",\"scene_update\":{\"location\":\"...\","
@@ -1509,8 +1819,8 @@ class IsekaiSurvivalService:
             turn["scene_objects_applied"] = metadata
         suggested = model_payload.get("suggested_actions")
         if isinstance(suggested, list):
-            merged = [*next_scene.suggested_actions, *[str(item) for item in suggested if str(item).strip()]]
-            next_scene = next_scene.model_copy(update={"suggested_actions": list(dict.fromkeys(merged))[:8]})
+            explicit = [str(item) for item in suggested if str(item).strip()]
+            next_scene = next_scene.model_copy(update={"suggested_actions": list(dict.fromkeys(explicit))[:8]})
         return next_scene
 
     def action_allows_location_change(self, turn: dict[str, Any]) -> bool:

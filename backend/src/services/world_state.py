@@ -148,8 +148,28 @@ def public_world_state_view(world_state: dict[str, Any]) -> dict[str, Any]:
         "isekai_clues": list(state.get("isekai_clues", []))[-20:],
         "isekai_pressure_events": state.get("isekai_pressure_events", {}),
         "isekai_risks": state.get("isekai_risks", {}),
+        "scene_graph": _public_scene_graph(state),
         "pending_lodging_reward": state.get("pending_lodging_reward", False),
     }
+
+
+def _public_scene_graph(state: dict[str, Any]) -> dict[str, Any]:
+    graph = state.get("scene_graph") if isinstance(state.get("scene_graph"), dict) else {}
+    nodes = [
+        dict(node)
+        for node in graph.get("nodes", [])
+        if isinstance(node, dict) and node.get("known_to_player", True) is not False
+    ] if isinstance(graph.get("nodes"), list) else []
+    edges = []
+    for edge in graph.get("edges", []) if isinstance(graph.get("edges"), list) else []:
+        if not isinstance(edge, dict):
+            continue
+        if edge.get("known_to_player", True) is False:
+            continue
+        if str(edge.get("access") or "") == "hidden":
+            continue
+        edges.append(dict(edge))
+    return {"nodes": nodes, "edges": edges} if nodes or edges else {}
 
 
 def public_world_delta_view(pending_delta: dict[str, Any]) -> dict[str, Any]:

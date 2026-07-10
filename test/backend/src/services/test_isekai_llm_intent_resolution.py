@@ -24,6 +24,14 @@ def activate_test_model(store):
     return model
 
 
+def set_content_packs(service, adventure_id: int, packs: list[str]):
+    world_state = service.adventures.get_world_state(adventure_id)
+    world_state["isekai_content"] = {"active_packs": packs, "activation": "explicit"}
+    world_state = service.quests.initial_world_state(world_state)
+    service.adventures.update_world_state(adventure_id, world_state)
+    return world_state
+
+
 def carriage_scene():
     return SceneState(
         location="泥泞旧路",
@@ -246,6 +254,39 @@ def test_llm_intent_path_executes_structured_compound_plan(store):
     assert metadata["resolved_steps"][2]["arguments"]["constraints"] == ["no_search", "no_loot"]
 
 
+def test_llm_intent_repeated_observe_steps_are_single_observation_turn(store):
+    activate_test_model(store)
+    client = IntentPlanLLMClient(
+        {
+            "schema_version": "isekai_intent_v1",
+            "raw_text": "静立听水声，观察哪边苔藓更湿，检查兽类足迹是否朝向水源。",
+            "requires_clarification": False,
+            "confidence": "high",
+            "steps": [
+                {"step_id": "s1", "action_type": "observe", "target_text": "水声"},
+                {"step_id": "s2", "action_type": "observe", "target_text": "湿苔藓"},
+                {"step_id": "s3", "action_type": "observe", "target_text": "兽类足迹"},
+            ],
+        }
+    )
+    service = IsekaiSurvivalService(store, llm_client=client)
+    adventure = service.create_adventure(AdventureCreate(title="观察合并测试", mode="isekai_survival", locale="zh-CN"))
+    service.adventures.update_scene(adventure.id, temple_scene())
+
+    response = service.advance(
+        adventure.id,
+        MessageCreate(content="静立听水声，观察哪边苔藓更湿，检查兽类足迹是否朝向水源。", locale="zh-CN"),
+    )
+
+    metadata = response.dm_message.metadata
+    assert metadata["source"] == "action_resolution"
+    assert metadata["action_type"] == "observe"
+    assert len(metadata["resolved_steps"]) == 1
+    assert metadata["survival_delta"]["time_cost_minutes"] == 15
+    assert metadata["survival_delta"]["visible_events"] == ["时间推进了约 15 分钟。"]
+    assert response.dm_message.content.count("时间推进了约") == 1
+
+
 def test_llm_intent_failure_blocks_high_risk_compound_fallback(store):
     activate_test_model(store)
     service = IsekaiSurvivalService(store, llm_client=FailingIntentLLMClient())
@@ -278,6 +319,7 @@ def test_temple_search_produces_specific_discovery_and_refreshes_interactables(s
     )
     service = IsekaiSurvivalService(store, llm_client=client)
     adventure = service.create_adventure(AdventureCreate(title="神庙搜索测试", mode="isekai_survival", locale="zh-CN"))
+    set_content_packs(service, adventure.id, ["baseline_exploration_discoveries"])
     service.adventures.update_scene(adventure.id, temple_scene())
 
     response = service.advance(adventure.id, MessageCreate(content="搜索木箱。", locale="zh-CN"))
@@ -302,6 +344,7 @@ def test_enter_town_from_gate_scene_uses_named_town_target(store):
     )
     service = IsekaiSurvivalService(store, llm_client=client)
     adventure = service.create_adventure(AdventureCreate(title="灰橡镇入口测试", mode="isekai_survival", locale="zh-CN"))
+    set_content_packs(service, adventure.id, ["baseline_exploration_discoveries"])
     service.adventures.update_scene(adventure.id, gray_oak_gate_scene())
 
     response = service.advance(adventure.id, MessageCreate(content="进入灰橡镇。", locale="zh-CN"))
@@ -318,6 +361,7 @@ def test_enter_town_from_gate_scene_uses_named_town_target(store):
 def test_isekai_output_repairs_stale_interactables_from_scene_facts(store):
     service = IsekaiSurvivalService(store)
     adventure = service.create_adventure(AdventureCreate(title="旧存档展示修复", mode="isekai_survival", locale="zh-CN"))
+    set_content_packs(service, adventure.id, ["baseline_exploration_discoveries"])
     stale_temple = temple_scene().model_copy(
         update={
             "interactables": [
@@ -337,6 +381,7 @@ def test_isekai_output_repairs_stale_interactables_from_scene_facts(store):
 def test_isekai_output_repairs_stale_gate_door_interactable(store):
     service = IsekaiSurvivalService(store)
     adventure = service.create_adventure(AdventureCreate(title="旧镇门展示修复", mode="isekai_survival", locale="zh-CN"))
+    set_content_packs(service, adventure.id, ["baseline_exploration_discoveries"])
     stale_gate = gray_oak_gate_scene().model_copy(
         update={
             "interactables": [{"id": "door_01", "type": "object", "name": "门口", "affordances": ["堵门", "离开", "观察"]}],
@@ -369,6 +414,7 @@ def test_forest_clue_observation_produces_specific_findings(store):
     )
     service = IsekaiSurvivalService(store, llm_client=client)
     adventure = service.create_adventure(AdventureCreate(title="森林线索测试", mode="isekai_survival", locale="zh-CN"))
+    set_content_packs(service, adventure.id, ["baseline_exploration_discoveries"])
     service.adventures.update_scene(adventure.id, forest_clue_scene())
 
     response = service.advance(
@@ -396,6 +442,7 @@ def test_watchtower_search_produces_specific_camp_findings(store):
     )
     service = IsekaiSurvivalService(store, llm_client=client)
     adventure = service.create_adventure(AdventureCreate(title="哨塔搜索测试", mode="isekai_survival", locale="zh-CN"))
+    set_content_packs(service, adventure.id, ["baseline_exploration_discoveries"])
     service.adventures.update_scene(adventure.id, collapsed_watchtower_scene())
 
     response = service.advance(
@@ -466,8 +513,9 @@ def test_llm_purchase_bed_arguments_infer_item_id_and_spend_copper(store):
     )
     service = IsekaiSurvivalService(store, llm_client=client)
     adventure = service.create_adventure(AdventureCreate(title="床位支付测试", mode="isekai_survival", locale="zh-CN"))
+    set_content_packs(service, adventure.id, ["old_furnace_inn_p1"])
     service.adventures.update_scene(adventure.id, gray_oak_inn_scene())
-    world_state = dict(adventure.world_state)
+    world_state = service.adventures.get_world_state(adventure.id)
     world_state["isekai_economy"] = {
         "currency": {"copper_total": 26},
         "quotes": {"inn_bed": 3},
@@ -492,6 +540,7 @@ def test_llm_purchase_bed_arguments_infer_item_id_and_spend_copper(store):
 def test_legacy_watchtower_save_clears_false_inn_reward_pollution(store):
     service = IsekaiSurvivalService(store)
     adventure = service.create_adventure(AdventureCreate(title="旧哨塔污染修复", mode="isekai_survival", locale="zh-CN"))
+    set_content_packs(service, adventure.id, ["old_furnace_inn_p1", "baseline_exploration_discoveries"])
     service.adventures.update_scene(
         adventure.id,
         SceneState(
@@ -503,7 +552,7 @@ def test_legacy_watchtower_save_clears_false_inn_reward_pollution(store):
             interactables=[{"id": "surroundings_01", "type": "place", "name": "周围环境", "affordances": ["观察", "搜索"]}],
         ),
     )
-    world_state = dict(adventure.world_state)
+    world_state = service.adventures.get_world_state(adventure.id)
     world_state.update(
         {
             "pending_lodging_reward": True,

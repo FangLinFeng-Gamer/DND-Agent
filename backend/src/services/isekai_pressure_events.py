@@ -2,26 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.src.services.isekai_content import IsekaiContentService
+
 
 class IsekaiPressureEventService:
-    EVENTS = [
-        {
-            "id": "night_wolf_howl_01",
-            "type": "night_wolf",
-            "trigger": "night && night_wolf_line.stage == rumor_heard && lodging_identity",
-            "cooldown_turns": 5,
-            "state_delta": {"night_wolf_attention": 1},
-            "visible_text": "半夜的窗纸忽然一颤，镇墙外传来压得很低的狼嚎，像是有什么东西在逆着风嗅人味。",
-        },
-        {
-            "id": "curfew_bell_01",
-            "type": "curfew",
-            "trigger": "night && no_lodging_identity",
-            "cooldown_turns": 5,
-            "state_delta": {"curfew_risk": 1},
-            "visible_text": "远处钟声响起，街上的巡逻灯火开始变密。",
-        },
-    ]
+    def __init__(self, content: IsekaiContentService | None = None):
+        self.content = content or IsekaiContentService()
 
     def evaluate(
         self,
@@ -38,7 +24,7 @@ class IsekaiPressureEventService:
         if not (turn.get("time") or {}).get("advances_time"):
             return state, None
 
-        for event in self.EVENTS:
+        for event in self.content.pressure_events(state):
             event_id = event["id"]
             if int(cooldowns.get(event_id, 0)) > 0:
                 continue
@@ -79,18 +65,33 @@ class IsekaiPressureEventService:
         return result
 
     def _triggered(self, event: dict[str, Any], world_state: dict[str, Any], turn: dict[str, Any]) -> bool:
-        event_id = str(event.get("id") or "")
-        if event_id == "curfew_bell_01":
-            return self._is_night(turn) and not self._has_lodging_identity(world_state)
-        if event_id == "night_wolf_howl_01":
-            quest = world_state.get("isekai_quest") if isinstance(world_state.get("isekai_quest"), dict) else {}
-            return (
-                self._is_night(turn)
-                and self._has_lodging_identity(world_state)
-                and quest.get("active_quest_id") == "night_wolf_line"
-                and quest.get("stage") == "rumor_heard"
-            )
-        return False
+        conditions = event.get("conditions") if isinstance(event.get("conditions"), dict) else {}
+        if conditions.get("time_of_day") == "night" and not self._is_night(turn):
+            return False
+        if "lodging_identity" in conditions and self._has_lodging_identity(world_state) != bool(conditions["lodging_identity"]):
+            return False
+        if not self._quest_matches(conditions.get("quest"), world_state):
+            return False
+        return self._has_event_cue(conditions, turn)
+
+    def _has_event_cue(self, event: dict[str, Any], turn: dict[str, Any]) -> bool:
+        cues = [str(item) for item in event.get("cue_contains_any", []) if str(item).strip()] if isinstance(event.get("cue_contains_any"), list) else []
+        if not cues:
+            return True
+        text = str(turn.get("player_input") or "")
+        return any(cue in text for cue in cues)
+
+    def _quest_matches(self, expected: Any, world_state: dict[str, Any]) -> bool:
+        if not isinstance(expected, dict):
+            return True
+        quest = world_state.get("isekai_quest") if isinstance(world_state.get("isekai_quest"), dict) else {}
+        quest_id = str(expected.get("active_quest_id") or "")
+        stage = str(expected.get("stage") or "")
+        if quest_id and quest.get("active_quest_id") != quest_id:
+            return False
+        if stage and quest.get("stage") != stage:
+            return False
+        return True
 
     def _apply_event(self, world_state: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
         state = dict(world_state)

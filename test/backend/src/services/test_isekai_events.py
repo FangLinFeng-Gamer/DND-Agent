@@ -1,4 +1,4 @@
-from backend.src.schemas.adventure import AdventureCreate
+from backend.src.schemas.adventure import AdventureCreate, SceneState
 from backend.src.services.isekai import IsekaiSurvivalService
 from backend.src.services.isekai_event_catalog import IsekaiEventCatalog
 from backend.src.services.isekai_events import IsekaiWorldEventDirector
@@ -75,6 +75,39 @@ def test_empty_wilderness_blocks_large_news_without_channel(store):
             "turn_count": 4,
             "player_preferences": {},
             "force_event_scope": "global",
+        },
+    )
+
+    assert events == []
+    assert WorldEventService(store).list_known_for_adventure(adventure.id) == []
+
+
+def test_wilderness_negating_town_channel_does_not_receive_settlement_events(store):
+    adventure = create_isekai_adventure(store)
+    director = IsekaiWorldEventDirector(store)
+    scene = SceneState(
+        location="黑松林废弃岗哨",
+        environment="岗哨木墙半塌，附近没有城镇灯火，也没有商路、旅店或旅人。",
+        important_objects=["硫磺污染水沟", "倒塌木墙"],
+        current_objective="确认污染和扎营风险。",
+    )
+    turn = {
+        "player_input": "我继续观察岗哨周围。",
+        "action_type": "observe",
+        "time": {"advances_time": True, "time_cost_minutes": 10},
+        "scene": scene,
+        "character": adventure.isekai_character,
+        "survival": adventure.survival_state,
+        "delta": {"visible_events": []},
+    }
+
+    events = director.evaluate_turn(
+        adventure.id,
+        turn,
+        {
+            "turn_count": 6,
+            "player_preferences": {},
+            "force_event_scope": "settlement",
         },
     )
 

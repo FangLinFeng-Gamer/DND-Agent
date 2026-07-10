@@ -34,7 +34,7 @@ class IsekaiWorldviewNormalizer:
         "危险",
         "法则",
     )
-    PRESSURE_GOALS = (
+    SETTLEMENT_PRESSURE_GOALS = (
         {
             "id": "lodging_identity",
             "label": "日落前取得落脚身份",
@@ -59,6 +59,90 @@ class IsekaiWorldviewNormalizer:
             "detail": "日落后街面巡逻变密，无法解释身份的外来者会触发警戒、罚款或驱逐。",
             "severity": "high",
         },
+    )
+    SETTLEMENT_CLOCKS = (
+        {
+            "id": "sunset",
+            "label": "日落倒计时",
+            "value": 55,
+            "max": 100,
+            "visible": True,
+            "trend": "rising",
+            "description": "天色越暗，寻找安全落脚点越困难。",
+        },
+        {
+            "id": "outsider_suspicion",
+            "label": "外来者怀疑",
+            "value": 20,
+            "max": 100,
+            "visible": True,
+            "trend": "rising",
+            "description": "当地人越怀疑异界来客，交涉和交易越困难。",
+        },
+        {
+            "id": "curfew_patrol",
+            "label": "宵禁巡逻",
+            "value": 10,
+            "max": 100,
+            "visible": True,
+            "trend": "rising",
+            "description": "夜色和守卫巡逻会限制公开行动。",
+        },
+        {
+            "id": "beast_activity",
+            "label": "野兽活动",
+            "value": 15,
+            "max": 100,
+            "visible": True,
+            "trend": "rising",
+            "description": "荒野里的声响和气味会吸引危险生物。",
+        },
+        {
+            "id": "weather_thirst",
+            "label": "天气与口渴",
+            "value": 20,
+            "max": 100,
+            "visible": True,
+            "trend": "rising",
+            "description": "潮湿、闷热或寒冷天气会加重补水和保暖压力。",
+        },
+    )
+    ENVIRONMENTAL_PLACE_WORDS = (
+        "森林",
+        "林地",
+        "荒野",
+        "岗哨",
+        "哨塔",
+        "矿道",
+        "洞穴",
+        "神庙",
+        "遗迹",
+        "山脚",
+        "山坡",
+        "营地",
+        "海崖",
+        "溪",
+        "沟渠",
+        "污染",
+        "硫磺",
+        "瘴气",
+    )
+    SETTLEMENT_PLACE_WORDS = (
+        "旅店",
+        "客栈",
+        "酒馆",
+        "集市",
+        "街",
+        "镇门",
+        "城门",
+        "前厅",
+        "后厨",
+        "客房",
+        "店主",
+        "摊",
+        "镇上",
+        "城内",
+        "村里",
     )
 
     REPLACEMENTS = (
@@ -87,8 +171,192 @@ class IsekaiWorldviewNormalizer:
             text = text.replace(source, target)
         return text
 
-    def pressure_goals(self) -> list[dict[str, str]]:
-        return [dict(goal) for goal in self.PRESSURE_GOALS]
+    def pressure_goals(self, scene: Any | None = None, world_state: dict[str, Any] | None = None) -> list[dict[str, str]]:
+        if self._uses_settlement_pressure(scene, world_state):
+            return [dict(goal) for goal in self.SETTLEMENT_PRESSURE_GOALS]
+        return self._environmental_pressure_goals(scene)
+
+    def pressure_clocks(
+        self,
+        clocks: Any,
+        scene: Any | None = None,
+        world_state: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        current = [dict(clock) for clock in clocks] if isinstance(clocks, list) else []
+        defaults = self.default_pressure_clocks(scene, world_state)
+        allowed_ids = {str(clock.get("id") or "") for clock in defaults}
+        by_id = {
+            str(clock.get("id") or ""): clock
+            for clock in current
+            if isinstance(clock, dict) and str(clock.get("id") or "") in allowed_ids
+        }
+        for clock in defaults:
+            existing = by_id.get(clock["id"])
+            if existing is None:
+                by_id[clock["id"]] = dict(clock)
+                continue
+            merged = {**clock, **existing}
+            merged["label"] = clock["label"]
+            merged["description"] = clock["description"]
+            merged["value"] = self._clamp_clock(int(merged.get("value", clock["value"])), int(merged.get("max", 100)))
+            by_id[clock["id"]] = merged
+        return [by_id[clock["id"]] for clock in defaults if clock["id"] in by_id]
+
+    def default_pressure_clocks(
+        self,
+        scene: Any | None = None,
+        world_state: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        if self._uses_settlement_pressure(scene, world_state):
+            return [dict(clock) for clock in self.SETTLEMENT_CLOCKS]
+        return self._environmental_pressure_clocks(scene)
+
+    def uses_settlement_pressure(self, scene: Any | None = None, world_state: dict[str, Any] | None = None) -> bool:
+        return self._uses_settlement_pressure(scene, world_state)
+
+    def _uses_settlement_pressure(self, scene: Any | None, world_state: dict[str, Any] | None) -> bool:
+        place_text = self._scene_place_text(scene)
+        scene_text = self._scene_text(scene)
+        if any(word in place_text for word in self.SETTLEMENT_PLACE_WORDS):
+            return True
+        if any(marker in place_text for marker in ["镇外", "城外", "村外"]) and any(
+            word in scene_text for word in self.ENVIRONMENTAL_PLACE_WORDS
+        ):
+            return False
+        if any(word in scene_text for word in self.ENVIRONMENTAL_PLACE_WORDS):
+            return False
+        return any(word in place_text for word in ["镇", "城", "村"])
+
+    def _environmental_pressure_goals(self, scene: Any | None) -> list[dict[str, str]]:
+        scene_text = self._scene_text(scene)
+        hazard_label = "确认环境风险"
+        hazard_detail = "当前区域的地形、气味、痕迹或异常法则会影响探索、扎营和采集。"
+        if any(word in scene_text for word in ["污染", "毒", "硫磺", "腐臭", "瘴气"]):
+            hazard_label = "确认污染风险"
+            hazard_detail = "当前场景存在污染或刺鼻异味，饮水、采集和扎营前都需要确认安全。"
+        elif any(word in scene_text for word in ["遗迹", "神庙", "祭坛", "符文"]):
+            hazard_label = "确认遗迹法则"
+            hazard_detail = "遗迹中的符文、祭坛或空间异常可能改变搜索、开门和休息的风险。"
+        elif any(word in scene_text for word in ["森林", "荒野", "岗哨", "矿道", "洞穴"]):
+            hazard_label = "确认荒野危险"
+            hazard_detail = "荒野中的魔物痕迹、陌生植物和地形遮蔽会改变移动与观察风险。"
+        return [
+            {
+                "id": "environmental_hazard",
+                "label": hazard_label,
+                "detail": hazard_detail,
+                "severity": "high",
+            },
+            {
+                "id": "safe_water",
+                "label": "确认可饮水源",
+                "detail": "水源必须来自当前场景可见对象或已发现线索；污染、异味或未知法则会影响饮用和装水。",
+                "severity": "high",
+            },
+            {
+                "id": "shelter_route",
+                "label": "确认庇护与退路",
+                "detail": "扎营、进入子场景或离开当前区域前，需要确认可用庇护、通道和返回路线。",
+                "severity": "medium",
+            },
+            {
+                "id": "supply_pacing",
+                "label": "管理体力与补给",
+                "detail": "时间、疲劳、食物和水会随行动消耗；谨慎行动更安全但会失去时间。",
+                "severity": "medium",
+            },
+        ]
+
+    def _environmental_pressure_clocks(self, scene: Any | None) -> list[dict[str, Any]]:
+        hazard = self._environmental_hazard_clock(scene)
+        return [
+            {
+                "id": "sunset",
+                "label": "日落倒计时",
+                "value": 55,
+                "max": 100,
+                "visible": True,
+                "trend": "rising",
+                "description": "天色越暗，确认安全庇护点和退路越困难。",
+            },
+            {
+                "id": "beast_activity",
+                "label": "野兽活动",
+                "value": 15,
+                "max": 100,
+                "visible": True,
+                "trend": "rising",
+                "description": "荒野里的声响、气味和血迹会吸引危险生物。",
+            },
+            {
+                "id": "weather_thirst",
+                "label": "天气与口渴",
+                "value": 20,
+                "max": 100,
+                "visible": True,
+                "trend": "rising",
+                "description": "潮湿、闷热、寒冷或污染会加重补水和保暖压力。",
+            },
+            {
+                "id": "shelter_security",
+                "label": "庇护安全",
+                "value": 25,
+                "max": 100,
+                "visible": True,
+                "trend": "rising",
+                "description": "临时庇护越不可靠，扎营、休息和处理伤势越危险。",
+            },
+            hazard,
+        ]
+
+    def _environmental_hazard_clock(self, scene: Any | None) -> dict[str, Any]:
+        scene_text = self._scene_text(scene)
+        label = "环境危险"
+        description = "当前区域的地形、痕迹和异常法则会改变观察、搜索、扎营与移动风险。"
+        if any(word in scene_text for word in ["污染", "毒", "硫磺", "腐臭", "瘴气"]):
+            label = "污染风险"
+            description = "污染、刺鼻异味或不明粉末会影响饮水、采集、搜索和扎营。"
+        elif any(word in scene_text for word in ["遗迹", "神庙", "祭坛", "符文"]):
+            label = "遗迹法则"
+            description = "符文、祭坛或空间异常会改变搜索、开门和休息的风险。"
+        elif any(word in scene_text for word in ["森林", "荒野", "岗哨", "矿道", "洞穴"]):
+            label = "环境危险"
+            description = "荒野中的魔物痕迹、陌生植物和地形遮蔽会改变移动与观察风险。"
+        return {
+            "id": "environmental_hazard",
+            "label": label,
+            "value": 20,
+            "max": 100,
+            "visible": True,
+            "trend": "rising",
+            "description": description,
+        }
+
+    def _clamp_clock(self, value: int, maximum: int) -> int:
+        return max(0, min(maximum, value))
+
+    def _scene_place_text(self, scene: Any | None) -> str:
+        if scene is None:
+            return ""
+        path = getattr(scene, "location_path", None) or {}
+        parts = [getattr(scene, "location", "")]
+        if isinstance(path, dict):
+            parts.extend(str(path.get(key) or "") for key in ["region", "site", "sublocation", "display_name"])
+        return " ".join(parts)
+
+    def _scene_text(self, scene: Any | None) -> str:
+        if scene is None:
+            return ""
+        parts = [
+            getattr(scene, "location", ""),
+            getattr(scene, "environment", ""),
+            getattr(scene, "current_objective", ""),
+        ]
+        parts.extend(str(item) for item in getattr(scene, "important_objects", []) or [])
+        path = getattr(scene, "location_path", None) or {}
+        if isinstance(path, dict):
+            parts.extend(str(path.get(key) or "") for key in ["region", "site", "sublocation", "display_name"])
+        return " ".join(parts)
 
     def normalize_list(self, values: Any, limit: int | None = None) -> list[str]:
         if not isinstance(values, list):

@@ -2,8 +2,12 @@ from backend.src.schemas.adventure import SceneState
 from backend.src.services.isekai_locations import IsekaiLocationService
 
 
+def p1_world_state():
+    return {"isekai_content": {"active_packs": ["old_furnace_inn_p1"]}}
+
+
 def test_location_service_builds_structured_town_and_inn_path():
-    service = IsekaiLocationService()
+    service = IsekaiLocationService(world_state=p1_world_state())
 
     path = service.path_for("inn_front_hall")
 
@@ -18,7 +22,7 @@ def test_location_service_builds_structured_town_and_inn_path():
 
 
 def test_location_service_validates_adjacency_and_refreshes_interactables():
-    service = IsekaiLocationService()
+    service = IsekaiLocationService(world_state=p1_world_state())
     scene = SceneState(
         location="灰石镇 / 旧炉旅店 / 前厅",
         location_path=service.path_for("inn_front_hall"),
@@ -38,7 +42,7 @@ def test_location_service_validates_adjacency_and_refreshes_interactables():
 
 
 def test_location_service_blocks_non_adjacent_node():
-    service = IsekaiLocationService()
+    service = IsekaiLocationService(world_state=p1_world_state())
     scene = SceneState(
         location="灰石镇 / 旧炉旅店 / 前厅",
         location_path=service.path_for("inn_front_hall"),

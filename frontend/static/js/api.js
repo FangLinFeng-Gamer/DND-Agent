@@ -1,4 +1,4 @@
-import { apiBase } from "./state.js?v=20260706-isekai-clock";
+import { apiBase } from "./state.js?v=20260709-suggested-action";
 
 export async function api(path, options = {}) {
   const headers = {

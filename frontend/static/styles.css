@@ -1426,6 +1426,7 @@ select:focus {
 }
 
 .isekai-interactables,
+.isekai-visible-exits,
 .isekai-suggested-actions {
   display: grid;
   gap: 7px;
@@ -1434,6 +1435,7 @@ select:focus {
 }
 
 .isekai-interactables h3,
+.isekai-visible-exits h3,
 .isekai-suggested-actions h3 {
   margin: 0;
   color: #d8c28d;
@@ -1442,19 +1444,22 @@ select:focus {
   letter-spacing: 0;
 }
 
-.isekai-interactable {
+.isekai-interactable,
+.isekai-visible-exit {
   display: grid;
   gap: 3px;
   border-left: 2px solid rgba(220, 179, 87, .45);
   padding-left: 8px;
 }
 
-.isekai-interactable strong {
+.isekai-interactable strong,
+.isekai-visible-exit strong {
   color: #f0e2bb;
   font-size: 13px;
 }
 
-.isekai-interactable span {
+.isekai-interactable span,
+.isekai-visible-exit span {
   color: #a89669;
   font-size: 12px;
   line-height: 1.45;

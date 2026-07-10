@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from backend.src.schemas.adventure import SceneState
@@ -33,7 +34,41 @@ class IsekaiActionGrounder:
                     action=action,
                 )
             )
-        return IsekaiIntentPlan(original_text=plan.raw_text, steps=steps, truncated=plan.truncated)
+        return IsekaiIntentPlan(original_text=plan.raw_text, steps=self._coalesce_repeated_observe_steps(steps), truncated=plan.truncated)
+
+    def _coalesce_repeated_observe_steps(self, steps: list[PlannedIsekaiStep]) -> list[PlannedIsekaiStep]:
+        result: list[PlannedIsekaiStep] = []
+        for step in steps:
+            if result and result[-1].action.action_type == "observe" and step.action.action_type == "observe":
+                previous = result[-1]
+                result[-1] = PlannedIsekaiStep(
+                    index=previous.index,
+                    text=self._join_observe_text(previous.text, step.text),
+                    action=self._merge_observe_action(previous.action, step.action),
+                )
+                continue
+            result.append(step)
+        return [PlannedIsekaiStep(index=index + 1, text=step.text, action=step.action) for index, step in enumerate(result)]
+
+    def _join_observe_text(self, first: str, second: str) -> str:
+        values = [str(first or "").strip(), str(second or "").strip()]
+        return "，".join(value for value in values if value)
+
+    def _merge_observe_action(self, first: ParsedIsekaiAction, second: ParsedIsekaiAction) -> ParsedIsekaiAction:
+        target_names = [
+            name
+            for name in [str(first.target_name or "").strip(), str(second.target_name or "").strip()]
+            if name
+        ]
+        merged_target = "、".join(dict.fromkeys(target_names))
+        return replace(
+            first,
+            target_id=first.target_id if first.target_id == second.target_id else "",
+            target_name=merged_target or first.target_name,
+            confidence="medium" if first.confidence != "low" and second.confidence != "low" else "low",
+            confidence_reasons=list(dict.fromkeys([*first.confidence_reasons, *second.confidence_reasons, "coalesced_observe"])),
+            matched_rules=list(dict.fromkeys([*first.matched_rules, *second.matched_rules, "coalesced:observe"])),
+        )
 
     def _action(self, step: LLMIntentStep, scene: SceneState | None) -> ParsedIsekaiAction:
         action_type = self._normalized_action_type(step)
@@ -250,9 +285,7 @@ class IsekaiActionGrounder:
                 str(step.arguments.get("purpose") or ""),
             ]
         )
-        if any(word in text for word in ["锅把", "后厨", "厨房", "旅店"]):
-            return "repair"
-        if any(word in text for word in ["斗篷", "缺口", "避风", "临时营地", "封住", "挡住", "加固", "堵住", "扎营"]):
+        if any(word in text for word in ["封住", "挡住", "加固", "堵住", "扎营"]):
             return "secure_shelter"
         return "repair"
 
@@ -265,8 +298,4 @@ class IsekaiActionGrounder:
                 str(step.arguments.get("cost") or ""),
             ]
         )
-        if any(word in text for word in ["床位", "住宿", "钥匙", "客房", "房间"]):
-            return "inn_bed"
-        if any(word in text for word in ["炖菜", "热食", "饭", "餐"]):
-            return "stew_meal"
         return ""

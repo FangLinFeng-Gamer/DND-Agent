@@ -1,7 +1,7 @@
-import { api } from "./api.js?v=20260706-isekai-clock";
-import { els, state } from "./state.js?v=20260706-isekai-clock";
-import { localizeRaceMechanicLabel, localizeRaceName, localizeRaceTag, t } from "./i18n.js?v=20260706-isekai-clock";
-import { emptyNode, pillNode, setStatus, showError } from "./ui.js?v=20260706-isekai-clock";
+import { api } from "./api.js?v=20260709-suggested-action";
+import { els, state } from "./state.js?v=20260709-suggested-action";
+import { localizeRaceMechanicLabel, localizeRaceName, localizeRaceTag, t } from "./i18n.js?v=20260709-suggested-action";
+import { emptyNode, pillNode, setStatus, showError } from "./ui.js?v=20260709-suggested-action";
 
 export async function loadRaces() {
   try {

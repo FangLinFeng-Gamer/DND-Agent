@@ -1,9 +1,9 @@
-import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260706-isekai-clock";
-import { apiBase, els, state } from "./state.js?v=20260706-isekai-clock";
-import { localizeClassName, localizeCombatAction, localizeEquipmentName, localizeRaceName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260706-isekai-clock";
-import { localizedStoryText } from "./stories.js?v=20260706-isekai-clock";
-import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260706-isekai-clock";
-import { rollD20ForCheck } from "./dice.js?v=20260706-isekai-clock";
+import { api, readErrorMessage, readStreamingResponse, resolvePendingCheck } from "./api.js?v=20260709-suggested-action";
+import { apiBase, els, state } from "./state.js?v=20260709-suggested-action";
+import { localizeClassName, localizeCombatAction, localizeEquipmentName, localizeRaceName, localizeRole, localizeSide, localizeStatus, localizeWorldMessage, t } from "./i18n.js?v=20260709-suggested-action";
+import { localizedStoryText } from "./stories.js?v=20260709-suggested-action";
+import { emptyNode, pillNode, setStatus, showError, showView, statNode, typingIndicatorNode } from "./ui.js?v=20260709-suggested-action";
+import { rollD20ForCheck } from "./dice.js?v=20260709-suggested-action";
 
 const ISEKAI_CREATION_PROGRESS_KEYS = [
   "isekaiProgressRace",
@@ -846,7 +846,8 @@ function renderIsekaiMessageExtras(message) {
   }
   const interactables = Array.isArray(metadata.interactables) ? metadata.interactables : [];
   const suggestedActions = Array.isArray(metadata.suggested_actions) ? metadata.suggested_actions : [];
-  if (!interactables.length && !suggestedActions.length) {
+  const visibleEdges = Array.isArray(metadata.visible_edges) ? metadata.visible_edges : [];
+  if (!interactables.length && !suggestedActions.length && !visibleEdges.length) {
     return null;
   }
 
@@ -875,6 +876,9 @@ function renderIsekaiMessageExtras(message) {
     });
     wrap.append(section);
   }
+  if (visibleEdges.length) {
+    wrap.append(renderIsekaiVisibleExits(visibleEdges));
+  }
   if (suggestedActions.length) {
     const section = document.createElement("section");
     section.className = "isekai-suggested-actions";
@@ -891,14 +895,60 @@ function renderIsekaiMessageExtras(message) {
       button.className = "isekai-suggested-action";
       button.textContent = action;
       button.addEventListener("click", () => {
-        els.isekaiMessageInput.value = action;
-        els.isekaiMessageInput.focus();
+        applyIsekaiSuggestedAction(action);
       });
       section.append(button);
     });
     wrap.append(section);
   }
   return wrap;
+}
+
+function renderIsekaiVisibleExits(visibleEdges) {
+  const section = document.createElement("section");
+  section.className = "isekai-visible-exits";
+  const heading = document.createElement("h3");
+  heading.textContent = t("isekaiVisibleExits");
+  section.append(heading);
+  visibleEdges.slice(0, 6).forEach((edge) => {
+    const item = document.createElement("div");
+    item.className = "isekai-visible-exit";
+    const title = document.createElement("strong");
+    title.textContent = formatIsekaiEdgeLabel(edge);
+    const detail = document.createElement("span");
+    detail.textContent = [
+      edge?.kind || edge?.type || "",
+      edge?.access || "",
+      edge?.risk ? `${t("risk")}: ${edge.risk}` : "",
+    ].filter(Boolean).join(" · ");
+    item.append(title);
+    if (detail.textContent) {
+      item.append(detail);
+    }
+    section.append(item);
+  });
+  return section;
+}
+
+function formatIsekaiEdgeLabel(edge) {
+  if (!edge || typeof edge !== "object") {
+    return t("notSet");
+  }
+  return edge.label || edge.name || edge.to_name || edge.to_display_name || edge.to_node_id || edge.id || t("notSet");
+}
+
+function applyIsekaiSuggestedAction(action) {
+  const text = String(action || "").trim();
+  if (!text || !els.isekaiMessageInput) {
+    return;
+  }
+  els.isekaiMessageInput.value = text;
+  els.isekaiMessageInput.dispatchEvent(new Event("input", { bubbles: true }));
+  els.isekaiMessageInput.focus();
+  if (typeof els.isekaiMessageInput.scrollIntoView === "function") {
+    els.isekaiMessageInput.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  setStatus(t("isekaiSuggestedActionFilled"), "ok");
 }
 
 function renderPendingCheck(message) {
@@ -2001,41 +2051,63 @@ function renderIsekaiEconomyPanel(adventure) {
   const currentSuggestedActions = Array.isArray(adventure.current_scene?.suggested_actions)
     ? adventure.current_scene.suggested_actions
     : [];
-  target.append(renderIsekaiCurrentInteractables(currentInteractables, currentSuggestedActions));
+  const currentVisibleEdges = currentVisibleEdgesForAdventure(adventure);
+  target.append(renderIsekaiCurrentInteractables(currentInteractables, currentSuggestedActions, currentVisibleEdges));
 }
 
-function renderIsekaiCurrentInteractables(interactables, suggestedActions) {
+function currentVisibleEdgesForAdventure(adventure) {
+  const nodeId = String(adventure.current_scene?.location_path?.node_id || "").trim();
+  const edges = Array.isArray(adventure.world_state?.scene_graph?.edges)
+    ? adventure.world_state.scene_graph.edges
+    : [];
+  return edges.filter((edge) => {
+    if (!edge || typeof edge !== "object") {
+      return false;
+    }
+    if (edge.known_to_player === false || edge.access === "hidden") {
+      return false;
+    }
+    return nodeId ? String(edge.from_node_id || "") === nodeId : true;
+  });
+}
+
+function renderIsekaiCurrentInteractables(interactables, suggestedActions, visibleEdges = []) {
   const section = document.createElement("section");
   section.className = "isekai-current-interactables";
   const heading = document.createElement("h3");
   heading.textContent = t("isekaiCurrentInteractables");
   section.append(heading);
 
-  if (!interactables.length) {
+  if (!interactables.length && !visibleEdges.length) {
     section.append(emptyNode(t("notSet")));
   } else {
-    const list = document.createElement("div");
-    list.className = "isekai-current-interactable-list";
-    interactables.slice(0, 8).forEach((entry) => {
-      const item = document.createElement("article");
-      item.className = "isekai-current-interactable";
-      const name = document.createElement("strong");
-      name.textContent = entry.name || entry.id || t("notSet");
-      const details = [
-        entry.type || "",
-        entry.state || "",
-        Array.isArray(entry.affordances) && entry.affordances.length ? `${t("isekaiAffordances")}: ${entry.affordances.join("、")}` : "",
-        entry.risk ? `${t("risk")}: ${entry.risk}` : "",
-      ].filter(Boolean);
-      const meta = document.createElement("span");
-      meta.textContent = details.join(" · ");
-      item.append(name);
-      if (meta.textContent) {
-        item.append(meta);
-      }
-      list.append(item);
-    });
-    section.append(list);
+    if (interactables.length) {
+      const list = document.createElement("div");
+      list.className = "isekai-current-interactable-list";
+      interactables.slice(0, 8).forEach((entry) => {
+        const item = document.createElement("article");
+        item.className = "isekai-current-interactable";
+        const name = document.createElement("strong");
+        name.textContent = entry.name || entry.id || t("notSet");
+        const details = [
+          entry.type || "",
+          entry.state || "",
+          Array.isArray(entry.affordances) && entry.affordances.length ? `${t("isekaiAffordances")}: ${entry.affordances.join("、")}` : "",
+          entry.risk ? `${t("risk")}: ${entry.risk}` : "",
+        ].filter(Boolean);
+        const meta = document.createElement("span");
+        meta.textContent = details.join(" · ");
+        item.append(name);
+        if (meta.textContent) {
+          item.append(meta);
+        }
+        list.append(item);
+      });
+      section.append(list);
+    }
+    if (visibleEdges.length) {
+      section.append(renderIsekaiVisibleExits(visibleEdges));
+    }
   }
 
   if (suggestedActions.length) {
@@ -2045,15 +2117,16 @@ function renderIsekaiCurrentInteractables(interactables, suggestedActions) {
     actionTitle.textContent = t("isekaiSuggestedActions");
     actions.append(actionTitle);
     suggestedActions.slice(0, 5).forEach((action) => {
+      const text = String(action || "").trim();
+      if (!text) {
+        return;
+      }
       const button = document.createElement("button");
       button.type = "button";
       button.className = "isekai-suggested-action";
-      button.textContent = String(action);
+      button.textContent = text;
       button.addEventListener("click", () => {
-        if (els.isekaiMessageInput) {
-          els.isekaiMessageInput.value = String(action);
-          els.isekaiMessageInput.focus();
-        }
+        applyIsekaiSuggestedAction(action);
       });
       actions.append(button);
     });

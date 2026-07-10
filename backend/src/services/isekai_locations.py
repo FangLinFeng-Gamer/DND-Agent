@@ -15,6 +15,8 @@ class IsekaiLocationNode:
     sublocation: str
     parent_id: str
     environment: str
+    aliases: list[str] = field(default_factory=list)
+    objective: str = ""
     important_objects: list[str] = field(default_factory=list)
     interactables: list[dict[str, Any]] = field(default_factory=list)
     suggested_actions: list[str] = field(default_factory=list)
@@ -26,6 +28,9 @@ class IsekaiLocationService:
     def __init__(self, content: IsekaiContentService | None = None, world_state: dict[str, Any] | None = None):
         self.content = content or IsekaiContentService()
         self.nodes = self._nodes(world_state)
+
+    def for_world_state(self, world_state: dict[str, Any] | None = None) -> "IsekaiLocationService":
+        return IsekaiLocationService(self.content, world_state)
 
     def path_for(self, node_id: str) -> dict[str, str]:
         node = self.nodes[node_id]
@@ -40,18 +45,15 @@ class IsekaiLocationService:
         }
 
     def node_id_for_text(self, text: str, current_node_id: str = "") -> str:
-        lowered = str(text or "")
-        if "灰石镇" in lowered and "旅店" not in lowered:
-            return "graystone_town"
-        if "旧炉旅店" in lowered or "旅店前厅" in lowered or "前厅" in lowered:
-            return "inn_front_hall"
-        if "后厨" in lowered or "厨房" in lowered:
-            return "inn_kitchen"
-        if "客房" in lowered or "三号房" in lowered or "二楼" in lowered:
-            return "inn_room_3"
-        if "马厩" in lowered:
-            return "inn_stable"
-        return current_node_id
+        query = str(text or "")
+        best_node = ""
+        best_score = 0
+        for node in self.nodes.values():
+            for marker in self._node_markers(node):
+                if marker and marker in query and len(marker) > best_score:
+                    best_node = node.node_id
+                    best_score = len(marker)
+        return best_node or current_node_id
 
     def can_move(self, scene: SceneState, target_node_id: str) -> bool:
         current = str((scene.location_path or {}).get("node_id") or "")
@@ -81,7 +83,7 @@ class IsekaiLocationService:
             }
         )
 
-    def scene_for(self, node_id: str, current_objective: str = "拿到今晚的落脚身份。") -> SceneState:
+    def scene_for(self, node_id: str, current_objective: str = "") -> SceneState:
         node = self.nodes[node_id]
         path = self.path_for(node_id)
         return SceneState(
@@ -90,19 +92,24 @@ class IsekaiLocationService:
             environment=node.environment,
             important_objects=list(node.important_objects),
             npcs=list(node.npcs),
-            current_objective=current_objective,
+            current_objective=current_objective or self._objective(node_id),
             interactables=[dict(item) for item in node.interactables],
             suggested_actions=list(node.suggested_actions),
         )
 
     def _objective(self, node_id: str) -> str:
-        return {
-            "graystone_town": "在日落前找到能承认你身份的落脚点。",
-            "inn_front_hall": "和店主谈妥住宿、食物或可交换的帮助。",
-            "inn_kitchen": "确认能否通过修好锅把换取住宿权益。",
-            "inn_room_3": "确认床位、钥匙和夜间安全。",
-            "inn_stable": "查看马厩是否适合暂避或听取夜间动静。",
-        }.get(node_id, "确认当前位置的可互动对象。")
+        node = self.nodes.get(node_id)
+        return (node.objective if node else "") or "确认当前位置的可互动对象。"
+
+    def _node_markers(self, node: IsekaiLocationNode) -> list[str]:
+        markers = [
+            node.region,
+            node.site,
+            node.sublocation,
+            " / ".join(part for part in [node.region, node.site, node.sublocation] if part),
+            *node.aliases,
+        ]
+        return sorted({str(marker).strip() for marker in markers if str(marker).strip()}, key=len, reverse=True)
 
     def _nodes(self, world_state: dict[str, Any] | None = None) -> dict[str, IsekaiLocationNode]:
         nodes: dict[str, IsekaiLocationNode] = {}
@@ -114,6 +121,8 @@ class IsekaiLocationService:
                 sublocation=str(payload.get("sublocation") or ""),
                 parent_id=str(payload.get("parent_id") or ""),
                 environment=str(payload.get("environment") or ""),
+                aliases=[str(item) for item in payload.get("aliases", [])],
+                objective=str(payload.get("objective") or ""),
                 important_objects=[str(item) for item in payload.get("important_objects", [])],
                 interactables=[dict(item) for item in payload.get("interactables", []) if isinstance(item, dict)],
                 suggested_actions=[str(item) for item in payload.get("suggested_actions", [])],

@@ -8,6 +8,14 @@ from backend.src.services.llm_models import LLMModelService
 from backend.src.services.isekai import IsekaiSurvivalService
 
 
+def set_content_packs(service, adventure_id: int, packs: list[str]):
+    world_state = service.adventures.get_world_state(adventure_id)
+    world_state["isekai_content"] = {"active_packs": packs, "activation": "explicit"}
+    world_state = service.quests.initial_world_state(world_state)
+    service.adventures.update_world_state(adventure_id, world_state)
+    return world_state
+
+
 def test_scene_state_accepts_structured_isekai_interactables():
     scene = SceneState(
         location="伐木营地",
@@ -97,6 +105,23 @@ class OpeningIsekaiLLMClient:
                 ensure_ascii=False,
             )
         return json.dumps({"narration": "模型异世界回复：雨声遮住了远处脚步。"}, ensure_ascii=False)
+
+
+class ContradictoryOpeningInventoryLLMClient:
+    def chat(self, model, messages):
+        if is_opening_prompt(messages):
+            return json.dumps(
+                {
+                    "location": "迷踪森林边缘",
+                    "environment": "树冠遮住天空，泥地上留着仓促逃亡的脚印。",
+                    "important_objects": ["断裂树枝", "湿苔", "兽类足迹"],
+                    "current_objective": "确认水源方向，并检查还能使用的随身物资。",
+                    "weather": "阴冷薄雾",
+                    "opening_narration": "你在树根下醒来，水囊已在昨夜逃亡时遗失，只剩干粮压在旧斗篷下。",
+                },
+                ensure_ascii=False,
+            )
+        return json.dumps({"narration": "模型异世界回复：你继续前进。"}, ensure_ascii=False)
 
 
 class InvalidOpeningIsekaiLLMClient:
@@ -377,6 +402,9 @@ def test_isekai_create_uses_active_model_for_opening_scene(store):
     adventure = service.create_adventure(AdventureCreate(title="Opening Road", mode="isekai_survival", locale="zh-CN"))
 
     assert llm_client.chat_calls[0]["model"].model_name == "isekai-dm-model"
+    opening_messages = llm_client.chat_calls[0]["messages"]
+    assert "character.inventory 是后端权威背包" in opening_messages[0]["content"]
+    assert "水囊(3/3)" in opening_messages[-1]["content"]
     assert adventure.current_scene.location == "灰桥镇废弃马厩"
     assert adventure.current_scene.important_objects == ["破马灯", "新鲜车辙", "散落燕麦"]
     assert adventure.current_scene.current_objective == "弄清是谁刚刚离开马厩，并找到可以过夜的干燥角落。"
@@ -384,6 +412,20 @@ def test_isekai_create_uses_active_model_for_opening_scene(store):
     assert adventure.survival_state["weather"] == "冷雨"
     assert adventure.world_state["confirmed_location"] == "灰桥镇废弃马厩"
     assert "灰桥镇废弃马厩" in adventure.messages[0].content
+    assert adventure.messages[0].metadata["opening_source"] == "active_model"
+
+
+def test_isekai_opening_repairs_model_inventory_contradictions(store):
+    activate_test_model(store)
+    service = IsekaiSurvivalService(store, llm_client=ContradictoryOpeningInventoryLLMClient())
+
+    adventure = service.create_adventure(AdventureCreate(title="Opening Inventory Guard", mode="isekai_survival", locale="zh-CN"))
+
+    opening = adventure.messages[0].content
+    assert "水囊(3/3)" in adventure.isekai_character["inventory"]
+    assert "水囊已在昨夜逃亡时遗失" not in opening
+    assert "水囊" in opening
+    assert "随身物品" in opening
     assert adventure.messages[0].metadata["opening_source"] == "active_model"
 
 
@@ -493,6 +535,21 @@ def test_isekai_eat_drink_consumes_inventory_and_records_resource_changes(store)
     assert any("饮用水囊" in change for change in changes)
     assert "干粮 x2" not in after_inventory
     assert response.dm_message.metadata["survival_delta"]["hp_delta"] == 0
+
+
+def test_isekai_eat_drink_reports_one_total_time_change(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Resource Time Road", mode="isekai_survival"))
+
+    response = service.advance(adventure.id, MessageCreate(content="我喝一口水，然后吃一点干粮。", locale="zh-CN"))
+
+    content = response.dm_message.content
+    visible_events = response.dm_message.metadata["survival_delta"]["visible_events"]
+    assert response.dm_message.metadata["survival_delta"]["time_cost_minutes"] == 15
+    assert visible_events == ["时间推进了约 15 分钟。"]
+    assert content.count("时间推进了约") == 1
+    assert "时间推进了约 5 分钟" not in content
+    assert "时间推进了约 10 分钟" not in content
 
 
 def test_isekai_drinking_skips_empty_waterskin_and_normalizes_charges(store):
@@ -962,6 +1019,7 @@ def test_enter_location_changes_location_and_projects_new_interactables(store):
     )
     service = IsekaiSurvivalService(store, llm_client=llm_client)
     adventure = service.create_adventure(AdventureCreate(title="Enter Projects", mode="isekai_survival"))
+    set_content_packs(service, adventure.id, ["baseline_exploration_discoveries"])
     scene = adventure.current_scene.model_copy(
         update={
             "location": "小屋外",
@@ -979,6 +1037,148 @@ def test_enter_location_changes_location_and_projects_new_interactables(store):
     interactable_ids = [entry["id"] for entry in response.adventure.current_scene.interactables]
     assert "hut_01" not in interactable_ids
     assert {"wooden_crate_01", "rain_barrel_01"} <= set(interactable_ids)
+
+
+def test_isekai_navigation_blocks_unconnected_location_jump(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="No Jump", mode="isekai_survival"))
+    scene = adventure.current_scene.model_copy(
+        update={
+            "location": "铁炉镇外 / 旧矿道入口",
+            "location_path": {"node_id": "mine_entrance", "display_name": "铁炉镇外 / 旧矿道入口"},
+            "environment": "旧矿道入口只有通向外层矿道的铁栅栏。",
+            "important_objects": ["铁栅栏"],
+            "interactables": [
+                {
+                    "id": "outer_tunnel_gate",
+                    "type": "entrance",
+                    "name": "铁栅栏",
+                    "affordances": ["进入", "观察"],
+                    "target_node_id": "mine_outer_tunnel",
+                }
+            ],
+        }
+    )
+    service.adventures.update_scene(adventure.id, scene)
+    world_state = service.adventures.get_world_state(adventure.id)
+    world_state["scene_graph"] = {
+        "nodes": [
+            {"node_id": "mine_entrance", "name": "旧矿道入口"},
+            {"node_id": "mine_outer_tunnel", "name": "外层矿道"},
+            {"node_id": "street_inn", "name": "街边旅店"},
+        ],
+        "edges": [
+            {
+                "id": "edge_mine_to_outer",
+                "from_node_id": "mine_entrance",
+                "to_node_id": "mine_outer_tunnel",
+                "access": "open",
+            }
+        ],
+    }
+    service.adventures.update_world_state(adventure.id, world_state)
+
+    response = service.advance(adventure.id, MessageCreate(content="进入街边旅店", locale="zh-CN"))
+
+    assert response.adventure.current_scene.location_path["node_id"] == "mine_entrance"
+    assert response.dm_message.metadata["time"]["advances_time"] is False
+    assert response.dm_message.metadata["resolved_steps"][0]["navigation"]["status"] == "known_target_unknown_route"
+    assert "没有合法连接路径" in response.dm_message.content or "寻找道路" in response.dm_message.content
+
+
+def test_isekai_navigation_returns_to_known_settlement_from_history(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Return Town", mode="isekai_survival"))
+    scene = adventure.current_scene.model_copy(
+        update={
+            "location": "铁炉镇外 / 旧矿道入口",
+            "location_path": {"node_id": "mine_entrance", "display_name": "铁炉镇外 / 旧矿道入口"},
+            "environment": "旧矿道入口还能看见来时踩出的泥印。",
+            "important_objects": ["来路泥印"],
+            "interactables": [
+                {
+                    "id": "old_track",
+                    "type": "place",
+                    "name": "来路泥印",
+                    "affordances": ["观察", "离开"],
+                }
+            ],
+        }
+    )
+    service.adventures.update_scene(adventure.id, scene)
+    world_state = service.adventures.get_world_state(adventure.id)
+    world_state["known_locations"] = [{"node_id": "grey_oak_gate", "name": "灰橡镇", "type": "settlement"}]
+    world_state["scene_graph"] = {
+        "nodes": [
+            {
+                "node_id": "grey_oak_gate",
+                "name": "灰橡镇",
+                "location_path": {"node_id": "grey_oak_gate", "region": "灰橡镇", "site": "镇门", "display_name": "灰橡镇 / 镇门"},
+                "environment": "镇门外有泥泞车辙和警惕的守卫。",
+                "current_objective": "决定是否进镇或在门外打听消息。",
+                "interactables": [{"id": "town_gate_guard", "type": "npc", "name": "守卫", "affordances": ["交谈", "观察"]}],
+                "suggested_actions": ["和守卫说明来意"],
+            },
+            {"node_id": "forest_path", "name": "林间小路"},
+            {"node_id": "mine_entrance", "name": "旧矿道入口"},
+        ],
+        "edges": [],
+    }
+    world_state["location_history"] = [
+        {"from_node_id": "grey_oak_gate", "to_node_id": "forest_path", "edge_id": "edge_town_to_path"},
+        {"from_node_id": "forest_path", "to_node_id": "mine_entrance", "edge_id": "edge_path_to_mine"},
+    ]
+    service.adventures.update_world_state(adventure.id, world_state)
+
+    response = service.advance(adventure.id, MessageCreate(content="回到城镇", locale="zh-CN"))
+
+    assert response.adventure.current_scene.location_path["node_id"] == "grey_oak_gate"
+    assert response.adventure.current_scene.location == "灰橡镇 / 镇门"
+    assert response.dm_message.metadata["resolved_steps"][0]["navigation"]["status"] == "resolved"
+
+
+def test_isekai_navigation_leave_current_scene_uses_back_edge(store):
+    service = IsekaiSurvivalService(store)
+    adventure = service.create_adventure(AdventureCreate(title="Leave Scene", mode="isekai_survival"))
+    scene = adventure.current_scene.model_copy(
+        update={
+            "location": "铁炉镇外 / 旧矿道 / 外层矿道",
+            "location_path": {"node_id": "mine_outer_tunnel", "display_name": "铁炉镇外 / 旧矿道 / 外层矿道"},
+            "environment": "外层矿道潮湿阴暗，入口的光在身后。",
+            "important_objects": ["入口光线"],
+            "interactables": [{"id": "exit_light", "type": "place", "name": "入口光线", "affordances": ["离开", "观察"]}],
+        }
+    )
+    service.adventures.update_scene(adventure.id, scene)
+    world_state = service.adventures.get_world_state(adventure.id)
+    world_state["scene_graph"] = {
+        "nodes": [
+            {
+                "node_id": "mine_entrance",
+                "name": "旧矿道入口",
+                "location_path": {"node_id": "mine_entrance", "region": "铁炉镇外", "site": "旧矿道入口", "display_name": "铁炉镇外 / 旧矿道入口"},
+                "environment": "旧矿道入口有冷雾和碎石坡。",
+                "interactables": [{"id": "rubble_slope", "type": "place", "name": "碎石坡", "affordances": ["观察", "搜索"]}],
+                "suggested_actions": ["搜索碎石坡"],
+            },
+            {"node_id": "mine_outer_tunnel", "name": "外层矿道"},
+        ],
+        "edges": [
+            {
+                "id": "edge_outer_to_entrance",
+                "from_node_id": "mine_outer_tunnel",
+                "to_node_id": "mine_entrance",
+                "kind": "back",
+                "access": "open",
+            }
+        ],
+    }
+    service.adventures.update_world_state(adventure.id, world_state)
+
+    response = service.advance(adventure.id, MessageCreate(content="离开这里", locale="zh-CN"))
+
+    assert response.adventure.current_scene.location_path["node_id"] == "mine_entrance"
+    assert response.dm_message.metadata["resolved_steps"][0]["navigation"]["navigation_intent"] == "leave_current_scene"
 
 
 def test_compound_turn_executes_drink_approach_enter_without_searching(store):
@@ -1080,6 +1280,7 @@ def test_blocked_carriage_entry_stops_plan_and_offers_physical_alternatives(stor
 def test_searching_cargo_bag_adds_real_item_and_risk_feedback(store):
     service = IsekaiSurvivalService(store)
     adventure = service.create_adventure(AdventureCreate(title="Cargo Search", mode="isekai_survival"))
+    set_content_packs(service, adventure.id, ["baseline_exploration_discoveries"])
     set_character_state(store, adventure.id, inventory=["水囊(2/3)", "干粮 x1"])
     scene = adventure.current_scene.model_copy(
         update={
@@ -1156,7 +1357,9 @@ def test_graystone_inn_facility_loop_tracks_location_money_entitlements_and_time
     )
     service.adventures.update_scene(adventure.id, outside)
     world_state = dict(adventure.world_state)
+    world_state["isekai_content"] = {"active_packs": ["old_furnace_inn_p1"], "activation": "explicit"}
     world_state["isekai_economy"] = {"currency": {"copper_total": 5}, "entitlements": [], "transaction_log": []}
+    world_state = service.quests.initial_world_state(world_state)
     service.adventures.update_world_state(adventure.id, world_state)
 
     town = service.advance(adventure.id, MessageCreate(content="进入灰石镇", locale="zh-CN"))
@@ -1211,9 +1414,10 @@ def test_purchase_bed_fails_with_shortfall_and_alternatives(store):
     adventure = service.create_adventure(AdventureCreate(title="No Copper Bed", mode="isekai_survival"))
     from backend.src.services.isekai_locations import IsekaiLocationService
 
-    locations = IsekaiLocationService()
+    world_state = set_content_packs(service, adventure.id, ["old_furnace_inn_p1"])
+    locations = IsekaiLocationService(world_state=world_state)
     service.adventures.update_scene(adventure.id, locations.scene_for("inn_front_hall"))
-    world_state = dict(adventure.world_state)
+    world_state = service.adventures.get_world_state(adventure.id)
     world_state["isekai_economy"] = {"currency": {"copper_total": 1}, "entitlements": [], "transaction_log": []}
     service.adventures.update_world_state(adventure.id, world_state)
 
@@ -1958,6 +2162,8 @@ def test_isekai_sleep_resets_overnight_pressure_clocks(store):
             clock["value"] = 87
         if clock["id"] == "curfew_patrol":
             clock["value"] = 82
+        if clock["id"] == "shelter_security":
+            clock["value"] = 82
     service.adventures.update_world_state(adventure.id, world_state)
 
     response = service.advance(
@@ -1968,7 +2174,10 @@ def test_isekai_sleep_resets_overnight_pressure_clocks(store):
     clocks = {clock["id"]: clock["value"] for clock in response.adventure.world_state["pressure_clocks"]}
     assert response.adventure.survival_state["time_of_day"] == "清晨"
     assert clocks["sunset"] <= 15
-    assert clocks["curfew_patrol"] <= 10
+    if "curfew_patrol" in clocks:
+        assert clocks["curfew_patrol"] <= 10
+    else:
+        assert clocks["shelter_security"] <= 25
     assert response.adventure.world_state["last_pressure_advance"]["overnight_reset"] is True
 
 

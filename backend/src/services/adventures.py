@@ -328,14 +328,26 @@ class AdventureService:
         isekai_character = self._isekai_character_for_adventure(row["id"]) if mode == "isekai_survival" else None
         survival_state = self._isekai_survival_state_for_adventure(row["id"]) if mode == "isekai_survival" else None
         current_scene = SceneState.model_validate(decode_json(row["current_scene_json"], {}))
+        normalized_world_state = normalize_world_state(decode_json(row["world_state_json"], {}), self._story_from_row(row))
         if mode == "isekai_survival":
-            current_scene = self._isekai_scene_for_output(current_scene)
+            cleaned_world_state = self._cleanup_implicit_isekai_content_packs(normalized_world_state)
+            if cleaned_world_state != normalized_world_state:
+                self.update_world_state(row["id"], cleaned_world_state)
+                normalized_world_state = cleaned_world_state
+            cleaned_scene, normalized_world_state = self._cleanup_implicit_isekai_scene(
+                current_scene,
+                normalized_world_state,
+            )
+            if cleaned_scene.model_dump(mode="json") != current_scene.model_dump(mode="json"):
+                self.update_scene(row["id"], cleaned_scene)
+                self.update_world_state(row["id"], normalized_world_state)
+                current_scene = cleaned_scene
+            current_scene = self._isekai_scene_for_output(current_scene, normalized_world_state)
         world_events = (
             WorldEventService(self.store).list_known_for_adventure(row["id"])
             if mode == "isekai_survival"
             else []
         )
-        normalized_world_state = normalize_world_state(decode_json(row["world_state_json"], {}), self._story_from_row(row))
         if mode == "isekai_survival":
             normalized_world_state = self._ensure_isekai_world_state_for_output(
                 row["id"],
@@ -346,7 +358,7 @@ class AdventureService:
         if mode == "isekai_survival":
             from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
 
-            world_state["isekai_pressure_goals"] = IsekaiWorldviewNormalizer().pressure_goals()
+            world_state["isekai_pressure_goals"] = IsekaiWorldviewNormalizer().pressure_goals(current_scene, normalized_world_state)
         return AdventureOut(
             id=row["id"],
             title=row["title"],
@@ -365,6 +377,97 @@ class AdventureService:
             world_events=world_events,
         )
 
+    def _cleanup_implicit_isekai_content_packs(self, world_state: dict[str, Any]) -> dict[str, Any]:
+        state = dict(world_state or {})
+        content = state.get("isekai_content")
+        content_dict = dict(content) if isinstance(content, dict) else {}
+        quest = state.get("isekai_quest") if isinstance(state.get("isekai_quest"), dict) else {}
+        if str(content_dict.get("activation") or "") == "explicit":
+            return state
+        active_packs = [str(item) for item in content_dict.get("active_packs", []) if str(item).strip()]
+        legacy_defaults = {"old_furnace_inn_p1", "baseline_exploration_discoveries"}
+        stale_quest = quest.get("active_quest_id") == "night_wolf_line" and "old_furnace_inn_p1" not in active_packs
+        if not any(pack_id in legacy_defaults for pack_id in active_packs) and not stale_quest:
+            return state
+        cleaned = []
+        removed = []
+        for pack_id in active_packs:
+            if pack_id in legacy_defaults:
+                removed.append(pack_id)
+                continue
+            cleaned.append(pack_id)
+        if not removed and not stale_quest:
+            return state
+        next_content = dict(content_dict)
+        next_content["active_packs"] = cleaned
+        history = [str(item) for item in next_content.get("removed_implicit_packs", []) if str(item).strip()]
+        next_content["removed_implicit_packs"] = list(dict.fromkeys([*history, *removed]))
+        state["isekai_content"] = next_content
+        if quest.get("active_quest_id") == "night_wolf_line":
+            state["isekai_quest"] = {"active_quest_id": None, "stage": "none", "flags": {}}
+        return state
+
+    def _cleanup_implicit_isekai_scene(
+        self,
+        scene: SceneState,
+        world_state: dict[str, Any],
+    ) -> tuple[SceneState, dict[str, Any]]:
+        content_state = world_state.get("isekai_content") if isinstance(world_state.get("isekai_content"), dict) else {}
+        removed = [str(item) for item in content_state.get("removed_implicit_packs", []) if str(item).strip()]
+        if not removed:
+            return scene, world_state
+        location_history = [dict(item) for item in world_state.get("location_history", []) if isinstance(item, dict)]
+        if not location_history:
+            return scene, world_state
+        last_move = location_history[-1]
+        previous_location = str(last_move.get("from") or "").strip()
+        if not previous_location or str(last_move.get("to") or "").strip() != scene.location:
+            return scene, world_state
+        if scene.location not in self._implicit_content_place_names(removed):
+            return scene, world_state
+        next_scene = scene.model_copy(
+            update={
+                "location": previous_location,
+                "location_path": {},
+                "environment": f"{previous_location}仍是当前确认地点，附近情况需要重新确认。",
+                "important_objects": [],
+                "npcs": [],
+                "current_objective": f"重新确认{previous_location}的可互动对象。",
+                "world_changes": ["已移除误加载的内容入口，当前位置回到上一处确认地点。"],
+                "interactables": [],
+                "suggested_actions": [],
+                "npc_states": [],
+            }
+        )
+        next_world_state = dict(world_state)
+        next_world_state["confirmed_location"] = previous_location
+        next_world_state["location_history"] = location_history[:-1]
+        return next_scene, next_world_state
+
+    def _implicit_content_place_names(self, pack_ids: list[str]) -> set[str]:
+        from backend.src.services.isekai_content import IsekaiContentService
+
+        content = IsekaiContentService()
+        names: set[str] = set()
+        for pack_id in pack_ids:
+            pack = content.builtin_pack(pack_id)
+            for template in pack.get("destination_templates", []):
+                if not isinstance(template, dict):
+                    continue
+                for obj in template.get("scene_objects", []):
+                    if isinstance(obj, dict) and obj.get("type") in {"place", "entrance"}:
+                        name = str(obj.get("name") or "").strip()
+                        if name:
+                            names.add(name)
+            for node in pack.get("locations", []):
+                if not isinstance(node, dict):
+                    continue
+                for name in [node.get("site"), node.get("sublocation")]:
+                    clean = str(name or "").strip()
+                    if clean:
+                        names.add(clean)
+        return names
+
     def _ensure_isekai_world_state_for_output(
         self,
         adventure_id: int,
@@ -378,6 +481,12 @@ class AdventureService:
         updated = IsekaiQuestService().initial_world_state(updated)
         updated = IsekaiPressureEventService().ensure_state(updated)
         updated = self._repair_legacy_isekai_world_state(updated, current_scene)
+        if current_scene is not None:
+            from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
+
+            worldview = IsekaiWorldviewNormalizer()
+            updated["isekai_pressure_goals"] = worldview.pressure_goals(current_scene, updated)
+            updated["pressure_clocks"] = worldview.pressure_clocks(updated.get("pressure_clocks"), current_scene, updated)
         if updated != world_state:
             self.update_world_state(adventure_id, updated)
         return updated
@@ -389,32 +498,28 @@ class AdventureService:
     ) -> dict[str, Any]:
         if not current_scene or not world_state.get("pending_lodging_reward"):
             return world_state
-        scene_text = " ".join(
-            [
-                current_scene.location,
-                current_scene.environment,
-                *current_scene.important_objects,
-                current_scene.current_objective,
-            ]
-        )
-        in_wilderness_watchtower = any(word in scene_text for word in ["哨塔", "森林", "麋鹿", "溪流"])
-        in_inn_context = any(word in scene_text for word in ["旅店", "后厨", "厨房", "前厅", "锅把"])
+        from backend.src.services.isekai_content import IsekaiContentService
+
+        content = IsekaiContentService()
+        reward_context_present = content.scene_supports_repair_reward_context(current_scene, world_state)
         economy = dict(world_state.get("isekai_economy") or {})
         has_lodging_record = bool(economy.get("entitlements") or economy.get("transaction_log"))
-        if not in_wilderness_watchtower or in_inn_context or has_lodging_record:
+        if reward_context_present or has_lodging_record:
             return world_state
 
         updated = dict(world_state)
         updated.pop("pending_lodging_reward", None)
+        cleanup_fragments = content.repair_reward_cleanup_fragments(updated)
         clues = [
             str(clue)
             for clue in updated.get("isekai_clues", [])
-            if str(clue).strip() and "店主" not in str(clue) and "旧炉旅店" not in str(clue)
+            if str(clue).strip() and not any(fragment and fragment in str(clue) for fragment in cleanup_fragments)
         ]
         updated["isekai_clues"] = clues
         quest = dict(updated.get("isekai_quest") or {})
         flags = dict(quest.get("flags") or {})
-        if quest.get("active_quest_id") == "night_wolf_line" and quest.get("stage") == "rumor_heard" and flags.get("rumor_source") == "old_furnace_keeper":
+        known_flag_values = content.quest_flag_values(updated)
+        if quest.get("stage") != "not_started" and any(str(value) in known_flag_values for value in flags.values()):
             quest["stage"] = "not_started"
             quest["flags"] = {}
             updated["isekai_quest"] = quest
@@ -434,33 +539,46 @@ class AdventureService:
         self.update_world_state(adventure_id, updated)
         return updated
 
-    def _isekai_scene_for_output(self, scene: SceneState) -> SceneState:
+    def _isekai_scene_for_output(self, scene: SceneState, world_state: dict[str, Any] | None = None) -> SceneState:
         from backend.src.services.isekai_worldview import IsekaiWorldviewNormalizer
         from backend.src.services.isekai_interactables import IsekaiInteractableProjector
+        from backend.src.services.isekai_content import IsekaiContentService
 
         repaired = IsekaiWorldviewNormalizer().repair_scene_state_payload(scene.model_dump())
         output_scene = SceneState.model_validate(repaired)
-        output_scene = self._repair_generic_isekai_scene(output_scene)
+        output_scene = self._repair_generic_isekai_scene(output_scene, world_state)
+        output_scene, _metadata = IsekaiContentService().materialize_scene_from_content(output_scene, world_state)
         projected, suggestions = IsekaiInteractableProjector().project(output_scene, "output")
         if not projected:
             return output_scene
         current_names = {str(entry.get("name") or "").strip() for entry in output_scene.interactables if isinstance(entry, dict)}
-        generic_current = current_names <= {"", "木箱", "门口", "周围环境"}
+        generic_current = current_names <= {"", "门口", "周围环境"}
         if not output_scene.interactables or generic_current:
             return output_scene.model_copy(update={"interactables": projected, "suggested_actions": suggestions})
         return output_scene
 
-    def _repair_generic_isekai_scene(self, scene: SceneState) -> SceneState:
+    def _repair_generic_isekai_scene(self, scene: SceneState, world_state: dict[str, Any] | None = None) -> SceneState:
+        from backend.src.services.isekai_content import IsekaiContentService
+
+        content = IsekaiContentService()
         generic_objects = {str(item).strip() for item in scene.important_objects}
-        if "哨塔" in scene.location and generic_objects <= {"", "周围环境"}:
-            return scene.model_copy(
-                update={
-                    "environment": "坍塌的石砌哨塔内部漏着冷风，旧火堆旁有灰烬，地基缝隙透出潮气，避风角落和墙体缺口都需要确认。",
-                    "important_objects": ["旧火堆", "地基缝隙", "避风角落", "墙体缺口", "墙角兽毛"],
-                    "current_objective": "确认哨塔内部是否适合扎营，同时避免夜里暴露。",
-                }
-            )
-        return scene
+        if not generic_objects <= {"", "周围环境"}:
+            return scene
+        template = content.destination_template(scene.location, world_state)
+        if not template:
+            return scene
+        repaired = scene.model_copy(
+            update={
+                "environment": str(template.get("environment") or scene.environment),
+                "important_objects": [str(item) for item in template.get("important_objects", []) if str(item).strip()]
+                or scene.important_objects,
+                "current_objective": scene.current_objective,
+            }
+        )
+        scene_objects = template.get("scene_objects") if isinstance(template.get("scene_objects"), list) else []
+        if scene_objects:
+            repaired, _metadata = content.materialize_scene_objects(repaired, {"add": scene_objects})
+        return repaired
 
     def _story_from_row(self, row: Row) -> StoryOut | None:
         snapshot = decode_json(row["story_snapshot_json"], {})
