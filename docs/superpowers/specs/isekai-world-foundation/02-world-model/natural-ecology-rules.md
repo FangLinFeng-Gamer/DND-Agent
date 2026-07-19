@@ -1,3 +1,33 @@
+---
+doc_id: isekai.natural_ecology_rules
+status: active
+layer: world-model
+owner: architecture
+created_at: 2026-07-10
+updated_at: 2026-07-18
+depends_on:
+  - isekai.field_domain_registry_rules
+  - isekai.deterministic_random_protocol_rules
+  - isekai.location_space_rules
+  - isekai.climate_terrain_formation_rules
+  - isekai.world_object_rules
+provides:
+  - AnimalSpeciesCatalog
+  - PlantSpeciesCatalog
+  - NaturalResourceCatalog
+  - CreaturePopulation
+  - FloraPatch
+  - CreatureGroup
+  - CreatureActor
+  - ResourceDeposit
+  - ResourceNode
+  - NaturalResourceStock
+  - EcologyPopulationTransferResolver
+  - EcologyResourceExtractionResolver
+  - EcologyRecoveryResolver
+  - EcologyQuantityValidator
+---
+
 # 异世界模式自然生态与资源规则设计
 
 ## 背景
@@ -21,6 +51,7 @@
 - 定义 `CreaturePopulation`、`CreatureGroup`、`FloraPatch`、`ResourceDeposit` 等运行时生态实体。
 - 定义采集、狩猎、捕鱼、装水、搜索后如何生成或修改 `WorldObject`。
 - 保证自然生态也遵守地点/空间规则和权威 `WorldState`。
+- 保证动物种群、植物片区和自然资源点在生成、提取、恢复和产出物品时满足数量守恒。
 
 ## 非目标
 
@@ -59,6 +90,8 @@ ResourceDeposit
 ResourceNode
 WorldObject
 ```
+
+所有生态 catalog 必须使用 [内容包、Catalog 与物化版本规则](../05-content-packs/content-pack-materialization-rules.md) 中的 `CatalogEnvelope`。由 catalog 物化出的 `CreaturePopulation`、`CreatureGroup`、`FloraPatch`、`ResourceDeposit` 或 `ResourceNode` 必须携带可追溯的 `provenance`，并记录 content pack、catalog、materializer、schema、registry、rule bundle 和 content pack hash。
 
 ### 3. 大多数动物用群体或种群表示
 
@@ -106,6 +139,23 @@ removed
 ```
 
 生态实体不允许只存在于 DM 文本。
+
+### 7. 生态数量必须守恒
+
+生态数量不能只靠 `small/medium/large`、`harvested` 或 `depleted` 表示。P1 后，动物使用整数占用守恒，植物和自然资源使用库存守恒。
+
+```text
+动物：CreaturePopulation.counts.current_live_count
+= CreaturePopulation.counts.reserve_count
++ sum(active CreatureGroup.count)
++ count(active CreatureActor)
+
+资源：source.stock.current_amount 减少
+= 产出 WorldObject / container.quantity_contents 增加
++ resolver 允许的损耗
+```
+
+`population_level`、`coverage`、`abundance` 可以作为生成标签或玩家可读分级，但不能作为权威数量来源。
 
 ## Catalog 类型
 
@@ -192,7 +242,7 @@ harvest_outputs 只表示可能产出，不能直接进入玩家物品栏。
 species_id 必须唯一。
 category 必须属于植物分类闭集。
 growth_form 用于投影和叙事，不创建空间层级。
-rarity 影响生成概率。
+rarity 通过确定性随机协议的 `rarity_weight` 影响生成候选整数权重。
 harvest_outputs 只表示成功采集后 resolver 可以生成的 WorldObject。
 ```
 
@@ -393,8 +443,18 @@ P0 自然资源目录：
   "id": "pop_wolf_north_slope_01",
   "species_id": "wolf",
   "region_id": "north_slope_wilds",
-  "chunk_ids": ["chunk_north_slope_12_08_02", "chunk_north_slope_12_09_02"],
+  "chunk_ids": ["chunk_north_slope_12_08_00", "chunk_north_slope_12_09_00"],
   "population_level": "small",
+  "counts": {
+    "initial_live_count": 18,
+    "current_live_count": 17,
+    "reserve_count": 11
+  },
+  "derived": {
+    "group_member_count": 5,
+    "active_actor_count": 1,
+    "depleted": false
+  },
   "activity_cycle": "night",
   "pressure": "hungry",
   "visibility": "hidden"
@@ -406,6 +466,8 @@ P0 自然资源目录：
 ```text
 CreaturePopulation 不直接出现在可互动列表。
 CreaturePopulation 用于生成痕迹、遭遇概率和 CreatureGroup。
+CreaturePopulation.counts 是动物数量权威来源；population_level 只是生成标签或可读分级。
+current_live_count 必须等于 reserve_count + active group count + active actor count。
 ```
 
 ### CreatureGroup
@@ -420,10 +482,11 @@ CreaturePopulation 用于生成痕迹、遭遇概率和 CreatureGroup。
   "count": 5,
   "location": {
     "scope": "world_chunk",
-    "chunk_id": "chunk_north_slope_12_09_02",
+    "chunk_id": "chunk_north_slope_12_09_00",
     "local_position": "tree_line"
   },
   "behavior_state": "stalking",
+  "lifecycle_state": "active",
   "visibility": "hinted",
   "signs": ["howl", "tracks"]
 }
@@ -435,6 +498,7 @@ CreaturePopulation 用于生成痕迹、遭遇概率和 CreatureGroup。
 CreatureGroup 必须有 location。
 CreatureGroup 可被 observe/search/track 揭示。
 CreatureGroup 靠近玩家、进入冲突、被驯服或成为剧情对象时，才能升级为 CreatureActor。
+CreatureGroup.count 必须来自 CreaturePopulation.reserve_count 或已有 CreatureGroup 的拆分，不能凭空写入。
 ```
 
 ### CreatureActor
@@ -445,13 +509,17 @@ CreatureGroup 靠近玩家、进入冲突、被驯服或成为剧情对象时，
 {
   "id": "creature_night_wolf_alpha_01",
   "species_id": "night_wolf",
+  "population_id": "pop_night_wolf_north_slope_01",
+  "source_group_id": "group_night_wolf_pack_01",
   "name": "暗夜狼首领",
+  "count_weight": 1,
   "location": {
     "scope": "world_chunk",
-    "chunk_id": "chunk_north_slope_12_09_02",
+    "chunk_id": "chunk_north_slope_12_09_00",
     "local_position": "ridge_shadow"
   },
   "state": {
+    "lifecycle_state": "active",
     "injured": false,
     "hostile": true
   }
@@ -464,6 +532,7 @@ CreatureGroup 靠近玩家、进入冲突、被驯服或成为剧情对象时，
 CreatureActor 不是 WorldObject。
 CreatureActor 的死亡、逃跑、驯服、追踪结果必须写事件。
 死亡或采集成功后，resolver 可以生成 WorldObject，例如 meat、hide、bone。
+P1 中每个 CreatureActor 固定占用 1 个生物数量；不能创建 count_weight != 1 的 Actor。
 ```
 
 ### FloraPatch
@@ -476,13 +545,33 @@ CreatureActor 的死亡、逃跑、驯服、追踪结果必须写事件。
   "species_id": "nightmare_grass",
   "location": {
     "scope": "world_chunk",
-    "chunk_id": "chunk_north_slope_12_08_02",
+    "chunk_id": "chunk_north_slope_12_08_00",
     "local_position": "shaded_slope"
   },
   "coverage": "sparse",
   "visibility": "hinted",
-  "state": {
+  "stock": {
+    "resource_type": "nightmare_grass",
+    "unit": "count",
+    "capacity_amount": "8.000",
+    "current_amount": "3.000",
+    "extraction": {
+      "min_source_amount": "1.000",
+      "max_source_amount": "3.000",
+      "source_to_output_ratio": "1.000",
+      "allowed_loss_ratio": "0.000"
+    },
+    "recovery": {
+      "recoverable": true,
+      "rate_amount_per_day": "0.250",
+      "cap_amount": "8.000"
+    }
+  },
+  "derived": {
     "harvested": false,
+    "depleted": false
+  },
+  "state": {
     "season": "late_autumn"
   }
 }
@@ -494,6 +583,7 @@ CreatureActor 的死亡、逃跑、驯服、追踪结果必须写事件。
 FloraPatch 不是 WorldObject。
 FloraPatch 可被 observe/search 揭示。
 采集成功后，resolver 根据 PlantSpecies.harvest_outputs 生成 WorldObject。
+FloraPatch.stock 是可采集数量的权威来源；state.harvested 只允许作为旧存档迁移输入。
 ```
 
 ### ResourceDeposit
@@ -506,12 +596,29 @@ FloraPatch 可被 observe/search 揭示。
   "resource_id": "dry_firewood",
   "location": {
     "scope": "world_chunk",
-    "chunk_id": "chunk_north_slope_12_08_02",
+    "chunk_id": "chunk_north_slope_12_08_00",
     "local_position": "under_pines"
   },
   "abundance": "small",
   "visibility": "visible",
-  "state": {
+  "stock": {
+    "resource_type": "dry_firewood",
+    "unit": "kg",
+    "capacity_amount": "20.000",
+    "current_amount": "12.500",
+    "extraction": {
+      "min_source_amount": "0.500",
+      "max_source_amount": "3.000",
+      "source_to_output_ratio": "1.000",
+      "allowed_loss_ratio": "0.050"
+    },
+    "recovery": {
+      "recoverable": false,
+      "rate_amount_per_day": "0.000",
+      "cap_amount": "20.000"
+    }
+  },
+  "derived": {
     "depleted": false
   }
 }
@@ -522,6 +629,7 @@ FloraPatch 可被 observe/search 揭示。
 ```text
 ResourceDeposit 不等于玩家已获得资源。
 采集或装水成功后，resolver 修改 deposit state 或生成 WorldObject。
+ResourceDeposit.stock 是可提取数量的权威来源；abundance 只作为可读分级或生成标签。
 ```
 
 ### ResourceNode
@@ -534,13 +642,32 @@ ResourceDeposit 不等于玩家已获得资源。
   "resource_id": "spring_water",
   "location": {
     "scope": "world_chunk",
-    "chunk_id": "chunk_north_slope_12_08_02",
+    "chunk_id": "chunk_north_slope_12_08_00",
     "local_position": "rock_crack"
   },
   "visibility": "visible",
-  "state": {
-    "quality": "clear",
+  "stock": {
+    "resource_type": "water",
+    "unit": "liter",
+    "capacity_amount": "30.000",
+    "current_amount": "30.000",
+    "extraction": {
+      "min_source_amount": "0.100",
+      "max_source_amount": "2.000",
+      "source_to_output_ratio": "1.000",
+      "allowed_loss_ratio": "0.000"
+    },
+    "recovery": {
+      "recoverable": true,
+      "rate_amount_per_day": "10.000",
+      "cap_amount": "30.000"
+    }
+  },
+  "derived": {
     "depleted": false
+  },
+  "state": {
+    "quality": "clear"
   }
 }
 ```
@@ -550,6 +677,7 @@ ResourceDeposit 不等于玩家已获得资源。
 ```text
 ResourceNode 可作为 drink/refill_water/search 的目标。
 给容器装水必须同时存在可交互 ResourceNode 和可用 container WorldObject。
+ResourceNode.stock 是可提取数量的权威来源；装水必须同时修改 source.stock 和目标容器 quantity_contents。
 ```
 
 ## 字段说明
@@ -619,6 +747,24 @@ ResourceNode 可作为 drink/refill_water/search 的目标。
 | `extraction_outputs[].target_object_type` | 操作目标需要的 WorldObject 类型。 |
 | `extraction_outputs[].resource_type` | 被提取的资源类别。 |
 
+### NaturalResourceStock 字段
+
+`NaturalResourceStock` 是 `FloraPatch.stock`、`ResourceDeposit.stock` 和 `ResourceNode.stock` 的共用库存结构。它不是独立 EntityType，不单独存在于 `WorldState`。
+
+| 字段 | 含义 |
+| --- | --- |
+| `stock.resource_type` | 库存资源类型，例如 water、dry_firewood、nightmare_grass。必须引用 NaturalResource 或植物/动物产出规则允许的资源类型。 |
+| `stock.unit` | 库存单位，例如 liter、kg、count、bundle。必须属于资源单位闭集。 |
+| `stock.capacity_amount` | 库存物理或生态上限，使用三位定点十进制字符串。 |
+| `stock.current_amount` | 当前可提取数量，使用三位定点十进制字符串。必须满足 `0 <= current_amount <= capacity_amount`。 |
+| `stock.extraction.min_source_amount` | 单次提取最小消耗源库存数量。 |
+| `stock.extraction.max_source_amount` | 单次提取最大消耗源库存数量。 |
+| `stock.extraction.source_to_output_ratio` | 源库存到产出库存的比例。`1.000` 表示消耗 1 单位源库存生成 1 单位产出。 |
+| `stock.extraction.allowed_loss_ratio` | 允许损耗比例，范围 0.000 到 1.000。损耗必须写入 EventLog。 |
+| `stock.recovery.recoverable` | 是否会随时间自然恢复。 |
+| `stock.recovery.rate_amount_per_day` | 每 1440 世界分钟恢复的数量。不可恢复资源必须为 `0.000`。 |
+| `stock.recovery.cap_amount` | 恢复上限。必须满足 `0 <= cap_amount <= capacity_amount`。 |
+
 ### CreaturePopulation 字段
 
 | 字段 | 含义 |
@@ -628,6 +774,12 @@ ResourceNode 可作为 drink/refill_water/search 的目标。
 | `region_id` | 种群所在 Region。 |
 | `chunk_ids` | 种群活动范围覆盖的 chunk。 |
 | `population_level` | 种群规模分级，例如 small、medium、large。 |
+| `counts.initial_live_count` | 生成时的活体总数，非负整数。用于审计和回放。 |
+| `counts.current_live_count` | 当前活体总数，非负整数。它必须等于 reserve、active group 和 active actor 的总和。 |
+| `counts.reserve_count` | 仍停留在抽象种群池中的活体数量，非负整数。它不直接可互动。 |
+| `derived.group_member_count` | 当前所有 active CreatureGroup 的 `count` 总和，由 `EcologyQuantityValidator` 或派生器重算。 |
+| `derived.active_actor_count` | 当前 active CreatureActor 数量，由 `EcologyQuantityValidator` 或派生器重算。 |
+| `derived.depleted` | 当前活体数量是否为 0 的派生结果。不能由 LLM、生成器或 resolver 手填。 |
 | `activity_cycle` | 当前种群活动周期，默认来自 AnimalSpecies，可被季节或事件修正。 |
 | `pressure` | 种群状态压力，例如 hungry、migrating、territorial。 |
 | `visibility` | 玩家对该种群的认知状态。种群通常不直接进入可互动列表。 |
@@ -645,6 +797,7 @@ ResourceNode 可作为 drink/refill_water/search 的目标。
 | `location.chunk_id` | 外部位置所在 chunk。 |
 | `location.local_position` | chunk 内粗略位置。 |
 | `behavior_state` | 当前行为状态，例如 stalking、foraging、fleeing。 |
+| `lifecycle_state` | 群体生命周期状态。P1 闭集为 active、merged、migrated、removed。只有 active 群体计入种群守恒。 |
 | `visibility` | 玩家对该群体的可见性。 |
 | `signs` | 玩家可感知或已发现的痕迹。 |
 
@@ -654,9 +807,13 @@ ResourceNode 可作为 drink/refill_water/search 的目标。
 | --- | --- |
 | `id` | 单个或具名生物 ID。 |
 | `species_id` | 引用的 AnimalSpecies。 |
+| `population_id` | 所属 CreaturePopulation。必须与来源群体 species 一致。 |
+| `source_group_id` | 来源 CreatureGroup。由群体升级而来时必填；直接从 reserve_count 物化时可以为空，但必须写明 resolver 原因。 |
 | `name` | 具名生物显示名。 |
+| `count_weight` | 该 Actor 占用的活体数量。P1 固定为 1。 |
 | `location` | 当前位置，结构遵循地点/空间规则。 |
 | `state` | 单体状态。 |
+| `state.lifecycle_state` | 单体生命周期状态。P1 闭集为 active、dead、migrated、tamed、removed。只有 active 计入 `active_actor_count`。 |
 | `state.injured` | 是否受伤。 |
 | `state.hostile` | 当前是否敌对。 |
 
@@ -669,8 +826,11 @@ ResourceNode 可作为 drink/refill_water/search 的目标。
 | `location` | 片区位置，结构遵循地点/空间规则。 |
 | `coverage` | 覆盖程度，例如 sparse、moderate、dense。 |
 | `visibility` | 玩家对该植物片区的可见性。 |
+| `stock` | 可采集库存，结构为 NaturalResourceStock。 |
+| `derived.harvested` | 是否已经采到低于可交互阈值的派生结果。不能手填。 |
+| `derived.depleted` | `stock.current_amount <= 0` 的派生结果。不能手填。 |
 | `state` | 片区运行时状态。 |
-| `state.harvested` | 是否已被采集。 |
+| `state.harvested` | 旧字段。P1 后只允许迁移工具读取，不允许新状态写入。 |
 | `state.season` | 当前季节状态，用于判断可采集性和描述。 |
 
 ### ResourceDeposit 字段
@@ -682,8 +842,10 @@ ResourceNode 可作为 drink/refill_water/search 的目标。
 | `location` | 资源集合位置，结构遵循地点/空间规则。 |
 | `abundance` | 资源丰度，例如 small、medium、large。 |
 | `visibility` | 玩家对资源集合的可见性。 |
+| `stock` | 可提取库存，结构为 NaturalResourceStock。 |
+| `derived.depleted` | `stock.current_amount <= 0` 的派生结果。不能手填。 |
 | `state` | 资源集合运行时状态。 |
-| `state.depleted` | 是否已耗尽。 |
+| `state.depleted` | 旧字段。P1 后只允许迁移工具读取，不允许新状态写入。 |
 
 ### ResourceNode 字段
 
@@ -693,9 +855,11 @@ ResourceNode 可作为 drink/refill_water/search 的目标。
 | `resource_id` | 引用的 NaturalResource。 |
 | `location` | 资源点位置，结构遵循地点/空间规则。 |
 | `visibility` | 玩家对资源点的可见性。 |
+| `stock` | 可提取库存，结构为 NaturalResourceStock。 |
+| `derived.depleted` | `stock.current_amount <= 0` 的派生结果。不能手填。 |
 | `state` | 资源点运行时状态。 |
 | `state.quality` | 资源质量，例如 clear、stagnant、polluted、unknown。 |
-| `state.depleted` | 是否暂时或永久耗尽。 |
+| `state.depleted` | 旧字段。P1 后只允许迁移工具读取，不允许新状态写入。 |
 
 ### 世界生成输入字段
 
@@ -714,10 +878,10 @@ ResourceNode 可作为 drink/refill_water/search 的目标。
 
 | 行为 | 输入 | 输出 |
 | --- | --- | --- |
-| gather | FloraPatch / ResourceDeposit | `WorldObject(resource/food/material)` |
-| hunt | CreatureGroup / CreatureActor | `WorldObject(food/material)` 或逃跑/受伤事件 |
-| fish | fish 类 CreaturePopulation / ResourceNode | `WorldObject(food)` |
-| refill_water | ResourceNode + container WorldObject | 修改 `components.container.contents` |
+| gather | FloraPatch / ResourceDeposit | 通过 `EcologyResourceExtractionResolver.extract` 生成 `WorldObject(resource/food/material)` |
+| hunt | CreatureGroup / CreatureActor | 通过 `EcologyPopulationTransferResolver` 修改数量，再生成 `WorldObject(food/material)` 或逃跑/受伤事件 |
+| fish | fish 类 CreaturePopulation / ResourceNode | 通过数量守恒 resolver 生成 `WorldObject(food)` |
+| refill_water | ResourceNode + container WorldObject | 通过 `EcologyResourceExtractionResolver.extract` 扣减 `ResourceNode.stock`，并在同一事务中调用或内联 `QuantityTransferResolver` 修改 `components.container.quantity_contents` |
 | collect_firewood | ResourceDeposit | `WorldObject(resource)` |
 | mine | ResourceDeposit | `WorldObject(material)` |
 | inspect_trace | CreatureGroup / ResourceDeposit / FloraPatch | `clue` 或 revealed state |
@@ -728,9 +892,121 @@ ResourceNode 可作为 drink/refill_water/search 的目标。
 转换必须由 deterministic resolver 执行。
 转换必须写 EventLog。
 转换结果必须经过 WorldObjectValidator。
-生态实体 state 必须同步更新，例如 harvested/depleted/disturbed。
+生态实体必须同步更新 stock、counts、derived 或 state，例如 stock.current_amount、derived.depleted、disturbed。
 DM 不能通过叙事直接把生态产物加入玩家物品栏。
 ```
+
+## 数量守恒 Resolver
+
+生态数量变化必须作为单一 `StateTransition` 提交，不能让 agent、LLM、DM 文本或通用 patch 接口分别修改来源、目标和事件。
+
+### EcologyPopulationTransferResolver
+
+动物数量转移只能由 `EcologyPopulationTransferResolver` 执行。
+
+允许操作：
+
+```text
+spawn_group(population_id, count, location)
+split_group(source_group_id, count, target_group_id, target_location)
+merge_groups(source_group_id, target_group_id)
+materialize_actor_from_group(group_id, actor_id, count=1)
+materialize_actor_from_reserve(population_id, actor_id, count=1, reason)
+return_actor_to_group(actor_id, target_group_id)
+mark_actor_dead(actor_id, harvest_policy)
+mark_actor_migrated(actor_id)
+mark_group_migrated(group_id)
+```
+
+事务要求：
+
+```text
+所有输入 count 必须为正整数。
+source_group.count 被扣减后不得小于 0。
+population.counts.reserve_count 被扣减后不得小于 0。
+创建 CreatureActor 时必须同时扣减来源 group 或 reserve。
+Actor dead/migrated/tamed 后不再计入 active_actor_count。
+每次提交后必须重算 population 派生数量。
+提交前后都必须满足 current_live_count = reserve_count + active group count + active actor count。
+失败时 WorldState 不得发生部分修改。
+```
+
+事件要求：
+
+```text
+CreaturePopulationCountChanged
+CreatureGroupCreated
+CreatureGroupCountChanged
+CreatureActorMaterialized
+CreatureActorLifecycleChanged
+```
+
+### EcologyResourceExtractionResolver
+
+植物、矿藏、柴堆、鱼点和其他可采资源的提取只能由 `EcologyResourceExtractionResolver.extract` 执行。
+
+输入：
+
+```text
+source_ref: FloraPatch | ResourceDeposit | ResourceNode
+requested_source_amount
+unit
+operation: gather | mine | collect_firewood | fish | harvest | refill_water
+target_ref: inventory | WorldObject.container | world_location
+output_profile: resource_profile | material_profile | consumable | quantity_contents
+caused_by
+```
+
+结算公式：
+
+```text
+source_delta = -actual_source_amount
+gross_output = actual_source_amount * stock.extraction.source_to_output_ratio
+loss_amount <= gross_output * stock.extraction.allowed_loss_ratio
+net_output = gross_output - loss_amount
+
+source_before + source_delta >= 0
+target_after = target_before + net_output
+net_output + loss_amount = gross_output
+```
+
+事务要求：
+
+```text
+actual_source_amount 必须落在 stock.extraction.min_source_amount 和 max_source_amount 之间。
+actual_source_amount 不得超过 stock.current_amount。
+产出 WorldObject 时，resource_profile.amount 或 material_profile.amount 必须等于 net_output。
+装入容器时，必须继续调用或内联执行 QuantityTransferResolver 的容量、重量和 quantity_contents 校验。
+source.stock.current_amount、目标物品或目标容器、derived.depleted 和 EventLog 必须同事务提交。
+失败时 WorldState 不得发生部分修改。
+```
+
+事件要求：
+
+```text
+EcologyResourceExtracted
+EcologyResourceStockChanged
+QuantityResourceTransferred
+ObjectCreated
+```
+
+### EcologyRecoveryResolver
+
+可恢复资源只能由 `EcologyRecoveryResolver` 在时间推进后恢复。
+
+```text
+recover_amount = elapsed_minutes / 1440 * stock.recovery.rate_amount_per_day
+new_current_amount = min(stock.current_amount + recover_amount, stock.recovery.cap_amount)
+```
+
+不可恢复资源必须满足：
+
+```text
+stock.recovery.recoverable=false
+stock.recovery.rate_amount_per_day=0.000
+```
+
+恢复发生时必须写 `EcologyResourceRecovered` 和 `EcologyResourceStockChanged`。如果恢复量为 0，不写状态事件。
 
 ## 世界生成使用规则
 
@@ -753,11 +1029,13 @@ DM 不能通过叙事直接把生态产物加入玩家物品栏。
 1. 根据 terrain_tags / climate_tags / biome_tags 选择候选动物、植物、资源。
 2. 根据 water_presence 加入水源、水生植物、鱼类和湿地资源。
 3. 根据 civilization_pressure 加入 livestock、井水、干柴、农作物、道路边资源。
-4. 根据 danger_tags 加入 predator、scavenger、abnormal_beast、abnormal_flora、corpse_remain。
-5. 根据 rarity 和 abundance 生成 CreaturePopulation、FloraPatch、ResourceDeposit。
-6. 根据当前 Site/LocationNode 需要投影少量可互动生态目标。
-7. 运行 Validator，拒绝不符合空间、地形或规则的生态实体。
+4. 根据 danger_tags 和已验证 OriginEventCandidate 加入 predator、scavenger、abnormal_beast、abnormal_flora、corpse_remain；历史候选只能调整合法候选权重，不能绕过地形和生态条件。
+5. 根据确定性随机协议的 `rarity_weight`、`abundance_count_band` 和 `WeightedChoiceKernel` 生成 CreaturePopulation、FloraPatch、ResourceDeposit。
+6. 运行 Validator，拒绝不符合空间、地形或规则的生态实体。
+7. Site / LocationNode 可互动生态目标由 `EcologyInteractionProjection` 在权威 Site 和 LocationNode 物化后生成，只读 FloraPatch、CreatureGroup、ResourceNode 和空间可见性，不回写生态权威状态。
 ```
+
+生态生成器不能读取尚未物化的 Site / LocationNode，也不能读取尚未物化的权威 `OriginEvent`。初始生成阶段若需要历史倾向，只能读取同一 manifest 中已验证的 `OriginEventCandidate`。生成阶段只创建 `FloraPatch`、`CreaturePopulation`、`CreatureGroup`、`NaturalResource`、`ResourceDeposit` 和 `ResourceNode` 等权威生态/资源事实；“玩家当前能看见哪几株药草、哪处痕迹、哪片灌木”属于投影，不属于生态生成。
 
 示例映射：
 
@@ -788,14 +1066,34 @@ DM 不能通过叙事直接把生态产物加入玩家物品栏。
 13. 生成器不能在不匹配地形的 chunk 中生成资源，除非有明确异常标签。
 14. `abnormal_beast`、`abnormal_flora`、`abnormal_resource` 必须需要危险、异常、遗迹或魔物痕迹标签支持。
 15. 水源类 ResourceNode 必须声明 quality 或由 resolver 在首次观察时确定 quality。
+16. `population_rules.rarity` 和 `PlantSpecies.rarity` 必须属于确定性随机协议的 `rarity_weight` 表。
+17. `ResourceDeposit.abundance` 必须属于确定性随机协议的 `abundance_count_band` 表，但不得作为权威数量来源。
+18. 生态生成的候选选择必须记录 `RandomDrawRef`。
+19. 生态候选 validator 拒绝不能触发全局重抽，只能按该 rule 的 `rejection_policy` 处理。
+20. `CreaturePopulation.counts.initial_live_count`、`current_live_count`、`reserve_count` 必须为非负整数。
+21. `CreatureGroup.count` 必须为正整数；inactive group 不得计入 active group count。
+22. `CreatureActor.count_weight` 在 P1 固定为 1；`state.lifecycle_state=active` 的 Actor 才计入 active actor count。
+23. 同一 `CreaturePopulation` 必须满足 `current_live_count = reserve_count + sum(active CreatureGroup.count) + count(active CreatureActor)`。
+24. `CreatureGroup.species_id`、`CreatureActor.species_id` 必须与引用的 `CreaturePopulation.species_id` 一致。
+25. 新写入的 `FloraPatch.state.harvested`、`ResourceDeposit.state.depleted`、`ResourceNode.state.depleted` 必须被拒绝；迁移工具除外。
+26. `FloraPatch.stock`、`ResourceDeposit.stock`、`ResourceNode.stock` 必须满足 NaturalResourceStock 字段域：单位闭集、三位定点字符串、非负、`current_amount <= capacity_amount`。
+27. `stock.extraction.min_source_amount <= stock.extraction.max_source_amount`，且二者不得超过 `stock.capacity_amount`。
+28. `stock.extraction.source_to_output_ratio` 必须大于 0；`allowed_loss_ratio` 必须在 0.000 到 1.000 之间。
+29. `stock.recovery.cap_amount <= stock.capacity_amount`；不可恢复资源的 `rate_amount_per_day` 必须为 `0.000`。
+30. `derived.harvested`、`derived.depleted`、`derived.group_member_count`、`derived.active_actor_count` 不能手填，必须可由权威字段重算。
+31. 动物数量转移必须由 `EcologyPopulationTransferResolver` 原子提交。
+32. 生态资源提取和恢复必须由 `EcologyResourceExtractionResolver` 或 `EcologyRecoveryResolver` 原子提交。
+33. 任何提取、恢复、死亡、迁移、升级 Actor 或生成产物都必须写 EventLog。
+34. 初始 ResourceFormation、FloraFormation 和 FaunaFormation 的输入清单不得包含权威 OriginEvent；若使用历史倾向，只能引用同一 manifest 中已验证的 OriginEventCandidate。
 
 ## 与现有文档关系
 
 本设计依赖：
 
-- [地点与空间规则](./2026-07-10-isekai-location-space-rules-design.md)
-- [气候、地形、生物群系与天气形成规则](./2026-07-11-isekai-climate-terrain-formation-rules-design.md)
-- [WorldObject 规则](./2026-07-10-isekai-world-object-rules-design.md)
+- [地点与空间规则](./location-space-rules.md)
+- [确定性随机协议](../01-governance/deterministic-random-protocol-rules.md)
+- [气候、地形、生物群系与天气形成规则](./climate-terrain-formation-rules.md)
+- [WorldObject 规则](./world-object-rules.md)
 
 关系如下：
 
@@ -818,5 +1116,11 @@ Natural Ecology Catalog
 6. 非生命自然资源优先用资源点或资源藏表示。
 7. 生态产物必须通过 resolver 转换为 `WorldObject`。
 8. 世界生成必须根据地形、气候、水源、文明压力和危险标签生成生态。
-9. AI 可以提出生态候选，但不能直接把生态候选写成最终事实。
-10. 最终事实以权威 `WorldState`、Validator、Resolver 和 EventLog 为准。
+9. 生态随机选择必须使用确定性随机协议，rarity 和 abundance 不能停留在文本概率。
+10. AI 可以提出生态候选，但不能直接把生态候选写成最终事实。
+11. 最终事实以权威 `WorldState`、Validator、Resolver 和 EventLog 为准。
+12. 动物数量使用 `CreaturePopulation.counts`、`CreatureGroup.count` 和 active `CreatureActor` 守恒，不为普通动物默认实例化单体。
+13. 植物片区、资源藏和资源点使用 `stock` 表示可提取库存；`harvested/depleted` 只能作为派生或旧存档迁移，不再是权威输入。
+14. 生态数量变化只能通过 `EcologyPopulationTransferResolver`、`EcologyResourceExtractionResolver` 和 `EcologyRecoveryResolver`，不能通过通用 patch 或 DM 文本直接改数量。
+15. P1 不实现完整繁殖、食物链、季节迁徙和生态 AI；只实现数量守恒、提取、恢复上限和事件审计。
+16. 初始生态生成位于 OriginHistoryCandidateFormation 之后、OriginHistoryMaterialization 之前；历史输入必须是候选而不是权威 OriginEvent。

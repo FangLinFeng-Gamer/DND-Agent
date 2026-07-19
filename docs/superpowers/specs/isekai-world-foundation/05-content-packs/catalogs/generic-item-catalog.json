@@ -1,7 +1,9 @@
 {
   "schema_version": 1,
   "content_pack_id": "isekai_generic_items_p0",
+  "content_pack_version": "2026-07-18.1",
   "kind": "generic_item_catalog",
+  "catalog_version": "2026-07-18.1",
   "generic_item_catalog": {
     "category_defaults": {
       "natural": {

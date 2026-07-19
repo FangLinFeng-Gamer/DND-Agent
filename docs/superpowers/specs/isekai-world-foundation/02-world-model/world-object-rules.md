@@ -1,3 +1,24 @@
+---
+doc_id: isekai.world_object_rules
+status: active
+layer: world-model
+owner: architecture
+created_at: 2026-07-10
+updated_at: 2026-07-18
+depends_on:
+  - isekai.field_domain_registry_rules
+  - isekai.location_space_rules
+provides:
+  - WorldObject
+  - object_type
+  - object_components
+  - WorldObjectValidator
+  - ContainmentTransferResolver
+  - QuantityTransferResolver
+  - WeightDeriver
+  - ContainerOccupancyDeriver
+---
+
 # 异世界模式 WorldObject 规则设计
 
 ## 背景
@@ -67,9 +88,28 @@ P0 必填字段：
   "visibility": "visible",
   "physical": {
     "size": "small",
-    "weight_kg": 0.8,
+    "tare_weight_kg": "0.800",
     "portable": true,
-    "condition": "worn"
+    "condition": "worn",
+    "materials": ["iron"],
+    "traits": ["rust_prone", "water_container"]
+  },
+  "components": {
+    "container": {
+      "capacity": {
+        "liquid_liters": "1.500",
+        "mass_kg": "8.000",
+        "slot_count": 2
+      },
+      "quantity_contents": [],
+      "contained_object_ids": []
+    }
+  },
+  "derived": {
+    "contained_mass_kg": "0.000",
+    "occupied_liquid_liters": "0.000",
+    "occupied_slot_count": 0,
+    "total_weight_kg": "0.800"
   },
   "affordances": ["observe", "take", "drink", "refill_water"],
   "state": {},
@@ -89,7 +129,23 @@ P0 推荐字段：
     "legal_status": "abandoned"
   },
   "tags": ["water_container", "metal"],
-  "source": "content_pack"
+  "provenance": {
+    "source_kind": "content_pack",
+    "content_pack_id": "isekai_containers_p0",
+    "content_pack_version": "2026-07-18.1",
+    "catalog_kind": "container_catalog",
+    "catalog_id": "container_dented_kettle",
+    "catalog_version": "2026-07-18.1",
+    "materializer_id": "ContainerMaterializer",
+    "materializer_version": "2026-07-18.1",
+    "materialization_id": "mat_water_kettle_01",
+    "instance_key": "hunter_cabin_inside/old_stove/water_kettle_01",
+    "schema_version": "world_object@2026-07-18",
+    "registry_hash": "sha256:registry_hash",
+    "rule_bundle_hash": "sha256:rule_bundle_hash",
+    "content_pack_hash": "sha256:content_pack_hash",
+    "catalog_entry_hash": "sha256:catalog_entry_hash"
+  }
 }
 ```
 
@@ -111,20 +167,55 @@ P0 推荐字段：
   "visibility": "visible",
   "physical": {
     "size": "small",
-    "weight_kg": 0.8,
+    "tare_weight_kg": "0.800",
     "portable": true,
-    "condition": "worn"
+    "condition": "worn",
+    "materials": ["iron"],
+    "traits": ["rust_prone", "water_container"]
   },
   "ownership": {
     "owner_id": null,
     "legal_status": "abandoned"
+  },
+  "components": {
+    "container": {
+      "capacity": {
+        "liquid_liters": "1.500",
+        "mass_kg": "8.000",
+        "slot_count": 2
+      },
+      "quantity_contents": [],
+      "contained_object_ids": []
+    }
+  },
+  "derived": {
+    "contained_mass_kg": "0.000",
+    "occupied_liquid_liters": "0.000",
+    "occupied_slot_count": 0,
+    "total_weight_kg": "0.800"
   },
   "affordances": ["observe", "take", "drink", "refill_water"],
   "state": {
     "opened": true
   },
   "tags": ["water_container", "metal"],
-  "source": "content_pack",
+  "provenance": {
+    "source_kind": "content_pack",
+    "content_pack_id": "isekai_containers_p0",
+    "content_pack_version": "2026-07-18.1",
+    "catalog_kind": "container_catalog",
+    "catalog_id": "container_dented_kettle",
+    "catalog_version": "2026-07-18.1",
+    "materializer_id": "ContainerMaterializer",
+    "materializer_version": "2026-07-18.1",
+    "materialization_id": "mat_water_kettle_01",
+    "instance_key": "hunter_cabin_inside/old_stove/water_kettle_01",
+    "schema_version": "world_object@2026-07-18",
+    "registry_hash": "sha256:registry_hash",
+    "rule_bundle_hash": "sha256:rule_bundle_hash",
+    "content_pack_hash": "sha256:content_pack_hash",
+    "catalog_entry_hash": "sha256:catalog_entry_hash"
+  },
   "created_turn": 0,
   "updated_turn": 0
 }
@@ -137,7 +228,9 @@ P0 推荐字段：
 稳定唯一 ID，不依赖对象中文名称。对象被改名或本地化后，`id` 不变。
 
 ```json
-"id": "battle_axe_01"
+{
+  "id": "battle_axe_01"
+}
 ```
 
 ### name
@@ -145,7 +238,9 @@ P0 推荐字段：
 玩家可见名称。
 
 ```json
-"name": "缺口战斧"
+{
+  "name": "缺口战斧"
+}
 ```
 
 ### aliases
@@ -153,7 +248,9 @@ P0 推荐字段：
 用于玩家自然语言目标绑定。可为空数组。
 
 ```json
-"aliases": ["战斧", "斧头", "旧斧"]
+{
+  "aliases": ["战斧", "斧头", "旧斧"]
+}
 ```
 
 ### description
@@ -161,7 +258,9 @@ P0 推荐字段：
 短描述，用于 DM 叙事和观察反馈。描述不能包含未经落库的其他当前可互动对象。
 
 ```json
-"description": "斧刃有两处缺口，木柄缠着旧皮条。"
+{
+  "description": "斧刃有两处缺口，木柄缠着旧皮条。"
+}
 ```
 
 ### object_type
@@ -212,7 +311,7 @@ light_source
 | container | 容器，可承载内容 | 水壶、木箱、背包、袋子、柜子、桶 | observe, open, close, search, take | container |
 | resource | 可采集或消耗的资源 | 干柴、草药束、兽皮、盐块 | observe, take, gather, use | resource_profile |
 | food | 食物 | 干粮、炖菜、浆果、肉干 | observe, take, eat, purchase | consumable |
-| water_source | 水源或补水对象 | 井、溪流、水桶、蓄水池 | observe, drink, refill_water | water_profile |
+| water_source | 水源或补水对象 | 井、溪流、泉眼、蓄水池 | observe, drink, refill_water | water_profile |
 | furniture | 家具，通常不可携带 | 床、桌子、椅子、柜子 | observe, search, move, hide_behind | furniture_profile |
 | fixture | 固定物或空间锚点 | 柜台、墙、炉灶、栏杆、木桩 | observe, search, repair | fixture_profile |
 | portal | 连接空间的对象 | 门、楼梯、地窖口、车厢破口、桥 | observe, enter, leave, open, close | portal_profile |
@@ -270,7 +369,7 @@ magic_sword
 
 P0 catalog 草案文件：
 
-- [2026-07-10-isekai-generic-item-catalog.json](./2026-07-10-isekai-generic-item-catalog.json)
+- [generic-item-catalog.json](../05-content-packs/catalogs/generic-item-catalog.json)
 
 ```text
 generic_item_catalog entry
@@ -284,6 +383,9 @@ Catalog 存放位置：
 ```json
 {
   "content_pack_id": "isekai_generic_items_p0",
+  "content_pack_version": "2026-07-18.1",
+  "kind": "generic_item_catalog",
+  "catalog_version": "2026-07-18.1",
   "generic_item_catalog": {
     "category_defaults": {},
     "entries": []
@@ -377,6 +479,9 @@ Catalog 字段说明：
 | 字段 | 含义 |
 | --- | --- |
 | `content_pack_id` | 提供该 catalog 的内容包 ID。 |
+| `content_pack_version` | 提供该 catalog 的内容包版本。任何影响物化结果的修改都必须递增。 |
+| `kind` | catalog 类型，通用小物件为 `generic_item_catalog`。 |
+| `catalog_version` | catalog 内容版本。任何 entry 或 category default 变更都必须递增。 |
 | `generic_item_catalog` | 通用小物件 catalog 根对象。 |
 | `generic_item_catalog.category_defaults` | 按 category 存放的默认属性表。 |
 | `generic_item_catalog.entries` | catalog 条目列表。 |
@@ -430,7 +535,23 @@ category_defaults
   "components": {},
   "state": {},
   "tags": ["small_item", "metal", "scrap"],
-  "source": "content_pack",
+  "provenance": {
+    "source_kind": "content_pack",
+    "content_pack_id": "isekai_generic_items_p0",
+    "content_pack_version": "2026-07-18.1",
+    "catalog_kind": "generic_item_catalog",
+    "catalog_id": "generic_bent_nail",
+    "catalog_version": "2026-07-18.1",
+    "materializer_id": "GenericItemMaterializer",
+    "materializer_version": "2026-07-18.1",
+    "materialization_id": "mat_generic_bent_nail_dark_corner_001",
+    "instance_key": "chunk_12_08_02/hunter_cabin_inside/dark_corner/loot_001",
+    "schema_version": "world_object@2026-07-18",
+    "registry_hash": "sha256:registry_hash",
+    "rule_bundle_hash": "sha256:rule_bundle_hash",
+    "content_pack_hash": "sha256:content_pack_hash",
+    "catalog_entry_hash": "sha256:catalog_entry_hash"
+  },
   "created_turn": 0,
   "updated_turn": 0
 }
@@ -550,7 +671,7 @@ P0 catalog entries：
 
 P0 catalog 草案文件：
 
-- [2026-07-10-isekai-container-catalog.json](./2026-07-10-isekai-container-catalog.json)
+- [container-catalog.json](../05-content-packs/catalogs/container-catalog.json)
 
 ```text
 container_catalog entry
@@ -568,11 +689,16 @@ Catalog 条目 schema：
   "object_type": "container",
   "category": "liquid_vessel",
   "physical_override": {
-    "weight_kg": 0.25
+    "tare_weight_kg": "0.250"
   },
   "container_override": {
-    "capacity": { "amount": 1.2, "unit": "liter" },
-    "contents": []
+    "capacity": {
+      "liquid_liters": "1.200",
+      "mass_kg": "8.000",
+      "slot_count": 0
+    },
+    "quantity_contents": [],
+    "contained_object_ids": []
   },
   "default_tags": ["leather", "water_container"]
 }
@@ -582,6 +708,10 @@ Catalog 字段说明：
 
 | 字段 | 含义 |
 | --- | --- |
+| `content_pack_id` | 提供该 catalog 的内容包 ID。 |
+| `content_pack_version` | 提供该 catalog 的内容包版本。任何影响物化结果的修改都必须递增。 |
+| `kind` | catalog 类型，容器为 `container_catalog`。 |
+| `catalog_version` | catalog 内容版本。任何 entry 或 category default 变更都必须递增。 |
 | `container_catalog` | 容器 catalog 根对象。 |
 | `catalog_id` | 容器 catalog 条目 ID。实例化时生成器必须转换成独立 WorldObject.id。 |
 | `name` | 容器默认显示名。 |
@@ -592,9 +722,11 @@ Catalog 字段说明：
 | `physical_override` | 条目对默认物理属性的覆盖。 |
 | `container_override` | 条目对默认 `components.container` 的覆盖。 |
 | `container_override.capacity` | 容器容量。 |
-| `container_override.capacity.amount` | 容量数值。 |
-| `container_override.capacity.unit` | 容量单位，例如 liter、kg、slot。 |
-| `container_override.contents` | 默认内容物。P0 必须为空数组，具体内容由场景实例或 resolver 写入。 |
+| `container_override.capacity.liquid_liters` | 液体容量，单位 liter。不能装液体的容器省略或为 0。 |
+| `container_override.capacity.mass_kg` | 最大内容承重，单位 kg，不包含容器自重。没有承重限制的 P1 容器必须显式声明规则来源，不能省略为无限。 |
+| `container_override.capacity.slot_count` | 离散物品槽位数量，整数。不能装离散物品的容器为 0。 |
+| `container_override.quantity_contents` | 默认数量资源内容。P1 必须为空数组，具体内容由场景实例、发现表或 resolver 写入。 |
+| `container_override.contained_object_ids` | 默认离散子物品列表。Catalog 条目必须为空数组，具体内容由场景实例、发现表或 resolver 写入。 |
 | `default_tags` | 容器默认标签。 |
 
 实例化为 `WorldObject` 时，世界生成器必须合并：
@@ -613,8 +745,13 @@ category_defaults
   "object_type": "container",
   "components": {
     "container": {
-      "capacity": { "amount": 1.2, "unit": "liter" },
-      "contents": []
+      "capacity": {
+        "liquid_liters": "1.200",
+        "mass_kg": "8.000",
+        "slot_count": 0
+      },
+      "quantity_contents": [],
+      "contained_object_ids": []
     }
   }
 }
@@ -625,12 +762,14 @@ Catalog 硬规则：
 ```text
 Catalog 只允许 object_type=container。
 Catalog 必须提供 category，并能从 category_defaults 合并出 components.container。
-Catalog 的 container_override 只能覆盖 components.container.capacity 和 components.container.contents。
-Catalog 默认 contents 必须为空数组；具体装了什么由场景实例、发现表或 resolver 决定。
+Catalog 的 container_override 只能覆盖 components.container.capacity、components.container.quantity_contents 和 components.container.contained_object_ids。
+Catalog 默认 quantity_contents 和 contained_object_ids 必须为空数组；具体装了什么由场景实例、发现表或 resolver 决定。
 Catalog 不允许定义 weapon_stats、armor_stats、tool_profile、consumable、currency_value、key_profile 等非容器组件。
 Catalog 不允许定义制作字段、合成字段或配方字段。
 Catalog 实例化后的 WorldObject 必须保持 object_type=container。
 Catalog 实例化后的 WorldObject 必须包含 components.container。
+liquid_vessel category 可以默认声明 drink、refill_water、pour；这些 affordance 只表示液体容器可以作为 drink.source、refill_water.target 或 pour.source 被尝试。
+liquid_vessel 实例化结果不得添加 water_profile；水囊、水壶、瓶子不是水源。
 portable=false 的容器不能被直接拾取到玩家物品栏。
 带锁容器的锁具必须由 mechanism/key 规则表达，不能只靠容器名称表达。
 ```
@@ -646,6 +785,7 @@ chunk
 zone
 on_object
 inside_object
+contained_by_parent
 under_object
 attached_to_object
 near_object
@@ -654,6 +794,8 @@ player_inventory
 offscreen
 removed
 ```
+
+`inside_object` 是旧版离散物品包含关系表达。P1-02 后，新写入的离散物品包含关系必须使用父容器 `components.container.contained_object_ids`；被包含的子物品自身只允许使用 `placement.kind=contained_by_parent`，且不得携带父容器 ID。迁移工具可以读取旧 `placement.kind=inside_object` 并转换为父容器记录。新生成、新 resolver 和新内容包不得写入 `inside_object`。
 
 ### visibility
 
@@ -674,11 +816,26 @@ removed：已消失、消耗或销毁。
 ```json
 {
   "size": "medium",
-  "weight_kg": 3.5,
+  "tare_weight_kg": "3.500",
   "portable": true,
-  "condition": "worn"
+  "condition": "worn",
+  "materials": ["iron", "wood"],
+  "traits": ["sharp_edge", "breakable"]
 }
 ```
+
+字段含义：
+
+| 字段 | 含义 |
+| --- | --- |
+| `size` | 对象体积等级。影响携带、遮挡、移动和空间投影。 |
+| `tare_weight_kg` | 对象空重或皮重，单位 kg。它不包含 `quantity_contents` 和 `contained_object_ids` 中的内容重量。 |
+| `portable` | 是否可直接进入携带/背包类位置。 |
+| `condition` | 当前完好程度。 |
+| `materials` | 对象的主要构成材料。它描述“这个对象由什么构成”。 |
+| `traits` | 由材料、结构或状态带来的物理交互倾向。它描述“这个对象大概能怎样互动”。 |
+
+`physical.tare_weight_kg` 是唯一可由内容包、生成器或 resolver 写入的基础重量字段。旧字段 `physical.weight_kg` 不再作为 WorldState 权威字段；迁移时按“旧 weight_kg 表示空重”转换为 `tare_weight_kg`。对象当前总重必须由 `WeightDeriver` 写入 `derived.total_weight_kg`。
 
 `size` 枚举：
 
@@ -701,12 +858,115 @@ broken
 ruined
 ```
 
+`materials` P0 闭集：
+
+```text
+wood
+iron
+steel
+bronze
+copper
+stone
+clay
+glass
+ceramic
+cloth
+leather
+bone
+paper
+wax
+water
+food
+plant_fiber
+organic
+crystal
+unknown
+```
+
+`traits` P0 闭集：
+
+```text
+flammable
+breakable
+brittle
+waterproof
+absorbent
+sharp_edge
+blocks_movement
+blocks_sight
+blocks_sound
+anchor_point
+heavy
+fragile
+lockable
+rust_prone
+rot_prone
+poisonous
+slippery
+insulating
+water_container
+```
+
 规则：
 
 ```text
 portable=false 的对象不能直接进入玩家物品栏。
 condition=broken 的对象不能执行正常使用类动作，除非 resolver 允许修理、拆解或强行使用。
 condition=ruined 的对象不能恢复为正常使用状态，除非专门规则允许。
+materials 表示对象构成，不表示这件对象本身就是材料资源。
+object_type=material + components.material_profile 表示“这件对象是一份可作为资源处理的材料”。
+traits 不是自动成功规则，只是 resolver 判断燃烧、破坏、遮挡、腐蚀、滑倒等交互的输入。
+具体能不能点燃、破坏、移动、修理，仍由 affordances、components、placement、HazardSource/ObstacleSource 和 resolver 共同决定。
+```
+
+### derived
+
+`derived` 保存可缓存的派生物理值。它是 `WorldObject` 的一部分，不是独立实体。内容包、LLM proposal、DM 文本和通用 patch 接口不能直接写入这些字段。
+
+```json
+{
+  "derived": {
+    "contained_mass_kg": "1.400",
+    "occupied_liquid_liters": "1.200",
+    "occupied_slot_count": 1,
+    "total_weight_kg": "2.200"
+  }
+}
+```
+
+字段含义：
+
+| 字段 | 含义 |
+| --- | --- |
+| `derived.contained_mass_kg` | 当前容器内容总质量，单位 kg。由数量资源质量与离散子物品总重相加得到。 |
+| `derived.occupied_liquid_liters` | 当前液体占用，单位 liter。只统计 `quantity_contents` 中 liquid 维度资源。 |
+| `derived.occupied_slot_count` | 当前离散物品槽位占用，整数。由 `contained_object_ids` 中每个对象的槽位占用相加得到。 |
+| `derived.total_weight_kg` | 当前对象总重，单位 kg。由 `WeightDeriver` 递归计算。 |
+
+总重公式：
+
+```text
+derived.total_weight_kg(object)
+= physical.tare_weight_kg
++ sum(quantity_contents[].amount * ResourceMassRegistry.mass_per_unit_kg)
++ sum(derived.total_weight_kg(child_object) for child_object_id in components.container.contained_object_ids)
+```
+
+占用公式：
+
+```text
+derived.occupied_liquid_liters = sum(quantity_contents 中 unit=liter 的 amount)
+derived.occupied_slot_count = sum(ObjectSlotRule.slot_cost(child_object))
+derived.contained_mass_kg = derived.total_weight_kg - physical.tare_weight_kg
+```
+
+规则：
+
+```text
+WeightDeriver 是 derived.total_weight_kg 和 derived.contained_mass_kg 的唯一写者。
+ContainerOccupancyDeriver 是 derived.occupied_liquid_liters 和 derived.occupied_slot_count 的唯一写者。
+内容包和 LLM proposal 不能写 derived。
+derived 字段可以缓存，但 validator 必须能从权威内容重算并校验一致。
 ```
 
 ### ownership
@@ -770,7 +1030,16 @@ enter
 leave
 ```
 
-不在允许集合内的 affordance 必须被 validator 删除，并写入 `blocked_affordances`。
+不在允许集合内的 affordance 必须被 validator 拒绝。Validator 不允许删除未知 affordance 后继续物化，也不允许写入未声明的 `blocked_affordances` 字段。
+
+`affordances` 只表示“玩家可以尝试这个动作”。它不等于“该对象独自满足动作结算所需的所有组件”。动作结算必须按参数角色校验，例如同一个 `refill_water`：
+
+```text
+source：水源，必须是 ResourceNode 或带 water_profile 的 WorldObject。
+target：盛水容器，必须是带 components.container 且容量单位支持液体的 WorldObject。
+```
+
+因此，水囊、水壶、桶可以声明 `refill_water`，因为它们可以作为 `refill_water.target`；它们不需要 `water_profile`。井、溪流、蓄水池可以声明 `refill_water`，因为它们可以作为 `refill_water.source`，并且必须具备 `water_profile` 或对应 ResourceNode 水源事实。
 
 ### state
 
@@ -799,20 +1068,34 @@ resolver 可以修改 state，LLM proposal 不能直接提交最终 state 变更
 用于搜索、叙事、规则分类和内容过滤，不参与核心结算。
 
 ```json
-"tags": ["rusty", "two_handed", "hunter_cabin"]
+{
+  "tags": ["rusty", "two_handed", "hunter_cabin"]
+}
 ```
 
-### source
+### provenance
 
-对象来源，用于调试和回放。
+对象来源证明，用于调试、重放、迁移和存档版本校验。P1 起运行时对象必须使用 `provenance`，不得只写 `source: content_pack`。
 
 ```text
-content_pack
-llm_proposal
-dm_scene_proposal
-resolver_created
-legacy_fallback
+source_kind
+content_pack_id
+content_pack_version
+catalog_kind
+catalog_id
+catalog_version
+materializer_id
+materializer_version
+materialization_id
+instance_key
+schema_version
+registry_hash
+rule_bundle_hash
+content_pack_hash
+catalog_entry_hash
 ```
+
+完整结构见 [内容包、Catalog 与物化版本规则](../05-content-packs/content-pack-materialization-rules.md) 的 `MaterializationProvenance`。
 
 ### created_turn / updated_turn
 
@@ -839,17 +1122,19 @@ legacy_fallback
   "components": {
     "container": {
       "capacity": {
-        "amount": 2,
-        "unit": "liter"
+        "liquid_liters": "2.000",
+        "mass_kg": "8.000",
+        "slot_count": 4
       },
-      "contents": [
+      "quantity_contents": [
         {
           "resource_type": "water",
-          "amount": 0.4,
+          "amount": "0.400",
           "unit": "liter",
           "quality": "stale"
         }
-      ]
+      ],
+      "contained_object_ids": ["key_01"]
     }
   }
 }
@@ -868,6 +1153,109 @@ legacy_fallback
     }
   }
 }
+```
+
+### 容器分账与守恒规则
+
+容器仍然是 `WorldObject`，不新增 `Container` 实体。容器能力只存在于 `WorldObject.components.container`。
+
+```text
+离散物品：WorldObject，由父容器 components.container.contained_object_ids 记录。
+数量资源：resource quantity，由 components.container.quantity_contents 记录。
+```
+
+示例：
+
+```text
+箱子里的钥匙：chest_01.components.container.contained_object_ids = ["key_01"]
+水袋里的水：waterskin_01.components.container.quantity_contents = [{ resource_type=water, amount=0.400, unit=liter }]
+背包里的装水瓶：backpack_01.components.container.contained_object_ids 包含 bottle_01；bottle_01.components.container.quantity_contents 包含 water。
+```
+
+禁止：
+
+```text
+quantity_contents 中出现 object_id。
+contained_object_ids 中出现非 WorldObject ID。
+同一 object_id 同时出现在两个容器的 contained_object_ids 中。
+离散物品继续用新写入的 placement.kind=inside_object 表达权威包含关系。
+```
+
+### ContainmentTransferResolver
+
+离散物品移动必须由 `ContainmentTransferResolver.move_object` 原子执行，不能让 LLM、DM 文本、agent 或通用 patch 接口分别修改 source/target 容器。
+
+输入：
+
+```text
+object_id
+source_container_id
+target_container_id
+caused_by
+```
+
+预检：
+
+```text
+source_container_id 必须引用存在且有 components.container 的 WorldObject。
+target_container_id 必须引用存在且有 components.container 的 WorldObject。
+source.components.container.contained_object_ids 必须包含 object_id。
+target.components.container.contained_object_ids 必须不包含 object_id。
+object_id 不能出现在除 source 以外的任何容器 contained_object_ids 中。
+移动后 target 的 occupied_slot_count 不得超过 capacity.slot_count。
+移动后 target 的 contained_mass_kg 不得超过 capacity.mass_kg。
+移动不能形成容器包含循环。
+```
+
+提交：
+
+```text
+从 source.components.container.contained_object_ids 移除 object_id。
+向 target.components.container.contained_object_ids 添加 object_id。
+调用 WeightDeriver 和 ContainerOccupancyDeriver 重算 source 与 target 的 derived 字段。
+写入单条 ContainerObjectTransferred EventLog。
+```
+
+事务规则：
+
+```text
+move_object 是单一 StateTransition。
+任一预检失败，WorldState 不发生任何变化。
+禁止提交“只删 source”“只加 target”“先改 contents 后补重量”的中间状态。
+validator 负责拒绝非法最终状态；resolver 负责只生成合法原子变更。
+```
+
+### QuantityTransferResolver
+
+数量资源转移必须由 `QuantityTransferResolver.move_quantity_resource` 原子执行。
+
+输入：
+
+```text
+resource_type
+amount
+unit
+source_ref
+target_ref
+allowed_loss
+caused_by
+```
+
+守恒公式：
+
+```text
+source_delta + target_delta + loss_delta = 0
+```
+
+规则：
+
+```text
+amount 必须为正数，且单位、精度和资源类型兼容。
+source 必须有足够数量。
+target 必须有足够 liquid_liters、mass_kg 或其他适用容量。
+allowed_loss 必须由具体规则声明，例如倒水洒出；不能由 LLM 自由填写。
+成功后必须重算 source 与 target 的 derived 字段，并写 QuantityResourceTransferred EventLog。
+失败时 WorldState 不发生任何变化。
 ```
 
 ### weapon_stats
@@ -1123,6 +1511,16 @@ legacy_fallback
 }
 ```
 
+P1 载具内部空间限制：
+
+```text
+vehicle_profile.entry_node_ids 非空时，vehicle_profile.mobility_state 必须是 static、disabled 或 anchored。
+vehicle_profile.entry_node_ids 非空时，该 vehicle 不得通过 move/travel 结算改变 chunk。
+vehicle_profile.mobility_state 为 movable、moving 或 operational 时，entry_node_ids 必须为空。
+可移动 vehicle 在 P1 只能作为普通 WorldObject 被观察、搜索、乘坐、推动、修理或移动，不能拥有内部 LocationNode / Site。
+MobileSite 延后到 P2 单独设计。
+```
+
 ### material_profile
 
 ```json
@@ -1159,14 +1557,16 @@ legacy_fallback
 
 | 字段 | 含义 |
 | --- | --- |
-| `components.container.capacity` | 容器最大容量。 |
-| `components.container.capacity.amount` | 容量数值。 |
-| `components.container.capacity.unit` | 容量单位，例如 liter、kg、slot。 |
-| `components.container.contents` | 容器当前内容。内容变化必须由 resolver 写入。 |
-| `components.container.contents[].resource_type` | 内容资源类型，例如 water。 |
-| `components.container.contents[].amount` | 内容数量。 |
-| `components.container.contents[].unit` | 内容单位。 |
-| `components.container.contents[].quality` | 内容质量。 |
+| `components.container.capacity` | 容器最大容量。P1 使用多维容量，不再使用单一 `amount/unit`。 |
+| `components.container.capacity.liquid_liters` | 液体容量，单位 liter，定点三位小数。不能装液体时为 0 或省略。 |
+| `components.container.capacity.mass_kg` | 最大内容承重，单位 kg，定点三位小数，不包含容器自重。 |
+| `components.container.capacity.slot_count` | 离散物品槽位容量，整数。不能装离散物品时为 0。 |
+| `components.container.quantity_contents` | 当前数量资源内容。只允许水、油、沙、米、盐等数量资源，不能出现 `object_id`。 |
+| `components.container.quantity_contents[].resource_type` | 内容资源类型，例如 water。 |
+| `components.container.quantity_contents[].amount` | 内容数量，必须使用定点十进制字符串。 |
+| `components.container.quantity_contents[].unit` | 内容单位，例如 liter、kg、count。 |
+| `components.container.quantity_contents[].quality` | 内容质量。 |
+| `components.container.contained_object_ids` | 当前被该容器包含的离散 WorldObject ID 列表。钥匙、苹果、书、瓶子等独立对象必须进入这里，不能进入 `quantity_contents`。 |
 | `components.tool_profile.tool_kinds` | 工具用途类别，例如 pry、repair。 |
 | `components.tool_profile.quality` | 工具质量。影响成功率、耗时和损坏风险。 |
 | `components.tool_profile.required_hands` | 使用所需手数。 |
@@ -1240,8 +1640,8 @@ legacy_fallback
 | `components.vehicle_profile.vehicle_kind` | 载具类型。 |
 | `components.vehicle_profile.capacity.passengers` | 载客数量。 |
 | `components.vehicle_profile.capacity.cargo_kg` | 载货重量。 |
-| `components.vehicle_profile.mobility_state` | 载具移动状态。 |
-| `components.vehicle_profile.entry_node_ids` | 可进入该载具内部的 LocationNode。 |
+| `components.vehicle_profile.mobility_state` | 载具移动状态。P1 闭集为 static、disabled、anchored、movable、moving、operational。 |
+| `components.vehicle_profile.entry_node_ids` | 可进入该载具内部的 LocationNode。P1 中非空时载具必须不可移动。 |
 | `components.vehicle_profile.requires_repair_to_move` | 移动前是否需要修理。 |
 | `components.material_profile.material_kind` | 材料类型。 |
 | `components.material_profile.amount` | 材料数量。 |
@@ -1287,10 +1687,10 @@ light_profile
 | weapon | 推荐 `weapon_stats` | 无 `weapon_stats` 时不能执行 `attack` 的战斗结算 |
 | armor | 推荐 `armor_stats` | 无 `armor_stats` 时不能提供防护数值 |
 | tool | 推荐 `tool_profile` | 无 `tool_profile` 时只能作为普通 item 使用 |
-| container | 推荐 `container` | 无 `container` 时不能装载 contents |
+| container | 推荐 `container` | 无 `container` 时不能装载数量资源或离散子物品 |
 | resource | 推荐 `resource_profile` | 资源数量不得只写在 description |
-| food | 必须 `consumable` | 无 `consumable` 时不能执行 `eat` |
-| water_source | 必须 `water_profile` | 无 `water_profile` 时不能执行 `refill_water` |
+| food | 必须 `consumable` | 无 `consumable` 时不能作为 `eat.source` |
+| water_source | 必须 `water_profile` | 无 `water_profile` 时不能作为 `drink.source` 或 `refill_water.source` |
 | furniture | 推荐 `furniture_profile` | 大型家具通常 `portable=false` |
 | fixture | 推荐 `fixture_profile` | fixture 默认 `portable=false` |
 | portal | 必须 `portal_profile` | 无 `portal_profile` 时不能连接 LocationEdge |
@@ -1305,6 +1705,78 @@ light_profile
 | material | 推荐 `material_profile` | 材料数量不得只写在 description |
 | light_source | 必须 `light_profile` | 无 `light_profile` 时不能改变可见性 |
 
+实现必须把上表物化为机器可读矩阵。P0 使用以下结构：
+
+```yaml
+object_type_component_matrix:
+  item: { required: [], recommended: [], allowed: [], forbidden_policy: all_components_except_allowed }
+  weapon: { required: [], recommended: [weapon_stats], allowed: [weapon_stats], forbidden_policy: all_components_except_allowed }
+  armor: { required: [], recommended: [armor_stats], allowed: [armor_stats], forbidden_policy: all_components_except_allowed }
+  tool: { required: [], recommended: [tool_profile], allowed: [tool_profile], forbidden_policy: all_components_except_allowed }
+  container: { required: [], recommended: [container], allowed: [container], forbidden_policy: all_components_except_allowed }
+  resource: { required: [], recommended: [resource_profile], allowed: [resource_profile], forbidden_policy: all_components_except_allowed }
+  food: { required: [consumable], recommended: [], allowed: [consumable], forbidden_policy: all_components_except_allowed }
+  water_source: { required: [water_profile], recommended: [], allowed: [water_profile], forbidden_policy: all_components_except_allowed }
+  furniture: { required: [], recommended: [furniture_profile], allowed: [furniture_profile], forbidden_policy: all_components_except_allowed }
+  fixture: { required: [], recommended: [fixture_profile], allowed: [fixture_profile], forbidden_policy: all_components_except_allowed }
+  portal: { required: [portal_profile], recommended: [], allowed: [portal_profile], forbidden_policy: all_components_except_allowed }
+  clue: { required: [], recommended: [clue_profile], allowed: [clue_profile], forbidden_policy: all_components_except_allowed }
+  document: { required: [document_profile], recommended: [], allowed: [document_profile], forbidden_policy: all_components_except_allowed }
+  artwork: { required: [], recommended: [art_profile], allowed: [art_profile], forbidden_policy: all_components_except_allowed }
+  trap: { required: [trap_profile], recommended: [], allowed: [trap_profile], forbidden_policy: all_components_except_allowed }
+  mechanism: { required: [], recommended: [mechanism_profile], allowed: [mechanism_profile], forbidden_policy: all_components_except_allowed }
+  currency: { required: [currency_value], recommended: [], allowed: [currency_value], forbidden_policy: all_components_except_allowed }
+  key: { required: [key_profile], recommended: [], allowed: [key_profile], forbidden_policy: all_components_except_allowed }
+  vehicle: { required: [], recommended: [vehicle_profile], allowed: [vehicle_profile], forbidden_policy: all_components_except_allowed }
+  material: { required: [], recommended: [material_profile], allowed: [material_profile], forbidden_policy: all_components_except_allowed }
+  light_source: { required: [light_profile], recommended: [], allowed: [light_profile], forbidden_policy: all_components_except_allowed }
+```
+
+矩阵规则：
+
+```text
+required 组件缺失时，WorldObjectValidator 必须拒绝。
+allowed 之外的组件出现时，WorldObjectValidator 必须拒绝。
+recommended 只用于生成器和内容包质量检查，不作为运行时拒绝条件。
+container_catalog 物化出的对象只能使用 container 这一项矩阵；即使带有 refill_water affordance，也不得添加 water_profile。
+```
+
+### ActionRoleRequirement
+
+`ActionRoleRequirement` 定义动作参数角色需要什么实体和组件。它是 `ActionGrounder` 与 resolver 的输入，不是 catalog 自动补组件规则。
+
+WorldObjectValidator 只检查：
+
+```text
+affordance 是否属于允许集合。
+对象是否至少能静态满足该 affordance 的一个合法角色。
+对象没有写入与 object_type 互斥的组件。
+```
+
+真正执行动作时，ActionGrounder 必须为每个动作绑定完整角色；resolver 必须检查运行时前置条件。
+
+| action | role | 可接受实体 | 静态要求 | 运行时要求 |
+| --- | --- | --- | --- | --- |
+| eat | source | WorldObject | `components.consumable.consume_action=eat` | servings 或 amount 大于 0，未腐败到不可食用。 |
+| drink | source | WorldObject | 满足其一：`components.consumable.consume_action=drink`；`components.water_profile`；`components.container.capacity.liquid_liters > 0`。 | consumable 有剩余；water_profile 可饮且有水；container.quantity_contents 含可饮用液体且数量大于 0。 |
+| refill_water | source | ResourceNode 或 WorldObject | ResourceNode 表示可取水资源；或 WorldObject 具备 `components.water_profile`。 | 可获得水量大于 0 或 unlimited，水质和过滤条件通过 resolver 判定。 |
+| refill_water | target | WorldObject | `components.container.capacity.liquid_liters > 0`。 | 目标容器可触及，有剩余液体容量，已有 quantity_contents 为空或与水兼容。 |
+| pour | source | WorldObject | `components.container.capacity.liquid_liters > 0`。 | container.quantity_contents 存在可倾倒液体且数量大于 0。 |
+| pour | target | WorldObject、ResourceNode、LocationNode 或 Zone | 目标能接受液体，或允许倒在地点/区域。 | 由 resolver 根据污染、浪费、火焰、容器容量等规则结算。 |
+| read | source | WorldObject | `components.document_profile`。 | 文档可见、可触及，语言和可读性通过 resolver 判定。 |
+| unlock | tool | WorldObject | `components.key_profile` 或 `components.tool_profile` 支持开锁用途。 | 钥匙匹配或工具检定通过。 |
+| unlock | target | WorldObject | `components.mechanism_profile` 或 portal 关联的 lock/mechanism。 | 目标上锁且可触及。 |
+| disarm | target | WorldObject | `components.trap_profile` 或 `components.mechanism_profile`。 | 目标处于 armed/jammed 等可处理状态。 |
+
+角色规则：
+
+```text
+一个对象声明某个 affordance，只需要能满足该 action 的至少一个静态角色。
+同一动作的多个角色可以绑定到不同实体。
+WorldObjectValidator 不检查运行时数量、距离、可见性或水质；这些由 ActionGrounder 和 resolver 检查。
+内容包不得为了通过某个 affordance 校验而给对象添加错误组件。例如水囊不能添加 water_profile 来冒充水源。
+```
+
 ## 示例
 
 ### 战斧
@@ -1317,16 +1789,17 @@ light_profile
   "description": "斧刃有两处缺口，木柄缠着旧皮条。",
   "object_type": "weapon",
   "placement": {
-    "kind": "inside_object",
-    "object_id": "weapon_chest_01",
+    "kind": "contained_by_parent",
     "reachability": "requires_open_container"
   },
   "visibility": "hidden",
   "physical": {
     "size": "medium",
-    "weight_kg": 3.5,
+    "tare_weight_kg": "3.500",
     "portable": true,
-    "condition": "worn"
+    "condition": "worn",
+    "materials": ["iron", "wood", "leather"],
+    "traits": ["sharp_edge"]
   },
   "ownership": {
     "owner_id": null,
@@ -1347,7 +1820,23 @@ light_profile
     "equipped_by": null
   },
   "tags": ["two_handed", "hunter_cabin"],
-  "source": "content_pack",
+  "provenance": {
+    "source_kind": "content_pack",
+    "content_pack_id": "hunter_cabin_objects_p0",
+    "content_pack_version": "2026-07-18.1",
+    "catalog_kind": "scene_object_catalog",
+    "catalog_id": "scene_battle_axe",
+    "catalog_version": "2026-07-18.1",
+    "materializer_id": "SceneObjectMaterializer",
+    "materializer_version": "2026-07-18.1",
+    "materialization_id": "mat_battle_axe_01",
+    "instance_key": "hunter_cabin_inside/weapon_rack/battle_axe_01",
+    "schema_version": "world_object@2026-07-18",
+    "registry_hash": "sha256:registry_hash",
+    "rule_bundle_hash": "sha256:rule_bundle_hash",
+    "content_pack_hash": "sha256:content_pack_hash",
+    "catalog_entry_hash": "sha256:catalog_entry_hash"
+  },
   "created_turn": 0,
   "updated_turn": 0
 }
@@ -1370,9 +1859,11 @@ light_profile
   "visibility": "visible",
   "physical": {
     "size": "medium",
-    "weight_kg": 9.0,
+    "tare_weight_kg": "9.000",
     "portable": true,
-    "condition": "damaged"
+    "condition": "damaged",
+    "materials": ["iron"],
+    "traits": ["rust_prone"]
   },
   "ownership": {
     "owner_id": null,
@@ -1392,7 +1883,23 @@ light_profile
     "durability": 41,
     "equipped_by": null
   },
-  "source": "content_pack",
+  "provenance": {
+    "source_kind": "content_pack",
+    "content_pack_id": "hunter_cabin_objects_p0",
+    "content_pack_version": "2026-07-18.1",
+    "catalog_kind": "scene_object_catalog",
+    "catalog_id": "scene_rusted_chainmail",
+    "catalog_version": "2026-07-18.1",
+    "materializer_id": "SceneObjectMaterializer",
+    "materializer_version": "2026-07-18.1",
+    "materialization_id": "mat_rusted_chainmail_01",
+    "instance_key": "hunter_cabin_inside/armor_stand/rusted_chainmail_01",
+    "schema_version": "world_object@2026-07-18",
+    "registry_hash": "sha256:registry_hash",
+    "rule_bundle_hash": "sha256:rule_bundle_hash",
+    "content_pack_hash": "sha256:content_pack_hash",
+    "catalog_entry_hash": "sha256:catalog_entry_hash"
+  },
   "created_turn": 0,
   "updated_turn": 0
 }
@@ -1415,9 +1922,11 @@ light_profile
   "visibility": "visible",
   "physical": {
     "size": "medium",
-    "weight_kg": 1.2,
+    "tare_weight_kg": "1.200",
     "portable": true,
-    "condition": "worn"
+    "condition": "worn",
+    "materials": ["wood", "cloth"],
+    "traits": ["flammable", "fragile"]
   },
   "ownership": {
     "owner_id": null,
@@ -1433,7 +1942,23 @@ light_profile
   },
   "state": {},
   "tags": ["family_history", "hidden_clue"],
-  "source": "content_pack",
+  "provenance": {
+    "source_kind": "content_pack",
+    "content_pack_id": "hunter_cabin_objects_p0",
+    "content_pack_version": "2026-07-18.1",
+    "catalog_kind": "scene_object_catalog",
+    "catalog_id": "scene_old_portrait",
+    "catalog_version": "2026-07-18.1",
+    "materializer_id": "SceneObjectMaterializer",
+    "materializer_version": "2026-07-18.1",
+    "materialization_id": "mat_old_portrait_01",
+    "instance_key": "hunter_cabin_inside/north_wall/old_portrait_01",
+    "schema_version": "world_object@2026-07-18",
+    "registry_hash": "sha256:registry_hash",
+    "rule_bundle_hash": "sha256:rule_bundle_hash",
+    "content_pack_hash": "sha256:content_pack_hash",
+    "catalog_entry_hash": "sha256:catalog_entry_hash"
+  },
   "created_turn": 0,
   "updated_turn": 0
 }
@@ -1450,7 +1975,7 @@ light_profile
 `take` 成功后必须修改 `placement`：
 
 ```text
-zone/on_object/inside_object
+zone/on_object/contained_by_parent
 -> player_inventory
 ```
 
@@ -1503,8 +2028,8 @@ durability/fuel/charges 减少
 `open` 和 `search` 对容器、机关、画框、柜子等对象生效。搜索结果必须来自：
 
 ```text
-inside_object contents
-hidden child objects
+container.contained_object_ids 中已物化的隐藏离散物品
+container.quantity_contents 中已物化的数量资源
 DiscoveryTable
 ```
 
@@ -1523,33 +2048,48 @@ DiscoveryTable
 7. 对象位置链不能形成循环。
 8. `visibility=removed` 时，`placement.kind` 必须是 `removed` 或对象不得出现在当前 projection。
 9. `physical.size` 和 `physical.condition` 属于允许集合。
-10. `physical.weight_kg` 不能为负数。
+10. `physical.tare_weight_kg` 不能为负数；`physical.weight_kg` 作为新 WorldState 字段必须被拒绝，迁移工具除外。
 11. `physical.portable=false` 的对象不能被 resolver 直接放入 `player_inventory`。
-12. `ownership.legal_status` 属于允许集合。
-13. `affordances` 必须属于允许集合。
-14. `components` 必须属于组件白名单。
-15. 组件和 `object_type` 必须符合“object_type 到组件兼容规则”表。
-16. 带有结算语义的 affordance 必须具备对应组件，例如 `eat` 需要 `consumable`，`refill_water` 需要 `water_profile`，`unlock` 需要 `key_profile` 或 `mechanism_profile`。
-17. LLM proposal 不能直接提交 placement、ownership、state 的最终变更，必须经过 resolver。
-18. `generic_item_catalog` 条目只允许 `object_type=item`。
-19. `generic_item_catalog` 条目不得定义 `components` 或任何制作、合成、配方字段。
-20. `generic_item_catalog.default_affordances` 只能从 `observe/take/search/trade` 中选择。
-21. `generic_item_catalog` 实例化后的 `WorldObject` 必须保持 `object_type=item` 且 `components={}`。
-22. `generic_item_catalog` 实例化不能绕过 `WorldObjectValidator`。
-23. `container_catalog` 条目只允许 `object_type=container`。
-24. `container_catalog` 条目必须能合并出 `components.container.capacity` 和 `components.container.contents`。
-25. `container_catalog` 默认 `contents` 必须为空数组，具体内容由场景实例、发现表或 resolver 写入。
-26. `container_catalog` 不得定义非容器组件。
-27. `container_catalog` 实例化不能绕过 `WorldObjectValidator`。
+12. `physical.materials` 如果存在，所有值必须属于材料闭集。
+13. `physical.traits` 如果存在，所有值必须属于物理交互 trait 闭集。
+14. `physical.traits` 不能表达具体剧情或任务状态，例如不得写 `opens_wolf_quest`。
+15. `ownership.legal_status` 属于允许集合。
+16. `affordances` 必须属于允许集合。
+17. `components` 必须属于组件白名单。
+18. 组件和 `object_type` 必须符合“object_type 到组件兼容规则”表。
+19. 带有结算语义的 affordance 必须能静态满足 `ActionRoleRequirement` 中至少一个合法角色；不能按 affordance 字符串直接要求单一组件。例如 `refill_water` 在 source 角色需要 ResourceNode 或 `water_profile`，在 target 角色需要液体 `container`。
+20. LLM proposal 不能直接提交 placement、ownership、state 的最终变更，必须经过 resolver。
+21. `WorldObject.provenance` 必须存在；P1 起不得只写旧 `source` 字符串。
+22. `provenance.source_kind=content_pack` 时，必须完整记录 content pack、catalog、materializer、schema、registry、rule bundle 和 content pack hash。
+23. `generic_item_catalog` 条目只允许 `object_type=item`。
+24. `generic_item_catalog` 条目不得定义 `components` 或任何制作、合成、配方字段。
+25. `generic_item_catalog.default_affordances` 只能从 `observe/take/search/trade` 中选择。
+26. `generic_item_catalog` 实例化后的 `WorldObject` 必须保持 `object_type=item` 且 `components={}`。
+27. `generic_item_catalog` 实例化不能绕过 `WorldObjectValidator`。
+28. `container_catalog` 条目只允许 `object_type=container`。
+29. `container_catalog` 条目必须能合并出 `components.container.capacity`、`components.container.quantity_contents` 和 `components.container.contained_object_ids`。
+30. `container_catalog` 默认 `quantity_contents` 和 `contained_object_ids` 必须为空数组，具体内容由场景实例、发现表或 resolver 写入。
+31. `container_catalog` 不得定义非容器组件。
+32. `container_catalog` 实例化不能绕过 `WorldObjectValidator`。
+33. `components.container.capacity` 不允许使用旧 `{amount, unit}` 结构。
+34. `components.container.quantity_contents` 不允许出现 `object_id`。
+35. `components.container.contained_object_ids` 必须全部引用存在的 WorldObject。
+36. 同一 WorldObject ID 只能出现在一个容器的 `contained_object_ids` 中。
+37. `contained_object_ids` 不能形成包含循环。
+38. `derived.total_weight_kg`、`derived.contained_mass_kg`、`derived.occupied_liquid_liters`、`derived.occupied_slot_count` 必须能由 `WeightDeriver` / `ContainerOccupancyDeriver` 重算得到。
+39. 当前占用不得超过 `capacity.liquid_liters`、`capacity.mass_kg` 或 `capacity.slot_count`。
+40. `vehicle_profile.entry_node_ids` 非空时，`vehicle_profile.mobility_state` 必须为 static、disabled 或 anchored。
+41. `vehicle_profile.mobility_state` 为 movable、moving 或 operational 时，`vehicle_profile.entry_node_ids` 必须为空。
+42. P1 中拥有内部 `LocationNode` 的 vehicle 不得通过正常玩法 resolver 改变 chunk；需要移动内部空间时必须等待 P2 `MobileSite` 设计。
 
 ## 与其他文档关系
 
 本设计依赖：
 
-- [2026-07-10-isekai-location-space-rules-design.md](./2026-07-10-isekai-location-space-rules-design.md)
-- [2026-07-08-isekai-scene-object-structuring-design.md](./2026-07-08-isekai-scene-object-structuring-design.md)
-- [2026-07-08-isekai-content-agnostic-refactor-design.md](./2026-07-08-isekai-content-agnostic-refactor-design.md)
-- [2026-07-08-isekai-llm-intent-resolution-design.md](./2026-07-08-isekai-llm-intent-resolution-design.md)
+- [地点与空间规则](./location-space-rules.md)
+- [2026-07-08-isekai-scene-object-structuring-design.md](../../2026-07-08-isekai-scene-object-structuring-design.md)
+- [2026-07-08-isekai-content-agnostic-refactor-design.md](../../2026-07-08-isekai-content-agnostic-refactor-design.md)
+- [2026-07-08-isekai-llm-intent-resolution-design.md](../../2026-07-08-isekai-llm-intent-resolution-design.md)
 
 数据流：
 
@@ -1641,10 +2181,12 @@ ContentPack / LLM Proposal
 
 验收：
 
-- 容器打开后才能显示内部 hidden contents。
+- 容器打开后才能显示内部 hidden contained_object_ids 或 quantity_contents。
 - 武器和护甲能被装备，但不能绕过装备槽/condition 校验。
 - 肖像画搜索能揭示画框背后的线索对象，而不是 DM 直接发放未落库线索。
-- `eat/refill_water/read/unlock/trigger` 等动作缺少对应组件时会被 resolver 拒绝。
+- `eat/refill_water/read/unlock/trigger` 等动作缺少对应角色组件或运行时前置条件时会被 resolver 拒绝。
+- `vehicle_profile.entry_node_ids` 非空时，`mobility_state` 不是 static、disabled 或 anchored 会被 validator 拒绝。
+- `mobility_state` 为 movable、moving 或 operational 的载具携带 `entry_node_ids` 会被 validator 拒绝。
 
 ### P0.5：通用小物件 catalog
 
@@ -1657,13 +2199,14 @@ ContentPack / LLM Proposal
 
 验收：
 
-- `generic_bent_nail` 能实例化为 `WorldObject`，并带有稳定 `id/name/aliases/description/placement/visibility/physical/affordances/state/tags/source/turns`。
+- `generic_bent_nail` 能实例化为 `WorldObject`，并带有稳定 `id/name/aliases/description/placement/visibility/physical/affordances/state/tags/provenance/turns`。
 - catalog 条目缺少 `catalog_id/name/object_type/category` 会被拒绝。
 - catalog 条目的 `object_type` 不是 `item` 会被拒绝。
 - catalog 条目定义 `components` 会被拒绝。
 - catalog 条目定义制作、合成或配方字段会被拒绝。
 - catalog 条目使用 `observe/take/search/trade` 之外的默认 affordance 会被拒绝。
 - 实例化结果必须再次经过 `WorldObjectValidator`，不能直接写入 `WorldState`。
+- 实例化结果的 `provenance` 必须能追溯到 content pack、catalog entry 和 materializer 版本。
 
 ### P0.6：容器 catalog
 
@@ -1676,13 +2219,15 @@ ContentPack / LLM Proposal
 
 验收：
 
-- `container_waterskin` 能实例化为 `WorldObject`，并带有稳定 `id/name/aliases/description/placement/visibility/physical/affordances/components.container/state/tags/source/turns`。
+- `container_waterskin` 能实例化为 `WorldObject`，并带有稳定 `id/name/aliases/description/placement/visibility/physical/affordances/components.container/state/tags/provenance/turns`。
+- `container_waterskin` 可以带 `drink/refill_water/pour` affordance，实例化后仍只有 `components.container`，不得要求或自动添加 `components.water_profile`。
 - catalog 条目缺少 `catalog_id/name/object_type/category` 会被拒绝。
 - catalog 条目的 `object_type` 不是 `container` 会被拒绝。
-- catalog 条目缺少可合并的 `capacity` 会被拒绝。
-- catalog 条目默认 `contents` 不是空数组会被拒绝。
+- catalog 条目缺少可合并的多维 `capacity` 会被拒绝。
+- catalog 条目默认 `quantity_contents` 或 `contained_object_ids` 不是空数组会被拒绝。
 - catalog 条目定义非容器组件会被拒绝。
 - 实例化结果必须再次经过 `WorldObjectValidator`，不能直接写入 `WorldState`。
+- 实例化结果的 `provenance` 必须能追溯到 content pack、catalog entry 和 materializer 版本。
 
 ## 回归测试要求
 
@@ -1698,14 +2243,35 @@ ContentPack / LLM Proposal
 - `test_take_rejects_non_portable_object`
 - `test_purchase_requires_for_sale_and_balance`
 - `test_equip_requires_valid_component_and_condition`
-- `test_affordance_requires_matching_component`
+- `test_unknown_affordance_is_rejected_without_blocked_affordances`
+- `test_affordance_requires_at_least_one_static_action_role`
+- `test_refill_water_source_requires_resource_node_or_water_profile`
+- `test_refill_water_target_accepts_liquid_container_without_water_profile`
+- `test_drink_accepts_liquid_container_as_attemptable_role`
+- `test_drink_from_empty_container_fails_in_resolver_not_validator`
 - `test_object_type_component_compatibility_is_enforced`
 - `test_consumed_object_updates_amount_or_removed`
 - `test_container_contents_revealed_only_after_open_or_search`
+- `test_world_object_rejects_new_inside_object_placement`
+- `test_contained_by_parent_requires_unique_parent_container`
+- `test_physical_weight_kg_is_rejected_after_migration`
+- `test_tare_weight_kg_requires_unit_range_precision`
+- `test_total_weight_is_derived_recursively`
+- `test_container_rejects_legacy_capacity_amount_unit`
+- `test_container_quantity_contents_rejects_object_id`
+- `test_container_contained_object_ids_must_reference_world_object`
+- `test_object_cannot_be_in_two_containers`
+- `test_container_containment_cycle_is_rejected`
+- `test_container_occupancy_cannot_exceed_liquid_capacity`
+- `test_container_occupancy_cannot_exceed_mass_capacity`
+- `test_container_occupancy_cannot_exceed_slot_capacity`
+- `test_move_object_is_atomic_state_transition`
+- `test_move_object_failure_leaves_world_state_unchanged`
+- `test_quantity_resource_transfer_conserves_amount`
 - `test_currency_amount_must_use_currency_value_component`
 - `test_portal_requires_portal_profile_for_location_edge`
 - `test_food_requires_consumable_for_eat`
-- `test_water_source_requires_water_profile_for_refill`
+- `test_water_source_requires_water_profile_for_refill_source`
 - `test_llm_proposal_cannot_directly_grant_world_object`
 - `test_generic_item_catalog_requires_minimum_fields`
 - `test_generic_item_catalog_rejects_non_item_type`
@@ -1718,10 +2284,11 @@ ContentPack / LLM Proposal
 - `test_container_catalog_requires_minimum_fields`
 - `test_container_catalog_rejects_non_container_type`
 - `test_container_catalog_requires_capacity`
-- `test_container_catalog_rejects_default_contents`
+- `test_container_catalog_rejects_default_quantity_or_contained_objects`
 - `test_container_catalog_rejects_non_container_components`
 - `test_container_catalog_entry_instantiates_world_object_container`
 - `test_container_instance_contains_container_component`
+- `test_container_liquid_vessel_refill_water_affordance_passes_without_water_profile`
 - `test_container_instance_runs_world_object_validator`
 
 ## 架构决策
@@ -1735,3 +2302,7 @@ ContentPack / LLM Proposal
 7. `affordance` 是可尝试动作，不是成功承诺。
 8. 对象状态变化必须写事件。
 9. LLM 可以提出对象，但不能直接提交最终状态变化。
+10. 容器不是独立 EntityType，只能作为 `WorldObject.components.container` 存在。
+11. 离散物品包含关系由父容器 `contained_object_ids` 作为权威记录；子物品只使用 `contained_by_parent` 标记自身处于被包含状态。
+12. 物品移动和数量资源转移只能通过原子 resolver 写入，不能由 agent 或 LLM 拼接多个字段 patch。
+13. `physical.tare_weight_kg` 是基础重量，`derived.total_weight_kg` 是派生总重。
