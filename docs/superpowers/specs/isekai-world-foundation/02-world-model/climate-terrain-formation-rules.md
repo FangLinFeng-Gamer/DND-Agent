@@ -1004,7 +1004,7 @@ P1 天气覆盖优先级闭集由 [静态世界运行规则](../03-runtime/stati
 ```text
 WeatherState 是动态状态，不是地形永久属性。
 天气变化必须由 WeatherService.advance 或 WeatherResolver 产生。
-天气变化必须写 WeatherInitialized 或 WeatherChanged EventLog。
+天气变化必须形成 WeatherInitialized 或 WeatherChanged StateTransition，并由 StateTransitionCommitter 生成 EventLogEntry。
 天气不能直接生成物品，只能影响行动、投影、生态活动和风险。
 天气不能直接写 EnvironmentState，必须由 EnvironmentDeriver 将 WeatherState、WorldTimeState、terrain、LocationNode.environment 和光源/热源对象派生成局部环境。
 天气结束后的 wet、muddy、slippery、snow_covered、fast_water 残留不能继续挂在旧 WeatherState 上，必须由 EnvironmentDeriver 创建或更新 EnvironmentResidualEffectState。

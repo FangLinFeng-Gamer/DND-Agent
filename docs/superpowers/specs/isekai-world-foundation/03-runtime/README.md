@@ -18,7 +18,7 @@
 
 ```text
 本层定义“世界状态如何变化”。
-任何权威状态变化必须写 EventLog。
+任何权威状态变化必须通过 StateTransition 提交，并由 StateTransitionCommitter 生成 EventLog。
 运行时派生状态必须能追溯输入事实。
 EventLog 不是游戏内记忆，主体知情必须通过 KnowledgeState 表达。
 Projection 只能读运行时状态，不能写 WorldState。

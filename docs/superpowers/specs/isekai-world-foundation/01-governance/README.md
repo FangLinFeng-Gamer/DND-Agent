@@ -12,6 +12,7 @@
 
 - [字段域与注册表规则](./field-domain-registry-rules.md)
 - [确定性随机协议](./deterministic-random-protocol-rules.md)
+- [可执行数值算法规则](./executable-numeric-algorithm-rules.md)
 
 ## 规则
 
@@ -21,5 +22,6 @@
 新增 rule_id 必须进入规则注册表。
 新增 schema 默认 additionalProperties=false。
 任何随机抽样必须使用确定性随机协议。
+任何进入长期可重放基线的数值算法必须使用可执行数值算法规则。
 治理层优先级高于世界模型、运行时和内容包。
 ```

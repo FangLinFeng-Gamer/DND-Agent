@@ -36,9 +36,10 @@ provides:
 ## 目标
 
 - 相同 `world_seed + schema_version + registry_hash + rule_bundle_hash + content_pack_hash` 必须得到相同随机结果。
-- 不同 rule、scope 和 logical draw 必须使用独立随机流，避免新增抽样影响其他抽样。
+- 不同 rule、随机作用域和 logical draw 必须使用独立随机流，避免新增抽样影响其他抽样。
 - 候选排序、去重、权重归一化、零权重 fallback 和 tie-break 必须可机器实现。
 - Validator 拒绝某个候选不能改变其他 logical draw 的结果。
+- 随机内核必须在有限步内产生确定结果或确定失败，不能依赖“几乎必然成功”的无限循环。
 - 所有随机引用必须能进入 `WorldGenerationManifest`，用于审计、重放和 hash 校验。
 
 ## 非目标
@@ -189,16 +190,22 @@ draw_digest = HMAC-SHA256(
 
 ### random_int_exclusive
 
-`random_int_exclusive(n)` 返回 `[0, n)` 的整数。
+`random_int_exclusive(n)` 成功时返回 `[0, n)` 的整数；失败时返回确定性 `random_failure_code`。
 
 规则：
 
 ```text
-n 必须是正整数。
+n 必须是整数，且 1 <= n <= 2^64。
 使用 rejection sampling 避免 modulo bias。
+P0 random_int_exclusive_max_attempts = 32。
 limit = floor(2^64 / n) * n。
+从 draw_index=0 开始尝试，最多尝试 32 次。
+如果 draw_uint64 < limit，结果为 draw_uint64 mod n，并记录接受该结果的 draw_index。
 如果 draw_uint64 >= limit，则 draw_index 加 1，重新计算同一个 logical_draw_id。
+如果 32 次尝试后仍没有 draw_uint64 < limit，返回 failure_code=random_int_rejection_exhausted。
+如果 n 不在合法范围内，返回 failure_code=random_int_invalid_bound，且不得消耗随机 draw。
 重试只属于当前 logical_draw，不影响其他 logical_draw。
+调用方不能在 random_int_exclusive 失败后切换到 modulo、系统随机数、相邻 logical_draw_id 或未声明 fallback。
 ```
 
 ### random_fixed_unit
@@ -277,9 +284,12 @@ location_node:<location_node_id>
 zone:<zone_id>
 object:<object_id>
 settlement:<settlement_id>
+named_npc:<named_npc_id>
 event:<event_id>
 test:<fixture_id>
 ```
+
+`RandomStreamRef.scope_id` 表示随机流作用域，不等同于 `FormationRuleContract.target_scope.kind` 或 `GeneratorOutputItem` 的 `target_scope_id`。目标作用域只用于说明规则输出归属、排序、冲突处理和审计；随机作用域必须由规则随机声明和实际抽样语义选择。目标专用类别例如 `resource_node`、`resource_deposit`、`flora_patch`、`population` 不因为出现在 target scope 中就自动成为 DRP scope_id 前缀；需要按这些实体独立拆分随机流时，必须先在本协议版本中登记对应前缀。
 
 在空间基础物化前，`world:<world_id>`、`region:<region_id>` 和 `chunk:<chunk_id>` 可以引用同一 manifest 中已经通过校验的布局候选目标 ID。此时 `GenerationInputRef.input_class` 仍必须是 `candidate`，不能因为 scope_id 使用未来目标 ID 就把它标记成已提交 world_fact。
 
@@ -315,13 +325,22 @@ shuffle_order
 id_suffix
 ```
 
+P0 `random_failure_code` 闭集：
+
+```text
+random_int_invalid_bound
+random_int_rejection_exhausted
+```
+
 规则：
 
 ```text
-logical_draw_id 必须由规则显式命名，不能使用循环下标的当前执行顺序。
+logical_draw_id 必须由规则在 FormationRuleContract.random.random_draws 中显式命名，不能使用循环下标的当前执行顺序。
 同一个 GeneratorOutputEnvelope 内，RandomDrawRef 必须按 stream_ref、logical_draw_id、draw_index 排序。
 candidate_set_hash 只在 weighted_choice 和 shuffle_order 中必填。
-result_id 必须引用被选中的候选或派生结果。
+成功抽样时，result_id 必须引用被选中的候选或派生结果。
+抽样失败且已消耗合法 draw 时，result_id 必须使用 random_failure:<random_failure_code>，例如 random_failure:random_int_rejection_exhausted。
+random_int_invalid_bound 属于调用参数校验失败；不得伪造 RandomDrawRef，应由调用方的 validator 或 failure_behavior 记录确定性失败。
 ```
 
 ## CandidateSet
@@ -402,7 +421,8 @@ weight_uint=0 的候选保留在 candidate_set_hash 中，但不参与 weighted_
 3. total_weight = sum(weight_uint)。
 4. 若 total_weight = 0，执行 zero_weight_policy。
 5. r = random_int_exclusive(total_weight)。
-6. 从头累计权重，选择第一个 cumulative_weight > r 的候选。
+6. 如果 random_int_exclusive 返回 failure_code，WeightedChoiceKernel 必须返回同一 failure_code，不能改用 modulo 或其他候选选择策略。
+7. 从头累计权重，选择第一个 cumulative_weight > r 的候选。
 ```
 
 Tie-break：
@@ -519,7 +539,7 @@ ChunkBaseFieldSmoothing 等待同一 Region 全部 ChunkBaseRawFieldsCandidate �
 2. `RandomDrawRef.stream_ref.domain` 必须属于 P0 `domain` 闭集。
 3. `RandomDrawRef.stream_ref.rule_id` 必须存在于规则注册表。
 4. `scope_id` 必须能解析到存在实体，或是生成前允许的 scope。
-5. `logical_draw_id` 必须属于该 rule 声明的 logical draw 列表。
+5. `logical_draw_id` 必须属于该 rule 的 `FormationRuleContract.random.random_draws` 列表，且 `draw_kind` 必须等于该 `logical_draw_id` 声明的 `draw_kind`。
 6. `candidate_set_hash` 必须可由规范化 CandidateSet 重算。
 7. `weighted_choice` 必须使用 `WeightedChoiceKernel`。
 8. 所有权重必须是整数，且范围为 0 到 1_000_000。
@@ -533,6 +553,9 @@ ChunkBaseFieldSmoothing 等待同一 Region 全部 ChunkBaseRawFieldsCandidate �
 16. 候选阶段使用未来目标 ID 作为 scope_id 时，必须能解析到同一 manifest 中已验证的布局候选。
 17. RegionClimateCandidateFormation 必须按 region_id 拆分随机流。
 18. ChunkBaseFieldSmoothing 启动前，同一 Region 的 raw fields 候选集合必须完整。
+19. random_int_exclusive 的 n 必须满足 1 <= n <= 2^64。
+20. random_int_exclusive 必须在最多 32 次 draw_index 尝试内成功或返回确定性 random_failure_code。
+21. RandomDrawRef.result_id 使用 random_failure: 前缀时，后缀必须属于 P0 random_failure_code 闭集。
 
 ## 测试清单
 
@@ -542,6 +565,7 @@ test_rule_bundle_hash_changes_random_stream
 test_content_pack_hash_changes_random_stream
 test_different_rule_ids_do_not_shift_each_other
 test_logical_draw_ids_are_independent
+test_random_draw_ref_matches_formation_rule_random_draws
 test_candidate_set_sorted_by_sort_key_and_id
 test_duplicate_candidate_id_rejected_or_merged_deterministically
 test_weighted_choice_uses_integer_weights
@@ -554,6 +578,10 @@ test_spatial_layout_candidate_ids_independent_of_thread_order
 test_spatial_layout_parallel_and_serial_hash_match
 test_spatial_layout_coordinates_use_stable_enumeration
 test_candidate_scope_target_id_requires_validated_layout_candidate
+test_random_int_exclusive_rejects_invalid_bound_without_draw
+test_random_int_exclusive_has_bounded_attempts
+test_random_int_exclusive_exhaustion_returns_failure_code
+test_random_draw_ref_random_failure_code_is_closed
 test_region_climate_stream_is_independent_per_region
 test_chunk_base_smoothing_requires_complete_region_raw_set
 test_weather_generation_uses_standard_weight_kernel
@@ -574,3 +602,4 @@ test_manifest_records_random_draw_refs
 9. P0 程序空间布局使用独立 `spatial_layout` 随机域和稳定坐标枚举。
 10. 候选阶段可以把已验证的未来目标 ID 用作随机 scope，但不能把候选冒充权威 world_fact。
 11. Region 气候和 chunk 基础场按各自目标 ID 拆分随机流，执行并行度不能改变结果。
+12. random_int_exclusive 是有限步协议：合法输入最多尝试 32 次，非法输入或耗尽尝试都产生确定性失败。

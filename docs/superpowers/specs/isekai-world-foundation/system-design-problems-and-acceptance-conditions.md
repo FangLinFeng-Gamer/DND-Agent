@@ -4,7 +4,7 @@ status: active
 layer: architecture
 owner: architecture
 created_at: 2026-07-11
-updated_at: 2026-07-18
+updated_at: 2026-07-19
 depends_on:
   - isekai.world_collection_influence_rules
   - isekai.field_domain_registry_rules
@@ -15,6 +15,9 @@ depends_on:
   - isekai.static_world_runtime_rules
   - isekai.world_knowledge_rules
   - isekai.world_generation_manifest_rules
+  - isekai.formation_rule_contract_rules
+  - isekai.executable_numeric_algorithm_rules
+  - isekai.generation_recovery_rules
   - isekai.ai_social_mind_rules
 provides:
   - system_design_problem_registry
@@ -336,14 +339,17 @@ random_stream = PRF(
 
 状态：`open`
 
+设计修复状态：`completed`
+
 问题包括：
 
-- 治理层和运行时文档定义了不同的 `change_op` 闭集。
 - event_type 闭集缺少对象揭示、生态变化、环境变化和社会变化等已要求事件。
 - `create` 示例只保存实体片段，无法从日志重建完整实体。
 - 行动流程先修改 WorldState、后写 EventLog，失败时会产生双写分叉。
 - Snapshot 的 event sequence 同时被要求“等于”和“不得大于”当前 sequence。
 - EventLog 自身属于权威集合，但未说明追加日志是否豁免“所有权威变化再写一条日志”，形成自记录悖论。
+- 缺少固定的 WorldStateContentHash、EventLogEntry.event_hash、WorldSnapshot.snapshot_hash 和 replay hash 校验协议。
+- 缺少 `materialize/derive` lowering 规则和 `delete_for_migration` 迁移 payload。
 
 证据来源：[字段域与注册表规则](./01-governance/field-domain-registry-rules.md)、[静态世界运行规则](./03-runtime/static-world-runtime-rules.md)、[WorldObject 规则](./02-world-model/world-object-rules.md)。
 
@@ -368,13 +374,31 @@ StateTransition = {
 
 完整 post-state 必须先通过所有 Validator，再使用 CAS 原子提交状态与事件。`create.value` 必须是完整规范化实体；明确 path/array 操作和同事件内顺序。EventLog append 是提交包络自身，不再为追加行为递归生成事件。Snapshot 只能指向已提交边界，并从 `event_sequence + 1` 开始重放。
 
-当前仍缺少：
+设计修复结果：
 
-- `StateTransition` 的 canonical schema。
-- `create/update/deactivate/materialize/derive` 的完整 change payload 结构。
-- `expected_sequence`、`expected_entity_revisions`、`preconditions` 和 CAS 原子提交规则。
-- `resulting_state_hash`、snapshot hash 和 event replay hash 的固定计算规则。
-- 从任意 Snapshot 之后重放事件并恢复同一 canonical world hash 的验收样例。
+- `change_op` 的唯一权威已收回到 [字段域与注册表规则](./01-governance/field-domain-registry-rules.md)。[静态世界运行规则](./03-runtime/static-world-runtime-rules.md) 只引用该闭集，不再单独定义 `delete/move/link/unlink`。
+- `StateTransition` 和 `StateTransitionBatch` 的 canonical schema 已写入 [静态世界运行规则](./03-runtime/static-world-runtime-rules.md)。生成清单、AI 社会模拟和知识传播只允许产出或提交该 schema，最终 EventLogEntry 必须由 StateTransitionCommitter 在原子提交时生成。`expected_sequence`、`expected_entity_revisions`、`preconditions`、幂等和 CAS 原子提交失败回滚规则也已在同一节定义。
+- `materialize/derive` lowering 已定义：生成阶段 operation 必须先降低为 EventLog 可重放的 `create/update/deactivate` changes，Candidate 留在 generation_audit，不能进入 world_facts。
+- `delete_for_migration` 已定义迁移审计 payload，必须携带 `migration_plan_id`、`migration_rule_id`、`delete_scope`、`old_value_hash`、`reason_code` 和可选 replacement，并只能由 migration_tool 使用。
+- WorldState/EventLog/Snapshot hash 已固定：`WorldStateContentHash` 排除 EventLogEntry、WorldSnapshot 和 `runtime_state.latest_snapshot_id` 以避免自引用；EventLog 使用 `previous_state_hash`、`previous_event_hash`、`resulting_state_hash` 和 `event_hash` 形成链式校验；Snapshot 使用 `state_hash`、`latest_event_hash` 和 `snapshot_hash` 固定恢复边界。
+- Snapshot 创建和恢复边界已拆开：创建时 `snapshot.event_sequence == WorldState.runtime_state.latest_event_sequence`；恢复到 `target_sequence` 时恢复器选择 `event_sequence <= target_sequence` 的最近有效 Snapshot，并从 `snapshot.event_sequence + 1` 重放。
+- SnapshotWriter 已定义为恢复检查点 writer，只写 snapshot namespace 和恢复索引；它不生成 StateTransition，`runtime_state.latest_snapshot_id` 不参与 WorldStateContentHash。
+- EventLog append 已定义为 StateTransitionCommitter 原子提交包络的一部分，不再为追加行为递归生成新的 EventLogEntry。
+- 跨集合 WriteACL 已收回旧的 EventLogEntry 直写入口：GenerationCommitter、KnowledgePropagation、AIProposalAuditWriter、SocialActionResolver、SocialFallbackResolver 和 SocialRumorIndexReducer 不能直接 `create EventLogEntry`，只能形成 StateTransition；唯一允许创建 EventLogEntry 的 writer 是 StateTransitionCommitter。
+
+工程关闭剩余项：
+
+- 实现 `StateTransitionValidator`、`StateTransitionCommitter` 和 `StateTransitionBatch` 原子提交。
+- 实现 `WorldStateContentHash`、`EventLogEntry.event_hash`、`WorldSnapshot.snapshot_hash` 和 replay 校验器。
+- 实现 `materialize/derive` lowering validator。
+- 实现 `delete_for_migration` payload validator。
+- 实现从 event 0 重放、从任意有效 Snapshot 重放并恢复同一 canonical world hash 的测试。
+- 实现 `test_state_transition_commit_is_atomic_with_event_log_append`。
+- 实现 `test_event_hash_chains_previous_event_hash`。
+- 实现 `test_event_replay_from_zero_restores_target_hash`。
+- 实现 `test_snapshot_restore_hash_matches_full_event_replay_hash`。
+- 实现 `test_snapshot_writer_updates_recovery_index_atomically`。
+- 实现 `test_only_state_transition_committer_can_create_event_log_entry`。
 
 ### P0-06 同一实体存在互不兼容的权威 schema
 
@@ -896,7 +920,9 @@ GenerationOutputValidator
 
 状态：`open`
 
-设计完成度：`partial_design`
+设计完成度：`contract_protocol_completed`
+
+设计修复状态：`completed`
 
 问题：世界生成阶段已经确定“先生成什么、读取什么、输出什么”，但部分领域还没有把“为什么会形成这个结果”写成足够精确的规则。这里的形成规则包括气候、地形、水文、生物群系、资源、植物、动物、聚落、Site、LocationNode、WorldObject、历史候选和社会状态等。
 
@@ -911,20 +937,40 @@ GenerationOutputValidator
 
 关闭条件：每个 formation rule 必须补齐函数签名、输入字段、输出字段、参数表、冲突处理、fallback、validator 条件和最小回归测试。没有补齐前，对应领域只能做验证性原型，不能冻结长期存档格式。
 
-设计关闭剩余项：
+设计修复结果：
 
-- 每类候选的数值参数表、取值范围、默认值和版本。
-- 形成条件的明确阈值。例如什么坡度、湿度、海拔和邻接水体组合会产生沼泽、湿地、山地、河谷或特定 biome tag。
-- 多个规则同时命中时的优先级、合并规则和拒绝规则。
-- 没有候选命中时的 fallback 行为。
-- 每个 Region / WorldChunk 的最小、最大和目标数量规则，例如资源点数量、植物 patch 数量、动物种群数量、Site 数量。
-- 跨领域约束，例如历史候选如何改变资源权重、聚落如何影响道路或 Site，但不能反向破坏已提交空间基础。
+- 已新增 [FormationRule 合约与注册表规则](./00-architecture/formation-rule-contract-rules.md)，定义 `FormationRuleContract`、`FormationRuleRegistry` 和 `FormationRuleContractValidator`。
+- 已明确 `GenerationStageContract` 只负责阶段 DAG 和读写边界；`FormationRuleContract` 负责阶段内部规则如何从输入形成输出。
+- 已规定每条规则必须声明 `function_signature`、`read_set`、`forbidden_read_set`、`output_set`、`parameters`、`random`、`candidate_generation`、`candidate_selection`、`conflict_policy`、`fallback_policy`、`validator_rules` 和 `regression_tests`。
+- 已定义 P1 最小形成规则注册清单，覆盖 spatial layout、climate、base field、terrain、hydrology、biome、resource、flora、fauna、site、location node、zone、world object、origin history、settlement social、weather、environment、hazard/obstacle 和 initial knowledge。
+- 已在 [世界生成输出清单规则](./00-architecture/world-generation-manifest-rules.md) 中新增 `formation_rule_refs`，并要求 `GeneratorOutputItem.rule_id` 必须引用当前阶段允许且注册的 FormationRuleContract。
+- 已把 `algorithm.status` 拆成 `ready`、`contract_only`、`deprecated`：P1-06 负责合约完整，P1-07 负责具体数值算法；`contract_only` 只能用于验证性原型，不能冻结长期存档格式。
+- 已要求 conflict、fallback 和 random draw 都必须显式声明，不能由实现临时决定。
+
+工程关闭剩余项：
+
+- 实现 `FormationRuleRegistry` 加载器。
+- 实现 `FormationRuleContract` schema 和 `FormationRuleContractValidator`。
+- 为 P1 最小注册清单逐条补 contract 实例。
+- 在 `GenerationStageContract` 校验中强制 `formation_rule_refs` 存在并引用注册规则。
+- 在 `GeneratorOutputItem` 校验中强制 `rule_id` 属于当前阶段的 `formation_rule_refs`。
+- 实现 `algorithm.status=contract_only` 的运行门禁：只能跑验证性原型，不能标记为长期可重放基线。
+- 实现 `test_every_generation_stage_references_registered_formation_rule`。
+- 实现 `test_generator_output_rule_id_must_be_registered`。
+- 实现 `test_stage_reads_cover_formation_rule_read_set`。
+- 实现 `test_formation_rule_output_set_must_be_write_acl_subset`。
+- 实现 `test_formation_rule_parameters_have_unit_range_default_precision`。
+- 实现 `test_formation_rule_random_requires_random_draw_ref`。
+- 实现 `test_formation_rule_conflict_policy_is_registered`。
+- 实现 `test_formation_rule_fallback_policy_is_registered`。
+- 实现 `test_contract_only_algorithm_cannot_mark_long_term_replay_baseline`。
+- 实现 `test_p1_minimum_formation_rule_registry_has_all_required_rule_prefixes`。
 
 ### P1-07 可执行数值算法未完成
 
 状态：`open`
 
-设计完成度：`design_incomplete`
+设计完成度：`numeric_protocol_completed`
 
 问题：确定性随机协议已经定义了“随机数怎么可重放”，但还没有完整定义“这些随机数怎样变成气候、地形、水文、生态和聚落结果”。Seed 负责抽样可重放；数值算法负责把输入、参数和抽样结果变成可验证世界事实。
 
@@ -938,23 +984,49 @@ GenerationOutputValidator
 
 关闭条件：所有数值算法必须声明单位、范围、精度、舍入规则、稳定排序、tie-break、最大重采样次数和失败行为。任何使用浮点的实现都必须规定 canonical quantization，否则不能进入可重放基线。
 
-设计关闭剩余项：
+设计修复状态：`completed`
 
-- `ChunkBaseRawFieldsCandidate` 的具体生成公式。
-- `ChunkBaseFieldSmoothing` 的邻接核、边界处理、迭代次数和定点精度。
-- terrain 分类公式，例如 elevation、slope、wetness、roughness 如何映射为 terrain type。
-- hydrology 路由、河流形成、湖泊/湿地形成和排水约束。
-- local climate 修正规则，例如高度、水体、植被、风向如何影响温度、湿度和风。
-- biome tag 推导矩阵和冲突处理。
-- weather 初始状态和转移权重核。
-- resource/flora/fauna 密度、数量、恢复率和 rarity 权重到实际数量的转换。
-- settlement/site/object placement 的评分函数、拒绝采样上限和 fallback。
+设计修复结果：
+
+- 已新增 [可执行数值算法规则](./01-governance/executable-numeric-algorithm-rules.md)，定义 `NumericAlgorithmSpec`、`NumericAlgorithmRegistry`、`FixedPointKernel` 和 `NumericAlgorithmValidator`。
+- 已明确长期可重放基线禁止隐式 float/double，所有 ready 算法必须使用整数或定点类型。
+- 已定义 P1 数值类型闭集：`normalized_milli`、`signed_normalized_milli`、`basis_points`、`weight_uint`、`score_int`、`count_int`、`minute_int`、`meter_int`、`celsius_tenth`、`three_decimal_quantity`。
+- 已定义统一运算规则：clamp、非负/带符号 round divide、scaled multiply、固定小数 canonical 输出和随机 fixed_unit 到 normalized_milli 的转换。
+- 已定义 `NumericAlgorithmSpec` 字段：`algorithm_id`、`algorithm_version`、`algorithm_status`、`used_by_rule_ids`、`input_fields`、`output_fields`、`parameters`、`operation_sequence`、`iteration_order`、`random_draws`、`output_quantization`、`tie_break`、`rejection`、`failure_behavior`、`validator_rules`、`regression_tests`。
+- 已定义 `NumericAlgorithmRegistry`，并补齐 P1 最小算法注册清单，覆盖 climate、base_field、terrain、hydrology、local_climate、biome、weather、resource、flora、fauna、settlement_anchor、site 和 object materialization。
+- 已给出 P1 默认可执行算法：Region 气候 weighted choice、Chunk raw fields 生成公式、Von Neumann 邻接平滑、terrain 阈值分类、hydrology downhill flow、水体存在判断、local climate 修正、biome tag 矩阵、weather 转移核、resource/flora/fauna 数量与评分、settlement/site 放置评分、object 初始数量算法。
+- 已把 FormationRuleContract 收紧：`algorithm.status=ready` 时，`algorithm.algorithm_id` 必须能解析到 ready `NumericAlgorithmSpec`。
+
+工程关闭剩余项：
+
+- 实现 `NumericAlgorithmRegistry` 加载器。
+- 实现 `NumericAlgorithmSpec` schema 和 `NumericAlgorithmValidator`。
+- 在 `FormationRuleContractValidator` 中校验 ready `algorithm_id` 能解析到 ready `NumericAlgorithmSpec`。
+- 在 world generation manifest 中记录每个输出使用的 `algorithm_id` 和 `algorithm_version`。
+- 把 P1 最小算法注册清单逐条落成机器可读规则包。
+- 将 `ChunkBaseRawFieldsCandidate` 输出改为 canonical 三位定点字符串，旧数字示例只能作为文档阅读示例，不能进入可重放 baseline。
+- 实现固定点运算内核，禁止 ready 算法调用 float/double/Math.random/本地 seed。
+- 实现 `test_numeric_algorithm_registry_has_p1_minimum_algorithms`。
+- 实现 `test_ready_formation_rule_algorithm_id_resolves_to_numeric_algorithm_spec`。
+- 实现 `test_numeric_algorithm_uses_canonical_fixed_point_types`。
+- 实现 `test_numeric_algorithm_rejects_float_output_in_replay_baseline`。
+- 实现 `test_numeric_algorithm_declares_output_quantization_for_every_numeric_field`。
+- 实现 `test_numeric_algorithm_iteration_order_is_stable`。
+- 实现 `test_numeric_algorithm_random_draws_use_drp_refs`。
+- 实现 `test_numeric_algorithm_rejection_attempts_are_bounded`。
+- 实现 `test_base_field_raw_generation_replays_same_seed`。
+- 实现 `test_base_field_smoothing_uses_von_neumann_previous_round`。
+- 实现 `test_terrain_classification_threshold_edges_are_stable`。
+- 实现 `test_hydrology_downhill_tiebreak_uses_chunk_id`。
+- 实现 `test_weather_transition_empty_candidates_falls_back_to_cloudy`。
+- 实现 `test_resource_stock_quantity_is_three_decimal_and_conserved`。
+- 实现 `test_site_placement_same_score_uses_site_type_then_chunk_id`。
 
 ### P1-08 失败恢复与断点续生成尚未设计
 
 状态：`open`
 
-设计完成度：`not_designed`
+设计完成度：`recovery_protocol_completed`
 
 问题：当前文档定义了正常生成路径，但还没有定义生成过程中断、校验失败、程序崩溃、重复提交或升级规则版本时如何继续。没有这部分，长流程生成只能依赖“一次跑完”，不能支持可靠恢复。
 
@@ -962,16 +1034,50 @@ GenerationOutputValidator
 
 关闭条件：必须定义 `GenerationRunState`、`GenerationStageRunState`、checkpoint schema、resume 协议、重试规则、回滚规则和崩溃注入测试。如果 P0 明确只支持一次性验证性原型，本项可以被降级为当前版本外的 `accepted_limited_scope`，但必须写明不支持断点续生成。
 
-设计关闭剩余项：
+设计修复状态：`completed`
 
-- 生成阶段状态机，例如 `pending -> running -> generated -> validated -> committed`，以及 `rejected`、`failed`、`rolled_back` 的语义。
-- checkpoint 写入时机和内容。
-- `resume_token`、`attempt_id`、`idempotency_key`、`stage_run_id` 和 output hash 的关系。
-- 一个阶段失败后，哪些 random draw 可以保留，哪些候选必须作废。
-- `atomic_commit_group_id` 失败时如何回滚或重试。
-- 重复执行同一 stage 时如何判定是幂等成功、重复提交、hash 冲突还是需要人工干预。
-- 规则版本或 content pack 版本变化后，已完成阶段是否可复用。
-- 生成审计损坏、缺失或 hash 不一致时的拒绝和修复策略。
+设计修复结果：
+
+- 已新增 [生成失败恢复与断点续生成规则](./00-architecture/generation-recovery-rules.md)，定义 `GenerationRunState`、`GenerationStageRunState`、`GenerationCheckpoint`、`GenerationResumeToken`、`GenerationRecoveryManager` 和 `GenerationRunValidator`。
+- 已明确生成记录分为 `generation_control` 和 `generation_audit`：`generation_control` 用于断点续跑，不进入最终 `WorldStateContentHash`；`generation_audit` 是最终 canonical 审计，进入世界内容 hash。
+- 已定义 run 状态闭集：`created`、`running`、`paused`、`completed`、`failed`、`repair_required`、`aborted`。
+- 已定义 stage 状态闭集：`pending`、`claimed`、`running`、`generated`、`validated`、`commit_prepared`、`committing`、`committed`、`skipped_idempotent`、`rejected`、`failed`、`rolled_back`、`repair_required`。
+- 已定义 checkpoint 写入边界：`run_created`、`stage_claimed`、`stage_output_persisted`、`stage_output_validated`、`stage_commit_prepared`、`stage_committed`、`stage_rejected`、`stage_failed`、`run_completed`、`run_failed`。
+- 已定义 `stage_run_id`、`output_id`、`attempt_id` 和提交 `idempotency_key` 的稳定派生规则，并规定提交幂等键不得包含 `attempt_no`。
+- 已定义 resume 协议：校验 token、checkpoint 链、版本锁、manifest/envelope/value hash、EventLog hash 和 stage 状态后，从最早未完成且依赖满足的 stage/scope 继续。
+- 已定义失败分类和重试规则：只有 `generator_crash`、`io_write_failed`、未提交且可重算的 `missing_output_payload` 可自动重试；hash、版本、EventLog、checkpoint 相关问题直接进入 `repair_required`。
+- 已定义 random draw 与输出处理：未提交 envelope 可以整体丢弃重算；已提交 output 的 RandomDrawRef 必须保留；不能只保留单个 draw 而丢弃 CandidateSet 或 output payload。
+- 已定义 `atomic_commit_group_id` 恢复规则：完整提交可幂等标记 committed，未提交可用同一 batch 重试，部分提交必须 `repair_required`。
+- 已定义版本变化后的复用规则：版本锁完全一致才可 resume；未提交旧 run 可 abort 后新建，已提交旧 run 不能原地续跑。
+- 已更新 [静态世界运行规则](./03-runtime/static-world-runtime-rules.md)，明确 `generation_control` 不进入 `WorldStateContentHash`。
+- 已更新 [世界生成输出清单规则](./00-architecture/world-generation-manifest-rules.md)，明确 manifest 不记录 attempt、失败重试次数或 resume token。
+
+工程关闭剩余项：
+
+- 实现 `GenerationRunStore`，持久化 `GenerationRunState`、`GenerationStageRunState`、`GenerationCheckpoint` 和 `GenerationResumeToken`。
+- 实现 `GenerationCheckpointWriter`，按稳定边界写 checkpoint 链。
+- 实现 `GenerationRunValidator`，校验 control hash、checkpoint 链、output hash、value hash 和版本锁。
+- 在 generation scheduler 中实现 run/stage 状态机。
+- 在 `GenerationOutputValidator` 后写 `stage_output_validated` checkpoint。
+- 在 `StateTransitionCommitter` 前写 `stage_commit_prepared` checkpoint，并使用稳定 idempotency_key。
+- 实现 `GenerationRecoveryManager.resume(token)`。
+- 为 atomic commit group 增加 batch 幂等查询和部分提交检测。
+- 实现 `test_generation_run_state_has_stable_run_id`。
+- 实现 `test_generation_checkpoint_chain_hashes_are_contiguous`。
+- 实现 `test_generation_resume_token_does_not_bypass_checkpoint_validation`。
+- 实现 `test_generation_running_stage_reruns_with_same_output_hash_after_crash`。
+- 实现 `test_generated_stage_reuses_persisted_envelope_when_hash_matches`。
+- 实现 `test_generated_stage_hash_conflict_enters_repair_required`。
+- 实现 `test_validated_stage_resumes_to_commit_prepared`。
+- 实现 `test_committing_stage_queries_event_log_before_retry`。
+- 实现 `test_committed_stage_is_not_rerun_on_resume`。
+- 实现 `test_stage_attempt_no_not_in_commit_idempotency_key`。
+- 实现 `test_duplicate_stage_commit_returns_existing_result`。
+- 实现 `test_atomic_commit_group_resume_retries_when_no_event_written`。
+- 实现 `test_atomic_commit_group_partial_event_log_enters_repair_required`。
+- 实现 `test_version_lock_mismatch_rejects_resume`。
+- 实现 `test_generation_control_not_in_final_world_state_content_hash`。
+- 实现 `test_generation_crash_injection_at_each_checkpoint_boundary_recovers_or_rejects_deterministically`。
 
 ## 系统设计必须满足的条件
 
@@ -1154,13 +1260,14 @@ Replay(snapshot, ordered events) -> canonical WorldState
 1. 重构治理层：FieldSpec、AuthorityDomain、WriteACL、ID namespace、registry version。
 2. 统一 EventLog、StateTransition、Snapshot、canonical hash 和迁移协议。
 3. 重排世界生成 DAG，并将 `GenerationStageContract`、manifest 和版本化随机协议落成机器可加载 registry。
-4. 定义 `GenerationRunState`、checkpoint、resume、重试和回滚协议。
-5. 补齐世界生成的领域形成规则、数值算法、参数表、fallback 和冲突处理。
-6. 统一 CreatureGroup、ChunkEdge、Portal、WorldObject state 等 canonical schema。
-7. 拆分 base/effective passability，并为所有多来源影响定义 reducer。
-8. 补齐时间区间、天气核、残留效果、生态和资源守恒。
-9. 修正 Catalog affordance/component 契约和 Materializer 纯函数语义。
-10. 最后补全 AI 社会状态、ObservationSnapshot、Proposal 和仲裁协议。
+4. 定义 FormationRule 合约、注册表、参数表、fallback、冲突处理和 validator 边界。
+5. 定义可执行数值算法、定点精度、量化、排序、重采样上限和失败行为。
+6. 定义 `GenerationRunState`、checkpoint、resume、重试、幂等提交和回滚/修复协议。
+7. 统一 CreatureGroup、ChunkEdge、Portal、WorldObject state 等 canonical schema。
+8. 拆分 base/effective passability，并为所有多来源影响定义 reducer。
+9. 补齐时间区间、天气核、残留效果、生态和资源守恒。
+10. 修正 Catalog affordance/component 契约和 Materializer 纯函数语义。
+11. 最后补全 AI 社会状态、ObservationSnapshot、Proposal 和仲裁协议。
 
 该顺序不能倒置。AI、生态或内容包实现不得先于治理、事务、确定性和 canonical schema 自行固化隐式规则。
 

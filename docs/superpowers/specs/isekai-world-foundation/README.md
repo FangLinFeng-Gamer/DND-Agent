@@ -73,7 +73,7 @@ WorldGenerationParameters + RandomSeedMaterial
 -> 世界事实校验、初始知识、after_world_generation Snapshot
 ```
 
-权威阶段顺序和直接依赖见 [世界集合与影响规则](./00-architecture/world-collection-influence-rules.md)；候选、并行屏障和原子提交协议见 [世界生成输出清单规则](./00-architecture/world-generation-manifest-rules.md)；空间候选字段见 [地点与空间规则](./02-world-model/location-space-rules.md)；气候与物理候选字段见 [气候、地形、生物群系与天气形成规则](./02-world-model/climate-terrain-formation-rules.md)。
+权威阶段顺序和直接依赖见 [世界集合与影响规则](./00-architecture/world-collection-influence-rules.md)；候选、并行屏障和原子提交协议见 [世界生成输出清单规则](./00-architecture/world-generation-manifest-rules.md)；生成失败恢复、checkpoint 和 resume 协议见 [生成失败恢复与断点续生成规则](./00-architecture/generation-recovery-rules.md)；阶段内部形成规则的统一合约见 [FormationRule 合约与注册表规则](./00-architecture/formation-rule-contract-rules.md)；形成规则引用的可重放数值算法见 [可执行数值算法规则](./01-governance/executable-numeric-algorithm-rules.md)；空间候选字段见 [地点与空间规则](./02-world-model/location-space-rules.md)；气候与物理候选字段见 [气候、地形、生物群系与天气形成规则](./02-world-model/climate-terrain-formation-rules.md)。
 
 ## 当前有效文档
 
@@ -85,11 +85,14 @@ WorldGenerationParameters + RandomSeedMaterial
 
 - [世界集合与影响规则](./00-architecture/world-collection-influence-rules.md)
 - [世界生成输出清单规则](./00-architecture/world-generation-manifest-rules.md)
+- [生成失败恢复与断点续生成规则](./00-architecture/generation-recovery-rules.md)
+- [FormationRule 合约与注册表规则](./00-architecture/formation-rule-contract-rules.md)
 
 ### 01-governance
 
 - [字段域与注册表规则](./01-governance/field-domain-registry-rules.md)
 - [确定性随机协议](./01-governance/deterministic-random-protocol-rules.md)
+- [可执行数值算法规则](./01-governance/executable-numeric-algorithm-rules.md)
 
 ### 02-world-model
 
@@ -173,4 +176,4 @@ Validator 规则
 
 Catalog 是内容包草案，不是运行时权威状态。运行时对象必须实例化为 `WorldObject`，并经过 `FieldDomainValidator` 和目标实体 validator 后才能进入 `WorldState`。
 
-LLM proposal 不是权威状态。所有 AI 输出必须经过 proposal validator、deterministic resolver 和 EventLog。
+LLM proposal 不是权威状态。所有 AI 输出必须经过 proposal validator 和 deterministic resolver，形成 StateTransition 后由 StateTransitionCommitter 生成 EventLog。

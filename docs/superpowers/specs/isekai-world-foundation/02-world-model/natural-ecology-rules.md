@@ -760,7 +760,7 @@ ResourceNode.stock 是可提取数量的权威来源；装水必须同时修改 
 | `stock.extraction.min_source_amount` | 单次提取最小消耗源库存数量。 |
 | `stock.extraction.max_source_amount` | 单次提取最大消耗源库存数量。 |
 | `stock.extraction.source_to_output_ratio` | 源库存到产出库存的比例。`1.000` 表示消耗 1 单位源库存生成 1 单位产出。 |
-| `stock.extraction.allowed_loss_ratio` | 允许损耗比例，范围 0.000 到 1.000。损耗必须写入 EventLog。 |
+| `stock.extraction.allowed_loss_ratio` | 允许损耗比例，范围 0.000 到 1.000。损耗必须进入 StateTransition，并由 StateTransitionCommitter 生成 EventLog。 |
 | `stock.recovery.recoverable` | 是否会随时间自然恢复。 |
 | `stock.recovery.rate_amount_per_day` | 每 1440 世界分钟恢复的数量。不可恢复资源必须为 `0.000`。 |
 | `stock.recovery.cap_amount` | 恢复上限。必须满足 `0 <= cap_amount <= capacity_amount`。 |
@@ -890,7 +890,7 @@ ResourceNode.stock 是可提取数量的权威来源；装水必须同时修改 
 
 ```text
 转换必须由 deterministic resolver 执行。
-转换必须写 EventLog。
+转换必须通过 StateTransition 提交，并由 StateTransitionCommitter 生成 EventLog。
 转换结果必须经过 WorldObjectValidator。
 生态实体必须同步更新 stock、counts、derived 或 state，例如 stock.current_amount、derived.depleted、disturbed。
 DM 不能通过叙事直接把生态产物加入玩家物品栏。
@@ -977,7 +977,7 @@ actual_source_amount 必须落在 stock.extraction.min_source_amount 和 max_sou
 actual_source_amount 不得超过 stock.current_amount。
 产出 WorldObject 时，resource_profile.amount 或 material_profile.amount 必须等于 net_output。
 装入容器时，必须继续调用或内联执行 QuantityTransferResolver 的容量、重量和 quantity_contents 校验。
-source.stock.current_amount、目标物品或目标容器、derived.depleted 和 EventLog 必须同事务提交。
+source.stock.current_amount、目标物品或目标容器、derived.depleted 必须进入同一个 StateTransition 或 StateTransitionBatch，并由 StateTransitionCommitter 在同一事务生成 EventLog。
 失败时 WorldState 不得发生部分修改。
 ```
 
@@ -1083,7 +1083,7 @@ stock.recovery.rate_amount_per_day=0.000
 30. `derived.harvested`、`derived.depleted`、`derived.group_member_count`、`derived.active_actor_count` 不能手填，必须可由权威字段重算。
 31. 动物数量转移必须由 `EcologyPopulationTransferResolver` 原子提交。
 32. 生态资源提取和恢复必须由 `EcologyResourceExtractionResolver` 或 `EcologyRecoveryResolver` 原子提交。
-33. 任何提取、恢复、死亡、迁移、升级 Actor 或生成产物都必须写 EventLog。
+33. 任何提取、恢复、死亡、迁移、升级 Actor 或生成产物都必须通过 StateTransition 提交，并由 StateTransitionCommitter 生成 EventLog。
 34. 初始 ResourceFormation、FloraFormation 和 FaunaFormation 的输入清单不得包含权威 OriginEvent；若使用历史倾向，只能引用同一 manifest 中已验证的 OriginEventCandidate。
 
 ## 与现有文档关系

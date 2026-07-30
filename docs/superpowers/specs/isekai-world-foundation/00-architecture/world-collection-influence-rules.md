@@ -35,7 +35,7 @@ provides:
 - 明确当前所有内容属于哪个世界大集合。
 - 明确集合之间只能通过哪些规则器产生影响。
 - 明确集合内部允许哪些状态转化。
-- 明确哪些变化必须写 EventLog。
+- 明确哪些变化必须形成 StateTransition，并由 StateTransitionCommitter 生成 EventLog。
 - 防止 DM 文本、LLM proposal 或内容包直接绕过规则修改世界。
 
 ## 非目标
@@ -49,7 +49,7 @@ provides:
 
 ### 1. 集合不能随意互相写状态
 
-一个集合不能直接修改另一个集合的权威状态。跨集合影响必须通过 Deriver、Resolver、Validator 和 EventLog。
+一个集合不能直接修改另一个集合的权威状态。跨集合影响必须通过 Deriver、Resolver、Validator、StateTransition 和 StateTransitionCommitter，最终由 EventLog 记录。
 
 同一集合内部也不能随意写字段。所有权威写入必须同时通过 `FieldOwnership` 和 `WriteACL`。
 
@@ -445,6 +445,8 @@ propose
 project_read
 ```
 
+本节 `operation` 是 WriteACL 权限域，用来判断某类规则是否允许写某类字段；它不是 EventLog 的 `changes[].op`。EventLog `change_op` 的唯一权威定义在 [字段域与注册表规则](../01-governance/field-domain-registry-rules.md)，`materialize`、`derive`、`propose`、`project_read` 等上游语义必须在提交前降低为可重放的 `create/update/deactivate` changes，不能直接进入 `changes[].op`。
+
 规则：
 
 ```text
@@ -455,7 +457,7 @@ update / derive 必须逐字段检查 FieldPath。
 materialize 只允许从已验证 catalog 生成实体，不允许跳过目标实体 validator。
 propose 只能写 AI proposal 集合，不能写权威 WorldState。
 project_read 只能读权威状态生成投影，不能写权威状态。
-delete_for_migration 只允许 migration_tool 使用，并必须写 migration note 或 EventLog。
+delete_for_migration 只允许 migration_tool 使用，必须进入迁移 StateTransition，并由 StateTransitionCommitter 生成 EventLogEntry。
 生成阶段 `GeneratorOutputItem.operation` 只能使用 `create`、`update`、`deactivate`、`materialize`、`derive`；即使全局 WriteACL 支持，生成阶段也必须拒绝 `propose`、`project_read` 和 `delete_for_migration`。
 ```
 
@@ -546,8 +548,11 @@ P0 最小 ACL：
 | `GenerationOutputValidator` | 任意权威 EntityType | `WriteACL 显式列出的字段` | `create/update/derive/materialize` | `deny` |
 | `GenerationCommitter` | 生成 manifest 已验证的 EntityType | `GenerationOutputValidator 已通过的 FieldPath` | `create/update/derive/materialize` | `allow` |
 | `GenerationCommitter` | 任意 EntityType | `*` | `propose/project_read/delete_for_migration` | `deny` |
-| `GenerationCommitter` | `EventLogEntry` | `*` | `create` | `allow` |
-| `GenerationCommitter` | `StaticWorldRuntimeState` | `runtime_state.latest_event_sequence` | `update` | `allow` |
+| `GenerationCommitter` | `EventLogEntry` | `*` | `create` | `deny` |
+| `GenerationCommitter` | `StaticWorldRuntimeState` | `runtime_state.latest_event_sequence` | `update` | `deny` |
+| `StateTransitionCommitter` | `StateTransitionValidator 已通过的 EntityType` | `StateTransitionValidator 已通过的 FieldPath` | `create/update/deactivate/delete_for_migration` | `allow` |
+| `StateTransitionCommitter` | `EventLogEntry` | `*` | `create` | `allow` |
+| `StateTransitionCommitter` | `StaticWorldRuntimeState` | `runtime_state.latest_event_sequence` | `update` | `allow` |
 | `SnapshotWriter` | `WorldSnapshot` | `*` | `create` | `allow` |
 | `SnapshotWriter` | `StaticWorldRuntimeState` | `runtime_state.latest_snapshot_id` | `update` | `allow` |
 
@@ -560,7 +565,7 @@ P0 最小 ACL：
 | `PolicyAndPressureFormation` | `LawPolicy`、`EconomyState`、`SocialPressureState` | `*` | `create/update` | `allow` |
 | `InitialKnowledgeFormation` | `KnowledgeState`、`DiscoveryState`、`RumorState`、`SecretState` | `*` | `create/update` | `allow` |
 | `KnowledgePropagation` | `KnowledgeState`、`DiscoveryState`、`RumorState`、`SecretState` | `*` | `create/update/deactivate` | `allow` |
-| `KnowledgePropagation` | `EventLogEntry` | `*` | `create` | `allow` |
+| `KnowledgePropagation` | `EventLogEntry` | `*` | `create` | `deny` |
 | `AgentObservationBuilder` | `AgentObservationSnapshot` | `*` | `create/update` | `allow` |
 | `AISocialScheduler` | `AIDecisionTick` | `*` | `create` | `allow` |
 | `AISocialScheduler` | `AIDecisionTick` | `status` | `update` | `allow` |
@@ -571,31 +576,33 @@ P0 最小 ACL：
 | `AIProposalConflictResolver` | `GroupDecisionProposal`、`NPCActionProposal` | `status`、`validation` | `update` | `allow` |
 | `AIProposalConflictResolver` | `AIDecisionTick` | `status` | `update` | `allow` |
 | `AIProposalConflictResolver` | `ProposalResourceReservation` | `*` | `create/update` | `allow` |
-| `AIProposalAuditWriter` | `EventLogEntry` | `*` | `create` | `allow` |
+| `AIProposalAuditWriter` | `EventLogEntry` | `*` | `create` | `deny` |
 | `SocialActionResolver` | `GroupDecisionProposal`、`NPCActionProposal` | `status`、`resolution` | `update` | `allow` |
 | `SocialActionResolver` | `AIDecisionTick` | `status`、`result` | `update` | `allow` |
 | `SocialActionResolver` | `ProposalResourceReservation` | `status` | `update` | `allow` |
 | `SocialActionResolver` | `SocialPressureState` | `pressure.*`、`active_patrol_level`、`state_revision` | `update` | `allow` |
 | `SocialActionResolver` | `SocialGroupState`、`NamedNPCState` | `attitude_to_player`、`state_revision` | `update` | `allow` |
-| `SocialActionResolver` | `EventLogEntry` | `*` | `create` | `allow` |
+| `SocialActionResolver` | `EventLogEntry` | `*` | `create` | `deny` |
 | `SocialActionResolver` | `KnowledgeState`、`RumorState`、`SecretState` | `*` | `create/update/deactivate` | `deny` |
 | `SocialFallbackResolver` | `AIDecisionTick` | `status`、`result` | `update` | `allow` |
-| `SocialFallbackResolver` | `EventLogEntry` | `*` | `create` | `allow` |
+| `SocialFallbackResolver` | `EventLogEntry` | `*` | `create` | `deny` |
 | `SocialRumorIndexReducer` | `SocialPressureState` | `active_rumor_ids`、`state_revision` | `update` | `allow` |
-| `SocialRumorIndexReducer` | `EventLogEntry` | `*` | `create` | `allow` |
+| `SocialRumorIndexReducer` | `EventLogEntry` | `*` | `create` | `deny` |
 | `AIProposalExpiryResolver` | `GroupDecisionProposal`、`NPCActionProposal`、`ProposalResourceReservation` | `status` | `update` | `allow` |
 | `Projection` | 任意权威 EntityType | `*` | `update/create/deactivate` | `deny` |
 | `MigrationTool` | 迁移计划列出的 EntityType | 迁移计划列出的 FieldPath | `delete_for_migration/update/create` | `allow` |
 
 `GenerationCommitter` 不是新的自由写入口。它只能提交已经由 `GenerationOutputValidator` 验证通过的 exact `GeneratorOutputItem`；字段许可仍以输出项中的原始 `producer + rule_id + EntityType + FieldPath + operation` 为准，不能用 `GenerationCommitter` 自己的身份扩大写权限。
 
-`GenerationCommitter` 只能把 `world_fact_outputs` 和 `knowledge_outputs` 转成权威 StateTransition；只能根据 `event_drafts` 创建最终 `EventLogEntry`；只能根据 `snapshot_refs` 调用 SnapshotWriter 创建或引用 `WorldSnapshot`。`candidate_outputs` 只能保存在 `system_ledger.generation_audit` 供后续生成阶段显式读取，不能提交进 `world_facts` 或 `knowledge_facts`。
+`StateTransitionCommitter` 也不是新的业务写权限主体。它只负责把已经由 `StateTransitionValidator` 按原始 `producer + rule_id + EntityType + FieldPath + operation` 校验通过的 changes 原子落盘；不能自行创建、改写或补充业务 changes。
 
-`AIProposalAuditWriter` 只能追加 `AIDecisionTickCreated`、`AIDecisionTickStatusChanged`、`AIProposalRecorded`、`AIProposalStatusChanged`、`ProposalReservationCreated` 和 `ProposalReservationStateChanged`，且 `changes` 只能引用 AI proposal 集合中的 system_ledger 实体。社会后果必须由 `SocialActionResolver` 或对应领域 resolver 产生独立领域事件。
+`GenerationCommitter` 只能把 `world_fact_outputs` 和 `knowledge_outputs` 转成权威 StateTransition；只能根据 `event_drafts` 填充 StateTransition 的 `event_type`、`caused_by`、`summary` 和 `ordered_changes`；最终 `EventLogEntry`、`sequence`、`previous_event_hash` 和 `resulting_state_hash` 必须由 `StateTransitionCommitter` 在原子提交时生成。`GenerationCommitter` 只能根据 `snapshot_refs` 调用 SnapshotWriter 创建或引用 `WorldSnapshot`。`candidate_outputs` 只能保存在 `system_ledger.generation_audit` 供后续生成阶段显式读取，不能提交进 `world_facts` 或 `knowledge_facts`。
 
-`SocialActionResolver` 只能追加 `SocialPressureChanged`、`PatrolLevelChanged`、`SocialAttitudeChanged`、`ServiceOfferCreated`、`ServiceRequestRefused`、`KnowledgeDisclosureResolved` 和 `RumorSpreadRequested`。`KnowledgeCreated`、`KnowledgeUpdated`、`RumorCreated` 和 `SecretUpdated` 只能由 `KnowledgePropagation` 追加；`SocialRumorIndexChanged` 只能由 `SocialRumorIndexReducer` 追加。
+`AIProposalAuditWriter` 只能形成 `event_type=AIDecisionTickCreated`、`AIDecisionTickStatusChanged`、`AIProposalRecorded`、`AIProposalStatusChanged`、`ProposalReservationCreated` 和 `ProposalReservationStateChanged` 的审计 StateTransition，且 `ordered_changes` 只能引用 AI proposal 集合中的 system_ledger 实体。社会后果必须由 `SocialActionResolver` 或对应领域 resolver 产生独立领域 StateTransition。
 
-`SocialFallbackResolver` 只能追加 `ServiceOfferCreated` 或 `ServiceRequestRefused`，且只允许用于 `AIDecisionTick.result.kind=fallback` 的 `service_request` 回退；其他回退必须是无世界状态变化的 `no_op`。
+`SocialActionResolver` 只能形成 `event_type=SocialPressureChanged`、`PatrolLevelChanged`、`SocialAttitudeChanged`、`ServiceOfferCreated`、`ServiceRequestRefused`、`KnowledgeDisclosureResolved` 和 `RumorSpreadRequested` 的 StateTransition。`KnowledgeCreated`、`KnowledgeUpdated`、`RumorCreated` 和 `SecretUpdated` 只能由 `KnowledgePropagation` 形成 StateTransition；`SocialRumorIndexChanged` 只能由 `SocialRumorIndexReducer` 形成 StateTransition。
+
+`SocialFallbackResolver` 只能形成 `event_type=ServiceOfferCreated` 或 `ServiceRequestRefused` 的 StateTransition，且只允许用于 `AIDecisionTick.result.kind=fallback` 的 `service_request` 回退；其他回退必须是无世界状态变化的 `no_op`。
 
 写入检查顺序：
 
@@ -607,8 +614,9 @@ P0 最小 ACL：
 5. WriteACL 使用 rule_id、EntityType、FieldPath、operation 判定 allow/deny。
 6. 生成阶段写入必须先进入 GeneratorOutputEnvelope。
 7. GenerationOutputValidator 校验输出清单。
-8. Validator 生成 StateTransition。
-9. EventLog 追加对应权威变化。
+8. Producer、resolver、迁移工具或 GenerationCommitter 只能形成 StateTransition 或 StateTransitionBatch。
+9. StateTransitionValidator 在内存中校验并计算 post-state hash。
+10. StateTransitionCommitter 原子写入 WorldState、EventLogEntry 和 latest_event_sequence；失败时不得留下部分状态。
 ```
 
 ## 跨集合影响总图
@@ -800,9 +808,9 @@ P0 世界生成必须按以下顺序：
 时间推进必须按以下顺序：
 
 ```text
-1. TimeService 推进 WorldTimeState，写 TimeAdvanced。
+1. TimeService 推进 WorldTimeState，形成 TimeAdvanced StateTransition，并由 StateTransitionCommitter 原子提交。
 2. WeatherService 用 `absolute_minute` 检查 WeatherState 是否过期。
-3. 如天气变化，写 WeatherChanged。
+3. 如天气变化，形成 WeatherChanged StateTransition，并由 StateTransitionCommitter 原子提交。
 4. EnvironmentDeriver 为天气结束后的地面效果创建、衰减或过期 EnvironmentResidualEffectState。
 5. EnvironmentDeriver 读取当前 WeatherState 和 active EnvironmentResidualEffectState，重算受影响空间的 EnvironmentState。
 6. EcologyRecoveryResolver 按 elapsed_minutes 恢复可恢复 FloraPatch / ResourceDeposit / ResourceNode 库存。
@@ -822,12 +830,13 @@ P0 世界生成必须按以下顺序：
 6. 采集、挖掘、捕鱼、采药、装水等生态资源提取只能由 `EcologyResourceExtractionResolver.extract` 作为单一 StateTransition 应用。
 7. 容器离散物品移动只能由 `ContainmentTransferResolver.move_object` 作为单一 StateTransition 应用。
 8. 数量资源转移只能由 `QuantityTransferResolver.move_quantity_resource` 作为单一 StateTransition 应用；装水场景必须与 `EcologyResourceExtractionResolver` 同事务。
-9. Resolver 应用允许的状态变化。
-10. 每个权威状态变化写 EventLog。
-11. WeightDeriver / ContainerOccupancyDeriver 重算受影响 WorldObject 的派生重量和容量占用。
-12. EcologyQuantityValidator 校验动物数量和资源库存守恒。
-13. 受影响集合的其他 Deriver 重算派生状态。
-14. Projection 层输出 DM 文本和 UI 可互动内容。
+9. Resolver 形成允许的 StateTransition 或 StateTransitionBatch。
+10. StateTransitionValidator 校验空间、对象、资源、数量守恒和字段域不变量，并计算 post-state hash。
+11. StateTransitionCommitter 原子提交 WorldState、EventLogEntry 和 latest_event_sequence。
+12. WeightDeriver / ContainerOccupancyDeriver 重算受影响 WorldObject 的派生重量和容量占用。
+13. EcologyQuantityValidator 校验动物数量和资源库存守恒。
+14. 受影响集合的其他 Deriver 重算派生状态。
+15. Projection 层输出 DM 文本和 UI 可互动内容。
 ```
 
 ## 集合内部状态转化

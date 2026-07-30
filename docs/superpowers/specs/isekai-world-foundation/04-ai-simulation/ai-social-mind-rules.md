@@ -36,7 +36,7 @@ provides:
 - 用“群体心智”模拟大量 NPC 的共同意识、利益、恐惧、偏见和行动倾向。
 - 对玩家近距离接触、剧情关键或长期互动的 NPC，使用更细粒度的个体代理模拟。
 - 所有 AI 输出都必须是 proposal，不能直接修改 `WorldState`。
-- AI 造成的影响必须经过 Validator 和 Deterministic Resolver，最终写入 EventLog。
+- AI 造成的影响必须经过 Validator 和 Deterministic Resolver，最终形成 StateTransition，并由 StateTransitionCommitter 生成 EventLog。
 - AI 只能读取主体可知的 `AgentObservationSnapshot`，不能直接读取全量 WorldState、OriginEvent 或 EventLog。
 
 ## 非目标
@@ -269,7 +269,7 @@ NPC 是否有权提供该服务。
 价格是否在内容包或经济规则允许范围内。
 NPC 态度和群体压力是否支持该行为。
 该行为是否会修改货币、权益、对象、地点或任务状态。
-所有状态变化是否写入 EventLog。
+所有状态变化是否形成 StateTransition，并由 StateTransitionCommitter 生成 EventLog。
 ```
 
 ## P0 协议边界
@@ -309,9 +309,9 @@ P0 不允许：
 | `AIProposalRecorder` | decision tick、snapshot、LLM payload | 用系统字段包装并记录 proposal | 不判断行动是否合法 |
 | `AIProposalValidator` | proposal、当前权威状态 | 校验 schema、知识、revision、前置条件和数值域 | 不直接修改世界事实 |
 | `AIProposalConflictResolver` | 同一 tick 的已验证 proposal | 计算冲突键、排序和资源预留 | 不让 AI 提供优先级 |
-| `AIProposalAuditWriter` | AI ledger mutation | 在同一事务追加限定类型 EventLog | 不决定或改写 proposal 内容、校验结果和社会后果 |
-| `AIProposalExpiryResolver` | WorldTimeState、非终态 proposal、active reservation | 将到期 proposal 和预留改为 expired 并写审计事件 | 不延长有效期，不修改资源本体 |
-| `SocialActionResolver` | 已接受 proposal、预留、当前状态 | 生成确定性的 StateTransition 和 EventLog | 不读取 reasoning 作为规则输入 |
+| `AIProposalAuditWriter` | AI ledger mutation | 形成限定类型审计 StateTransition，并交给 StateTransitionCommitter | 不决定或改写 proposal 内容、校验结果和社会后果，不直接写 EventLog |
+| `AIProposalExpiryResolver` | WorldTimeState、非终态 proposal、active reservation | 将到期 proposal 和预留改为 expired，并形成审计 StateTransition | 不延长有效期，不修改资源本体，不直接写 EventLog |
+| `SocialActionResolver` | 已接受 proposal、预留、当前状态 | 生成确定性的 StateTransition，并提交给 StateTransitionCommitter | 不读取 reasoning 作为规则输入，不直接写 EventLog |
 | `SocialFallbackResolver` | trigger、snapshot、当前权威状态 | LLM 不可用或两次尝试均失败时给出确定性最低行为 | 不模拟人格，不产生额外社会奖励或惩罚 |
 
 ## AIDecisionTick
@@ -736,14 +736,14 @@ P0 `action_type` 闭集：
 | proposal_kind | action_type | 必要目标 | 参数 | 确定性落点 |
 | --- | --- | --- | --- | --- |
 | `group_decision` | `spread_rumor` | knowledge、settlement 或 social_group | `intensity_band` | SocialActionResolver 写 RumorSpreadRequested；KnowledgePropagation 写 RumorState；SocialRumorIndexReducer 写 active_rumor_ids |
-| `group_decision` | `adjust_social_pressure` | pressure_state | `pressure_key`、`direction`、`intensity_band` | SocialPressureState、EventLog |
-| `group_decision` | `request_patrol_change` | settlement | `direction` | SocialPressureState.active_patrol_level、EventLog |
-| `group_decision` | `change_group_attitude` | social_group、actor | `target_attitude` | SocialGroupState.attitude_to_player、EventLog |
-| `npc_action` | `offer_service` | service、actor | `requested_price_modifier` 可空 | 确定性服务报价、可选资源预留、EventLog |
-| `npc_action` | `refuse_service` | service、actor | `refusal_reason` | 单次服务请求结果、EventLog；不永久关闭 ServiceState |
-| `npc_action` | `reveal_known_fact` | knowledge、actor | `disclosure_style` | KnowledgePropagation 输入、EventLog |
-| `npc_action` | `withhold_known_fact` | knowledge、actor | `withholding_reason` | 单次交互结果、EventLog；不删除 KnowledgeState |
-| `npc_action` | `change_npc_attitude` | named_npc、actor | `target_attitude` | NamedNPCState.attitude_to_player、EventLog |
+| `group_decision` | `adjust_social_pressure` | pressure_state | `pressure_key`、`direction`、`intensity_band` | SocialPressureState StateTransition |
+| `group_decision` | `request_patrol_change` | settlement | `direction` | SocialPressureState.active_patrol_level StateTransition |
+| `group_decision` | `change_group_attitude` | social_group、actor | `target_attitude` | SocialGroupState.attitude_to_player StateTransition |
+| `npc_action` | `offer_service` | service、actor | `requested_price_modifier` 可空 | 确定性服务报价、可选资源预留 StateTransition |
+| `npc_action` | `refuse_service` | service、actor | `refusal_reason` | 单次服务请求结果 StateTransition；不永久关闭 ServiceState |
+| `npc_action` | `reveal_known_fact` | knowledge、actor | `disclosure_style` | KnowledgePropagation 输入 StateTransition |
+| `npc_action` | `withhold_known_fact` | knowledge、actor | `withholding_reason` | 单次交互结果 StateTransition；不删除 KnowledgeState |
+| `npc_action` | `change_npc_attitude` | named_npc、actor | `target_attitude` | NamedNPCState.attitude_to_player StateTransition |
 
 目标数量和归属规则：
 
@@ -1038,6 +1038,7 @@ NPC 出现在当前关键事件里。
 -> AIProposalAuditWriter（提交 system_ledger 变化）
 -> SocialActionResolver
 -> StateTransition
+-> StateTransitionCommitter
 -> EventLog
 -> KnowledgePropagation
 -> Space / UI / Narration Projection
@@ -1148,7 +1149,7 @@ AI 反馈链在 depth、冷却、传播和累计变化上存在硬上限。
 4. 实现 `AIProposalRecorder` 和 `AIProposalAuditWriter`，由系统补齐 proposal 元数据、拒绝 LLM 伪造字段并原子记录 ledger 事件。
 5. 实现 action policy registry、`AIProposalValidator`、冲突键计算和确定性排序。
 6. 实现 reservation 的创建、消费、释放和过期事务。
-7. 实现 P0 action_type 对应的确定性 resolver、SocialFallbackResolver 和 EventLog 写入。
+7. 实现 P0 action_type 对应的确定性 resolver、SocialFallbackResolver、StateTransition 生成和 StateTransitionCommitter 接入。
 8. 实现 causal depth、冷却、衰减、滞回和累计变化上限。
 9. 实现 proposal、reservation 和 resolution 的 replay 与存档恢复。
 

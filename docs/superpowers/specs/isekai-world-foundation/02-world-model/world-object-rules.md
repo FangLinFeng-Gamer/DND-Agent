@@ -404,7 +404,7 @@ Catalog 条目 schema：
   "object_type": "item",
   "category": "metal_small",
   "physical_override": {
-    "weight_kg": 0.02,
+    "tare_weight_kg": "0.020",
     "condition": "worn"
   },
   "default_affordances": ["observe", "take", "search"],
@@ -417,57 +417,57 @@ Category 默认属性：
 ```json
 {
   "natural": {
-    "physical": { "size": "tiny", "weight_kg": 0.03, "portable": true, "condition": "worn" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.030", "portable": true, "condition": "worn" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "natural"]
   },
   "waste": {
-    "physical": { "size": "tiny", "weight_kg": 0.04, "portable": true, "condition": "damaged" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.040", "portable": true, "condition": "damaged" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "debris"]
   },
   "domestic": {
-    "physical": { "size": "tiny", "weight_kg": 0.03, "portable": true, "condition": "worn" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.030", "portable": true, "condition": "worn" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "domestic"]
   },
   "cloth": {
-    "physical": { "size": "tiny", "weight_kg": 0.02, "portable": true, "condition": "worn" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.020", "portable": true, "condition": "worn" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "cloth"]
   },
   "animal_remain": {
-    "physical": { "size": "tiny", "weight_kg": 0.02, "portable": true, "condition": "worn" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.020", "portable": true, "condition": "worn" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "animal_remain"]
   },
   "metal_small": {
-    "physical": { "size": "tiny", "weight_kg": 0.04, "portable": true, "condition": "worn" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.040", "portable": true, "condition": "worn" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "metal"]
   },
   "wooden": {
-    "physical": { "size": "small", "weight_kg": 0.06, "portable": true, "condition": "worn" },
+    "physical": { "size": "small", "tare_weight_kg": "0.060", "portable": true, "condition": "worn" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "wood"]
   },
   "ceramic_glass": {
-    "physical": { "size": "tiny", "weight_kg": 0.04, "portable": true, "condition": "damaged" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.040", "portable": true, "condition": "damaged" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "shard"]
   },
   "mark_symbol": {
-    "physical": { "size": "tiny", "weight_kg": 0.03, "portable": true, "condition": "worn" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.030", "portable": true, "condition": "worn" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "mark"]
   },
   "suspicious_trace": {
-    "physical": { "size": "tiny", "weight_kg": 0.02, "portable": true, "condition": "damaged" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.020", "portable": true, "condition": "damaged" },
     "affordances": ["observe", "take", "search"],
     "tags": ["small_item", "suspicious_trace"]
   },
   "trade_trinket": {
-    "physical": { "size": "tiny", "weight_kg": 0.02, "portable": true, "condition": "worn" },
+    "physical": { "size": "tiny", "tare_weight_kg": "0.020", "portable": true, "condition": "worn" },
     "affordances": ["observe", "take", "search", "trade"],
     "tags": ["small_item", "trinket"]
   }
@@ -523,7 +523,7 @@ category_defaults
   "visibility": "visible",
   "physical": {
     "size": "tiny",
-    "weight_kg": 0.02,
+    "tare_weight_kg": "0.020",
     "portable": true,
     "condition": "worn"
   },
@@ -577,93 +577,93 @@ P0 catalog entries：
 
 | catalog_id | name | aliases | description | category | physical_override | tags |
 | --- | --- | --- | --- | --- | --- | --- |
-| generic_pebble | 石子 | 石头, 小石子 | 一颗普通石子，边缘被磨得发圆。 | natural | weight_kg=0.03 | stone |
-| generic_flat_stone | 扁平石片 | 石片, 扁石 | 一片扁平石片，表面有水磨痕迹。 | natural | size=small, weight_kg=0.12 | stone |
-| generic_sharp_flint | 尖锐燧石 | 燧石, 尖石片 | 一块边缘锋利的燧石，握起来有些硌手。 | natural | size=small, weight_kg=0.08 | stone, sharp |
-| generic_dry_twig | 干树枝 | 树枝, 枯枝 | 一截干树枝，轻轻一折就会断。 | natural | size=small, weight_kg=0.05 | wood |
-| generic_pine_cone | 松果 | 干松果 | 一个干松果，鳞片间夹着灰尘。 | natural | weight_kg=0.03 | forest |
-| generic_dead_leaf_clump | 枯叶团 | 枯叶, 叶团 | 一团发脆的枯叶，散着潮土味。 | natural | weight_kg=0.02 | leaves |
-| generic_mud_clod | 泥块 | 干泥块, 泥团 | 一块半干的泥团，表面粘着草屑。 | natural | size=small, weight_kg=0.15 | earth |
-| generic_shell | 贝壳 | 小贝壳 | 一枚暗淡贝壳，边缘缺了一角。 | trade_trinket | weight_kg=0.02 | natural |
-| generic_feather | 羽毛 | 鸟羽, 干净羽毛 | 一根细长羽毛，羽轴还算完整。 | trade_trinket | weight_kg=0.01 | animal_trace |
-| generic_animal_fur_clump | 兽毛团 | 毛团, 兽毛 | 一小团粗硬兽毛，颜色发灰。 | natural | weight_kg=0.01 | animal_trace |
-| generic_pottery_shard | 碎陶片 | 陶片, 破陶片 | 一片粗陶碎片，断口还留着黑灰。 | waste | weight_kg=0.04 | ceramic |
-| generic_bottle_cork | 破瓶塞 | 瓶塞, 旧瓶塞 | 一个破损瓶塞，闻起来有陈酒味。 | waste | weight_kg=0.01 | cork |
-| generic_empty_vial | 空小瓶 | 小瓶, 空瓶 | 一只空小瓶，瓶口有细裂纹。 | waste | size=small, weight_kg=0.08 | glass |
-| generic_wax_stub | 断蜡块 | 蜡块, 蜡头 | 一小截断蜡，芯线已经烧黑。 | waste | weight_kg=0.03 | wax |
-| generic_crumpled_paper | 旧纸团 | 纸团, 废纸 | 一团皱巴巴的旧纸，字迹已经糊开。 | waste | weight_kg=0.01 | paper |
-| generic_charred_wood_chip | 烧焦木片 | 焦木片, 黑木片 | 一片烧焦木片，指尖一碰就掉黑灰。 | waste | weight_kg=0.02 | wood, burned |
-| generic_torn_leather_thong | 破皮绳 | 皮绳, 断皮绳 | 一截断开的皮绳，边缘被磨得发毛。 | waste | weight_kg=0.03 | leather |
-| generic_broken_arrow_shaft | 断箭杆 | 箭杆, 断箭 | 半截箭杆，尾羽已经脱落。 | waste | size=small, weight_kg=0.06 | wood, arrow_debris |
-| generic_bent_nail | 弯曲钉子 | 弯钉, 钉子, 旧钉子 | 一枚弯曲的旧钉子，钉身有些发黑。 | metal_small | weight_kg=0.02 | scrap |
-| generic_rusty_metal_shard | 生锈铁片 | 铁片, 锈铁片 | 一小片生锈铁片，边缘钝而参差。 | metal_small | weight_kg=0.05, condition=damaged | scrap |
-| generic_old_button | 旧纽扣 | 纽扣, 破纽扣 | 一枚旧纽扣，孔眼里嵌着灰尘。 | domestic | weight_kg=0.01 | clothing |
-| generic_copper_button | 铜扣 | 小铜扣, 铜纽扣 | 一枚发暗铜扣，边缘还有浅浅花纹。 | trade_trinket | weight_kg=0.02 | metal |
-| generic_comb_tooth | 木梳齿 | 梳齿, 断梳齿 | 一截断掉的木梳齿，表面被磨得光滑。 | domestic | weight_kg=0.01 | wood |
-| generic_pipe_mouthpiece | 破烟斗嘴 | 烟斗嘴, 斗嘴 | 一个破烟斗嘴，咬痕很深。 | domestic | weight_kg=0.03, condition=damaged | personal |
-| generic_small_cloth_pouch | 小布包 | 布包, 空布包 | 一个空小布包，束口绳已经松了。 | domestic | size=small, weight_kg=0.04 | cloth |
-| generic_empty_spool | 空线轴 | 线轴, 木线轴 | 一个空线轴，木芯上还残着几圈细线。 | domestic | weight_kg=0.02 | wood |
-| generic_needle_case | 针盒 | 空针盒, 旧针盒 | 一个小针盒，盖子有点松。 | domestic | weight_kg=0.03 | sewing |
-| generic_bone_die | 骨骰子 | 骰子, 旧骰子 | 一枚骨骰子，点数刻得并不规整。 | trade_trinket | weight_kg=0.02 | bone |
-| generic_wooden_cup | 木杯 | 旧木杯, 杯子 | 一个旧木杯，杯沿裂开一道细口。 | domestic | size=small, weight_kg=0.10, condition=damaged | wood |
-| generic_cracked_spoon | 裂开的勺子 | 勺子, 破勺子 | 一把裂开的旧勺子，柄端被火燎黑。 | domestic | size=small, weight_kg=0.06, condition=damaged | utensil |
-| generic_torn_cloth_strip | 破布条 | 布条, 破布 | 一条脏破布条，边缘起了毛。 | cloth | weight_kg=0.02 | scrap |
-| generic_bloodstained_cloth | 染血布片 | 血布, 带血布片 | 一块染血布片，血迹已经发暗。 | suspicious_trace | weight_kg=0.02 | cloth, blood |
-| generic_coarse_thread | 粗麻线 | 麻线, 粗线 | 几缕粗麻线，缠成一个小结。 | cloth | weight_kg=0.01 | thread |
-| generic_leather_offcut | 皮革边角 | 皮革碎片, 皮边角 | 一小块皮革边角，边缘参差。 | cloth | weight_kg=0.03 | leather |
-| generic_old_glove | 旧手套 | 手套, 破手套 | 一只旧手套，指尖已经磨穿。 | cloth | size=small, weight_kg=0.06, condition=damaged | clothing |
-| generic_torn_cloak_corner | 撕裂斗篷角 | 斗篷角, 破斗篷布 | 一角撕裂的厚布，像是从斗篷上扯下来的。 | cloth | size=small, weight_kg=0.05, condition=damaged | clothing |
-| generic_shoelace | 鞋带 | 旧鞋带 | 一根旧鞋带，末端已经散开。 | cloth | weight_kg=0.01 | cord |
-| generic_sewing_needle | 缝补针 | 针, 细针 | 一根缝补针，针尖略微发钝。 | metal_small | weight_kg=0.01 | sewing |
-| generic_wool_thread_ball | 羊毛线团 | 线团, 毛线团 | 一小团羊毛线，混着草屑。 | cloth | weight_kg=0.02 | wool |
-| generic_small_bone_chip | 小骨片 | 骨片, 碎骨 | 一小块骨片，断面已经发黄。 | animal_remain | weight_kg=0.02 | bone |
-| generic_animal_tooth | 兽牙 | 牙, 小兽牙 | 一枚小兽牙，根部还带着干硬污垢。 | trade_trinket | weight_kg=0.02 | bone |
-| generic_bird_bone | 鸟骨 | 细鸟骨 | 一根细鸟骨，轻得几乎没有分量。 | animal_remain | weight_kg=0.01 | bone |
-| generic_fishbone | 鱼刺 | 细鱼刺 | 几根细鱼刺，已经干硬发白。 | animal_remain | weight_kg=0.01 | bone |
-| generic_dried_skin_flake | 干硬皮屑 | 皮屑, 干皮片 | 一片干硬皮屑，边缘卷曲。 | animal_remain | weight_kg=0.01 | hide |
-| generic_broken_horn_piece | 断角片 | 角片, 断角 | 一小片断角，表面有细密纹路。 | trade_trinket | weight_kg=0.04 | horn |
-| generic_claw_shell | 爪壳 | 爪片, 兽爪壳 | 一片脱落的爪壳，尖端还很硬。 | animal_remain | weight_kg=0.01 | claw |
-| generic_insect_shell | 虫壳 | 空虫壳 | 一枚空虫壳，背部泛着暗光。 | animal_remain | weight_kg=0.01 | insect |
-| generic_quill_stem | 羽梗 | 羽轴, 羽梗 | 一截断掉的羽梗，中空而脆。 | animal_remain | weight_kg=0.01, condition=damaged | feather |
-| generic_iron_ring | 铁环 | 小铁环, 锈铁环 | 一个小铁环，内侧有磨损痕。 | metal_small | weight_kg=0.04 | scrap |
-| generic_copper_wire | 铜线 | 细铜线 | 一小截铜线，被拧得有些变形。 | trade_trinket | weight_kg=0.01 | metal |
-| generic_rusty_buckle | 生锈扣环 | 扣环, 锈扣 | 一个生锈扣环，扣舌已经卡住。 | metal_small | weight_kg=0.05, condition=damaged | clothing |
-| generic_broken_chain_link | 断链节 | 链节, 断铁链节 | 一枚断开的链节，裂口很旧。 | metal_small | weight_kg=0.06, condition=damaged | scrap |
-| generic_rivet | 铆钉 | 小铆钉 | 一枚脱落铆钉，帽面被磨平。 | metal_small | weight_kg=0.02 | scrap |
-| generic_broken_bell | 破铃铛 | 铃铛, 坏铃铛 | 一个破铃铛，摇起来只有哑声。 | trade_trinket | weight_kg=0.06, condition=damaged | metal |
-| generic_bad_pin | 坏扣针 | 扣针, 断扣针 | 一枚坏扣针，针脚已经歪了。 | metal_small | weight_kg=0.01, condition=damaged | clothing |
-| generic_wooden_wedge | 木楔 | 楔子, 小木楔 | 一枚粗糙木楔，尖端有压痕。 | wooden | weight_kg=0.08 | wedge |
-| generic_short_wood_chip | 短木片 | 木片, 碎木片 | 一截短木片，断口粗糙。 | wooden | weight_kg=0.06, condition=damaged | scrap |
-| generic_notched_wood_tag | 刻痕木牌 | 木牌, 刻痕牌 | 一块带刻痕的小木牌，纹路像是人为划出的。 | wooden | weight_kg=0.05 | mark |
-| generic_broken_wooden_handle | 断木柄 | 木柄, 断柄 | 一截断掉的木柄，握痕还在。 | wooden | weight_kg=0.12, condition=damaged | handle |
-| generic_wooden_bead | 小木珠 | 木珠 | 一颗小木珠，表面被磨得发亮。 | trade_trinket | weight_kg=0.01 | wood |
-| generic_charred_wooden_peg | 烧焦木钉 | 木钉, 焦木钉 | 一枚烧焦木钉，半边已经碳化。 | wooden | weight_kg=0.02, condition=damaged | burned |
-| generic_rough_wooden_plug | 粗糙木塞 | 木塞, 旧木塞 | 一个粗糙木塞，边缘削得不平。 | wooden | weight_kg=0.03 | plug |
-| generic_spoon_handle | 木勺柄 | 勺柄, 断勺柄 | 一截木勺柄，尾端有烧痕。 | wooden | weight_kg=0.03, condition=damaged | utensil |
-| generic_white_pottery_shard | 白陶碎片 | 白陶片, 陶片 | 一片白陶碎片，釉面已经开裂。 | ceramic_glass | weight_kg=0.04 | ceramic |
-| generic_black_glaze_shard | 黑釉陶片 | 黑陶片, 黑釉片 | 一片黑釉陶片，边缘锋利。 | ceramic_glass | weight_kg=0.04 | ceramic |
-| generic_cracked_cup_shard | 裂杯片 | 杯片, 破杯片 | 一块裂杯片，还能看出杯沿弧度。 | ceramic_glass | weight_kg=0.05 | ceramic |
-| generic_glass_bead | 玻璃珠 | 小玻璃珠, 珠子 | 一颗玻璃珠，里面有一道淡绿气泡。 | trade_trinket | weight_kg=0.01 | glass |
-| generic_green_bottle_base | 绿色瓶底 | 瓶底, 绿玻璃底 | 一块绿色瓶底，厚重而浑浊。 | ceramic_glass | size=small, weight_kg=0.10 | glass |
-| generic_mirror_shard | 镜片碎片 | 镜片, 破镜片 | 一片镜片碎片，映出的影子被裂纹切开。 | ceramic_glass | weight_kg=0.03 | glass, reflective |
-| generic_frosted_glass_piece | 磨砂玻璃片 | 磨砂片, 玻璃片 | 一块磨砂玻璃片，透光但看不清另一侧。 | ceramic_glass | weight_kg=0.04 | glass |
-| generic_rune_pebble | 刻符石子 | 符石, 刻字石子 | 一颗刻着浅符号的石子，笔画很旧。 | mark_symbol | weight_kg=0.03 | stone |
-| generic_tied_wood_tag | 系绳木牌 | 木牌, 挂牌 | 一块系着短绳的小木牌，牌面被雨水泡花。 | mark_symbol | size=small, weight_kg=0.05 | wood |
-| generic_marked_cloth_strip | 带记号布条 | 记号布条, 布条 | 一条带记号的布条，颜料已经褪色。 | mark_symbol | weight_kg=0.02 | cloth |
-| generic_painted_wood_chip | 涂漆木片 | 漆木片, 彩木片 | 一块涂漆木片，只剩半块颜色。 | mark_symbol | weight_kg=0.03, condition=damaged | wood |
-| generic_notched_bone_chip | 刻痕骨片 | 骨片, 刻痕骨 | 一片带刻痕的骨片，刻线很浅。 | mark_symbol | weight_kg=0.02 | bone |
-| generic_old_wax_seal_fragment | 旧封蜡碎块 | 封蜡, 蜡封碎片 | 一块旧封蜡碎片，纹章只剩一角。 | mark_symbol | weight_kg=0.02, condition=damaged | wax |
-| generic_scored_stone_chip | 有划线的石片 | 划线石片, 石片 | 一片有划线的石片，像被人刻意记过数。 | mark_symbol | weight_kg=0.03 | stone |
-| generic_muddy_shoelace | 带泥鞋带 | 泥鞋带, 鞋带 | 一根带泥鞋带，泥里夹着细草根。 | suspicious_trace | weight_kg=0.01 | clothing |
-| generic_black_blood_cloth | 沾黑血的布片 | 黑血布片, 血布 | 一块沾着黑血的布片，血迹带着怪异腥味。 | suspicious_trace | weight_kg=0.02 | cloth, blood |
-| generic_odd_smell_feather | 带异味羽毛 | 异味羽毛, 羽毛 | 一根带异味的羽毛，闻起来像潮铁和腐叶。 | suspicious_trace | weight_kg=0.01 | feather |
-| generic_chewed_bone_chip | 咬碎骨片 | 咬痕骨片, 碎骨 | 一块咬碎的骨片，齿痕细密。 | suspicious_trace | weight_kg=0.02 | bone |
-| generic_burned_charm_paper | 烧焦符纸 | 符纸, 焦符纸 | 一角烧焦符纸，残留的墨线像符号。 | suspicious_trace | weight_kg=0.01 | paper |
-| generic_wet_paper_corner | 湿透纸角 | 纸角, 湿纸片 | 一角湿透纸片，纤维快要散开。 | suspicious_trace | weight_kg=0.01, condition=ruined | paper |
-| generic_tooth_marked_wood | 带齿痕木片 | 齿痕木片, 木片 | 一块带齿痕木片，咬痕深得不正常。 | suspicious_trace | size=small, weight_kg=0.05 | wood |
-| generic_medicinal_smell_pouch | 有药味的小布包 | 药味布包, 小布包 | 一个有药味的小布包，里面已经空了。 | suspicious_trace | size=small, weight_kg=0.03 | cloth |
-| generic_tiny_silver_thread | 小银线 | 银线, 细银线 | 一小截细银线，在暗处也有微光。 | trade_trinket | weight_kg=0.01 | metal |
-| generic_old_badge_fragment | 旧徽章碎片 | 徽章碎片, 旧徽章 | 一片旧徽章碎片，背面还有断针。 | trade_trinket | weight_kg=0.03, condition=damaged | mark |
+| generic_pebble | 石子 | 石头, 小石子 | 一颗普通石子，边缘被磨得发圆。 | natural | tare_weight_kg="0.030" | stone |
+| generic_flat_stone | 扁平石片 | 石片, 扁石 | 一片扁平石片，表面有水磨痕迹。 | natural | size=small, tare_weight_kg="0.120" | stone |
+| generic_sharp_flint | 尖锐燧石 | 燧石, 尖石片 | 一块边缘锋利的燧石，握起来有些硌手。 | natural | size=small, tare_weight_kg="0.080" | stone, sharp |
+| generic_dry_twig | 干树枝 | 树枝, 枯枝 | 一截干树枝，轻轻一折就会断。 | natural | size=small, tare_weight_kg="0.050" | wood |
+| generic_pine_cone | 松果 | 干松果 | 一个干松果，鳞片间夹着灰尘。 | natural | tare_weight_kg="0.030" | forest |
+| generic_dead_leaf_clump | 枯叶团 | 枯叶, 叶团 | 一团发脆的枯叶，散着潮土味。 | natural | tare_weight_kg="0.020" | leaves |
+| generic_mud_clod | 泥块 | 干泥块, 泥团 | 一块半干的泥团，表面粘着草屑。 | natural | size=small, tare_weight_kg="0.150" | earth |
+| generic_shell | 贝壳 | 小贝壳 | 一枚暗淡贝壳，边缘缺了一角。 | trade_trinket | tare_weight_kg="0.020" | natural |
+| generic_feather | 羽毛 | 鸟羽, 干净羽毛 | 一根细长羽毛，羽轴还算完整。 | trade_trinket | tare_weight_kg="0.010" | animal_trace |
+| generic_animal_fur_clump | 兽毛团 | 毛团, 兽毛 | 一小团粗硬兽毛，颜色发灰。 | natural | tare_weight_kg="0.010" | animal_trace |
+| generic_pottery_shard | 碎陶片 | 陶片, 破陶片 | 一片粗陶碎片，断口还留着黑灰。 | waste | tare_weight_kg="0.040" | ceramic |
+| generic_bottle_cork | 破瓶塞 | 瓶塞, 旧瓶塞 | 一个破损瓶塞，闻起来有陈酒味。 | waste | tare_weight_kg="0.010" | cork |
+| generic_empty_vial | 空小瓶 | 小瓶, 空瓶 | 一只空小瓶，瓶口有细裂纹。 | waste | size=small, tare_weight_kg="0.080" | glass |
+| generic_wax_stub | 断蜡块 | 蜡块, 蜡头 | 一小截断蜡，芯线已经烧黑。 | waste | tare_weight_kg="0.030" | wax |
+| generic_crumpled_paper | 旧纸团 | 纸团, 废纸 | 一团皱巴巴的旧纸，字迹已经糊开。 | waste | tare_weight_kg="0.010" | paper |
+| generic_charred_wood_chip | 烧焦木片 | 焦木片, 黑木片 | 一片烧焦木片，指尖一碰就掉黑灰。 | waste | tare_weight_kg="0.020" | wood, burned |
+| generic_torn_leather_thong | 破皮绳 | 皮绳, 断皮绳 | 一截断开的皮绳，边缘被磨得发毛。 | waste | tare_weight_kg="0.030" | leather |
+| generic_broken_arrow_shaft | 断箭杆 | 箭杆, 断箭 | 半截箭杆，尾羽已经脱落。 | waste | size=small, tare_weight_kg="0.060" | wood, arrow_debris |
+| generic_bent_nail | 弯曲钉子 | 弯钉, 钉子, 旧钉子 | 一枚弯曲的旧钉子，钉身有些发黑。 | metal_small | tare_weight_kg="0.020" | scrap |
+| generic_rusty_metal_shard | 生锈铁片 | 铁片, 锈铁片 | 一小片生锈铁片，边缘钝而参差。 | metal_small | tare_weight_kg="0.050", condition=damaged | scrap |
+| generic_old_button | 旧纽扣 | 纽扣, 破纽扣 | 一枚旧纽扣，孔眼里嵌着灰尘。 | domestic | tare_weight_kg="0.010" | clothing |
+| generic_copper_button | 铜扣 | 小铜扣, 铜纽扣 | 一枚发暗铜扣，边缘还有浅浅花纹。 | trade_trinket | tare_weight_kg="0.020" | metal |
+| generic_comb_tooth | 木梳齿 | 梳齿, 断梳齿 | 一截断掉的木梳齿，表面被磨得光滑。 | domestic | tare_weight_kg="0.010" | wood |
+| generic_pipe_mouthpiece | 破烟斗嘴 | 烟斗嘴, 斗嘴 | 一个破烟斗嘴，咬痕很深。 | domestic | tare_weight_kg="0.030", condition=damaged | personal |
+| generic_small_cloth_pouch | 小布包 | 布包, 空布包 | 一个空小布包，束口绳已经松了。 | domestic | size=small, tare_weight_kg="0.040" | cloth |
+| generic_empty_spool | 空线轴 | 线轴, 木线轴 | 一个空线轴，木芯上还残着几圈细线。 | domestic | tare_weight_kg="0.020" | wood |
+| generic_needle_case | 针盒 | 空针盒, 旧针盒 | 一个小针盒，盖子有点松。 | domestic | tare_weight_kg="0.030" | sewing |
+| generic_bone_die | 骨骰子 | 骰子, 旧骰子 | 一枚骨骰子，点数刻得并不规整。 | trade_trinket | tare_weight_kg="0.020" | bone |
+| generic_wooden_cup | 木杯 | 旧木杯, 杯子 | 一个旧木杯，杯沿裂开一道细口。 | domestic | size=small, tare_weight_kg="0.100", condition=damaged | wood |
+| generic_cracked_spoon | 裂开的勺子 | 勺子, 破勺子 | 一把裂开的旧勺子，柄端被火燎黑。 | domestic | size=small, tare_weight_kg="0.060", condition=damaged | utensil |
+| generic_torn_cloth_strip | 破布条 | 布条, 破布 | 一条脏破布条，边缘起了毛。 | cloth | tare_weight_kg="0.020" | scrap |
+| generic_bloodstained_cloth | 染血布片 | 血布, 带血布片 | 一块染血布片，血迹已经发暗。 | suspicious_trace | tare_weight_kg="0.020" | cloth, blood |
+| generic_coarse_thread | 粗麻线 | 麻线, 粗线 | 几缕粗麻线，缠成一个小结。 | cloth | tare_weight_kg="0.010" | thread |
+| generic_leather_offcut | 皮革边角 | 皮革碎片, 皮边角 | 一小块皮革边角，边缘参差。 | cloth | tare_weight_kg="0.030" | leather |
+| generic_old_glove | 旧手套 | 手套, 破手套 | 一只旧手套，指尖已经磨穿。 | cloth | size=small, tare_weight_kg="0.060", condition=damaged | clothing |
+| generic_torn_cloak_corner | 撕裂斗篷角 | 斗篷角, 破斗篷布 | 一角撕裂的厚布，像是从斗篷上扯下来的。 | cloth | size=small, tare_weight_kg="0.050", condition=damaged | clothing |
+| generic_shoelace | 鞋带 | 旧鞋带 | 一根旧鞋带，末端已经散开。 | cloth | tare_weight_kg="0.010" | cord |
+| generic_sewing_needle | 缝补针 | 针, 细针 | 一根缝补针，针尖略微发钝。 | metal_small | tare_weight_kg="0.010" | sewing |
+| generic_wool_thread_ball | 羊毛线团 | 线团, 毛线团 | 一小团羊毛线，混着草屑。 | cloth | tare_weight_kg="0.020" | wool |
+| generic_small_bone_chip | 小骨片 | 骨片, 碎骨 | 一小块骨片，断面已经发黄。 | animal_remain | tare_weight_kg="0.020" | bone |
+| generic_animal_tooth | 兽牙 | 牙, 小兽牙 | 一枚小兽牙，根部还带着干硬污垢。 | trade_trinket | tare_weight_kg="0.020" | bone |
+| generic_bird_bone | 鸟骨 | 细鸟骨 | 一根细鸟骨，轻得几乎没有分量。 | animal_remain | tare_weight_kg="0.010" | bone |
+| generic_fishbone | 鱼刺 | 细鱼刺 | 几根细鱼刺，已经干硬发白。 | animal_remain | tare_weight_kg="0.010" | bone |
+| generic_dried_skin_flake | 干硬皮屑 | 皮屑, 干皮片 | 一片干硬皮屑，边缘卷曲。 | animal_remain | tare_weight_kg="0.010" | hide |
+| generic_broken_horn_piece | 断角片 | 角片, 断角 | 一小片断角，表面有细密纹路。 | trade_trinket | tare_weight_kg="0.040" | horn |
+| generic_claw_shell | 爪壳 | 爪片, 兽爪壳 | 一片脱落的爪壳，尖端还很硬。 | animal_remain | tare_weight_kg="0.010" | claw |
+| generic_insect_shell | 虫壳 | 空虫壳 | 一枚空虫壳，背部泛着暗光。 | animal_remain | tare_weight_kg="0.010" | insect |
+| generic_quill_stem | 羽梗 | 羽轴, 羽梗 | 一截断掉的羽梗，中空而脆。 | animal_remain | tare_weight_kg="0.010", condition=damaged | feather |
+| generic_iron_ring | 铁环 | 小铁环, 锈铁环 | 一个小铁环，内侧有磨损痕。 | metal_small | tare_weight_kg="0.040" | scrap |
+| generic_copper_wire | 铜线 | 细铜线 | 一小截铜线，被拧得有些变形。 | trade_trinket | tare_weight_kg="0.010" | metal |
+| generic_rusty_buckle | 生锈扣环 | 扣环, 锈扣 | 一个生锈扣环，扣舌已经卡住。 | metal_small | tare_weight_kg="0.050", condition=damaged | clothing |
+| generic_broken_chain_link | 断链节 | 链节, 断铁链节 | 一枚断开的链节，裂口很旧。 | metal_small | tare_weight_kg="0.060", condition=damaged | scrap |
+| generic_rivet | 铆钉 | 小铆钉 | 一枚脱落铆钉，帽面被磨平。 | metal_small | tare_weight_kg="0.020" | scrap |
+| generic_broken_bell | 破铃铛 | 铃铛, 坏铃铛 | 一个破铃铛，摇起来只有哑声。 | trade_trinket | tare_weight_kg="0.060", condition=damaged | metal |
+| generic_bad_pin | 坏扣针 | 扣针, 断扣针 | 一枚坏扣针，针脚已经歪了。 | metal_small | tare_weight_kg="0.010", condition=damaged | clothing |
+| generic_wooden_wedge | 木楔 | 楔子, 小木楔 | 一枚粗糙木楔，尖端有压痕。 | wooden | tare_weight_kg="0.080" | wedge |
+| generic_short_wood_chip | 短木片 | 木片, 碎木片 | 一截短木片，断口粗糙。 | wooden | tare_weight_kg="0.060", condition=damaged | scrap |
+| generic_notched_wood_tag | 刻痕木牌 | 木牌, 刻痕牌 | 一块带刻痕的小木牌，纹路像是人为划出的。 | wooden | tare_weight_kg="0.050" | mark |
+| generic_broken_wooden_handle | 断木柄 | 木柄, 断柄 | 一截断掉的木柄，握痕还在。 | wooden | tare_weight_kg="0.120", condition=damaged | handle |
+| generic_wooden_bead | 小木珠 | 木珠 | 一颗小木珠，表面被磨得发亮。 | trade_trinket | tare_weight_kg="0.010" | wood |
+| generic_charred_wooden_peg | 烧焦木钉 | 木钉, 焦木钉 | 一枚烧焦木钉，半边已经碳化。 | wooden | tare_weight_kg="0.020", condition=damaged | burned |
+| generic_rough_wooden_plug | 粗糙木塞 | 木塞, 旧木塞 | 一个粗糙木塞，边缘削得不平。 | wooden | tare_weight_kg="0.030" | plug |
+| generic_spoon_handle | 木勺柄 | 勺柄, 断勺柄 | 一截木勺柄，尾端有烧痕。 | wooden | tare_weight_kg="0.030", condition=damaged | utensil |
+| generic_white_pottery_shard | 白陶碎片 | 白陶片, 陶片 | 一片白陶碎片，釉面已经开裂。 | ceramic_glass | tare_weight_kg="0.040" | ceramic |
+| generic_black_glaze_shard | 黑釉陶片 | 黑陶片, 黑釉片 | 一片黑釉陶片，边缘锋利。 | ceramic_glass | tare_weight_kg="0.040" | ceramic |
+| generic_cracked_cup_shard | 裂杯片 | 杯片, 破杯片 | 一块裂杯片，还能看出杯沿弧度。 | ceramic_glass | tare_weight_kg="0.050" | ceramic |
+| generic_glass_bead | 玻璃珠 | 小玻璃珠, 珠子 | 一颗玻璃珠，里面有一道淡绿气泡。 | trade_trinket | tare_weight_kg="0.010" | glass |
+| generic_green_bottle_base | 绿色瓶底 | 瓶底, 绿玻璃底 | 一块绿色瓶底，厚重而浑浊。 | ceramic_glass | size=small, tare_weight_kg="0.100" | glass |
+| generic_mirror_shard | 镜片碎片 | 镜片, 破镜片 | 一片镜片碎片，映出的影子被裂纹切开。 | ceramic_glass | tare_weight_kg="0.030" | glass, reflective |
+| generic_frosted_glass_piece | 磨砂玻璃片 | 磨砂片, 玻璃片 | 一块磨砂玻璃片，透光但看不清另一侧。 | ceramic_glass | tare_weight_kg="0.040" | glass |
+| generic_rune_pebble | 刻符石子 | 符石, 刻字石子 | 一颗刻着浅符号的石子，笔画很旧。 | mark_symbol | tare_weight_kg="0.030" | stone |
+| generic_tied_wood_tag | 系绳木牌 | 木牌, 挂牌 | 一块系着短绳的小木牌，牌面被雨水泡花。 | mark_symbol | size=small, tare_weight_kg="0.050" | wood |
+| generic_marked_cloth_strip | 带记号布条 | 记号布条, 布条 | 一条带记号的布条，颜料已经褪色。 | mark_symbol | tare_weight_kg="0.020" | cloth |
+| generic_painted_wood_chip | 涂漆木片 | 漆木片, 彩木片 | 一块涂漆木片，只剩半块颜色。 | mark_symbol | tare_weight_kg="0.030", condition=damaged | wood |
+| generic_notched_bone_chip | 刻痕骨片 | 骨片, 刻痕骨 | 一片带刻痕的骨片，刻线很浅。 | mark_symbol | tare_weight_kg="0.020" | bone |
+| generic_old_wax_seal_fragment | 旧封蜡碎块 | 封蜡, 蜡封碎片 | 一块旧封蜡碎片，纹章只剩一角。 | mark_symbol | tare_weight_kg="0.020", condition=damaged | wax |
+| generic_scored_stone_chip | 有划线的石片 | 划线石片, 石片 | 一片有划线的石片，像被人刻意记过数。 | mark_symbol | tare_weight_kg="0.030" | stone |
+| generic_muddy_shoelace | 带泥鞋带 | 泥鞋带, 鞋带 | 一根带泥鞋带，泥里夹着细草根。 | suspicious_trace | tare_weight_kg="0.010" | clothing |
+| generic_black_blood_cloth | 沾黑血的布片 | 黑血布片, 血布 | 一块沾着黑血的布片，血迹带着怪异腥味。 | suspicious_trace | tare_weight_kg="0.020" | cloth, blood |
+| generic_odd_smell_feather | 带异味羽毛 | 异味羽毛, 羽毛 | 一根带异味的羽毛，闻起来像潮铁和腐叶。 | suspicious_trace | tare_weight_kg="0.010" | feather |
+| generic_chewed_bone_chip | 咬碎骨片 | 咬痕骨片, 碎骨 | 一块咬碎的骨片，齿痕细密。 | suspicious_trace | tare_weight_kg="0.020" | bone |
+| generic_burned_charm_paper | 烧焦符纸 | 符纸, 焦符纸 | 一角烧焦符纸，残留的墨线像符号。 | suspicious_trace | tare_weight_kg="0.010" | paper |
+| generic_wet_paper_corner | 湿透纸角 | 纸角, 湿纸片 | 一角湿透纸片，纤维快要散开。 | suspicious_trace | tare_weight_kg="0.010", condition=ruined | paper |
+| generic_tooth_marked_wood | 带齿痕木片 | 齿痕木片, 木片 | 一块带齿痕木片，咬痕深得不正常。 | suspicious_trace | size=small, tare_weight_kg="0.050" | wood |
+| generic_medicinal_smell_pouch | 有药味的小布包 | 药味布包, 小布包 | 一个有药味的小布包，里面已经空了。 | suspicious_trace | size=small, tare_weight_kg="0.030" | cloth |
+| generic_tiny_silver_thread | 小银线 | 银线, 细银线 | 一小截细银线，在暗处也有微光。 | trade_trinket | tare_weight_kg="0.010" | metal |
+| generic_old_badge_fragment | 旧徽章碎片 | 徽章碎片, 旧徽章 | 一片旧徽章碎片，背面还有断针。 | trade_trinket | tare_weight_kg="0.030", condition=damaged | mark |
 
 ### 容器 Catalog
 

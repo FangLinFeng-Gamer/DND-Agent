@@ -652,7 +652,7 @@ critical
 SecretState 必须引用目标事实。
 SecretState.holders 必须拥有对应 KnowledgeState。
 SecretState 可以让 can_tell_player=false 或设置 withholding_reason。
-SecretState 泄露必须通过 resolver 和 EventLog。
+SecretState 泄露必须通过 resolver 形成 StateTransition，并由 StateTransitionCommitter 生成 EventLog。
 ```
 
 ## KnowledgePropagation
@@ -826,7 +826,7 @@ AI proposal 引用的 action_type、target_ref 和 arguments 必须是以上三�
 11. `SecretState.holders` 必须拥有对应 KnowledgeState。
 12. `AgentObservationSnapshot` 不能包含主体没有权限知道的目标。
 13. AI proposal 不能直接创建 KnowledgeState、RumorState、SecretState 或 DiscoveryState。
-14. KnowledgePropagation 写入知识状态必须写 EventLog。
+14. KnowledgePropagation 写入知识状态必须形成 StateTransition，并由 StateTransitionCommitter 生成 EventLog。
 15. 世界事实实体不能包含主体认知字段。
 16. 知识事实实体不能包含物理世界字段。
 17. `AuthoritativeWorldState.world_facts` 不能存放 KnowledgeState、DiscoveryState、RumorState 或 SecretState。
@@ -843,10 +843,10 @@ AI proposal 引用的 action_type、target_ref 和 arguments 必须是以上三�
 ```text
 1. Resolver 生成 StateTransition。
 2. StateTransition 通过 Validator。
-3. EventLog 追加提交记录。
+3. StateTransitionCommitter 原子提交 WorldState 变化并生成 EventLogEntry。
 4. KnowledgePropagation 读取 EventLog、空间、参与者、证据和社会关系。
 5. KnowledgePropagation 生成 KnowledgeState / DiscoveryState / RumorState / SecretState 更新。
-6. 知识更新写入 EventLog。
+6. 知识更新必须再次形成 StateTransition，并由 StateTransitionCommitter 原子提交。
 7. Projection 和 AI Observation 使用更新后的知识状态。
 ```
 

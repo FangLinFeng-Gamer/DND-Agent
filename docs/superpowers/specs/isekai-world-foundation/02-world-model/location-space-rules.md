@@ -642,14 +642,14 @@ chunk 坐标从哪里到哪里？
     "terrain_tags": ["mountain", "forest_edge", "wind_exposed"]
   },
   "base_fields": {
-    "elevation": 0.72,
-    "moisture": 0.35,
-    "rockiness": 0.8,
-    "soil_depth": 0.25,
-    "water_flow": 0.1,
-    "civilization_pressure": 0.15,
-    "danger_pressure": 0.55,
-    "abnormal_pressure": 0.05
+    "elevation": "0.720",
+    "moisture": "0.350",
+    "rockiness": "0.800",
+    "soil_depth": "0.250",
+    "water_flow": "0.100",
+    "civilization_pressure": "0.150",
+    "danger_pressure": "0.550",
+    "abnormal_pressure": "0.050"
   },
   "local_climate": {
     "temperature_offset_c": -3.0
@@ -2142,7 +2142,7 @@ target_node_id: old_furnace_inn_kitchen
 -> 计算 effective_traversal 时间、风险和资源变化
 -> 成功后更新 player current node_id / zone_id
 -> 刷新 SpaceProjection
--> 写入 LocationChangedEvent
+-> 形成 event_type=LocationChangedEvent 的 StateTransition，并由 StateTransitionCommitter 生成 EventLogEntry
 ```
 
 失败时：
@@ -2172,7 +2172,7 @@ target_zone_id: front_counter_area
 -> access.state=restricted 时检查 requires 是否满足
 -> access.state=blocked 时拒绝并输出 blocked_reason
 -> 成功后只更新 current_zone_id，不改变 current_node_id
--> 写入 ZoneChangedEvent
+-> 形成 event_type=ZoneChangedEvent 的 StateTransition，并由 StateTransitionCommitter 生成 EventLogEntry
 ```
 
 时间通常为 1-3 分钟，可能改变可见性、可达性和 NPC 反应。

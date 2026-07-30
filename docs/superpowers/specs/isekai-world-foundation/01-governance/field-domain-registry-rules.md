@@ -411,7 +411,7 @@ P1 数值字段最小声明：
 必须记录派生来源。
 派生输出仍必须满足该字段的值域约束；例如 biome_tags 的派生结果必须全部存在于 biome_tag registry，time_band 的派生结果必须属于 time_band enum。
 手动写入或 LLM 写入必须被拒绝。
-迁移工具可以回填，但必须写 EventLog 或 migration note。
+迁移工具可以回填，但权威状态变化必须通过 StateTransition 提交并生成 EventLog；仅不改变权威状态的说明性补录可以写 migration note。
 ```
 
 ### boolean
@@ -830,6 +830,21 @@ update
 deactivate
 delete_for_migration
 ```
+
+`change_op` 的唯一权威定义只能出现在本节。运行时、世界模型、生成清单和具体 resolver 文档只能引用本闭集，不得重新定义第二套 `changes[].op` 值域。
+
+`change_op` 只用于 EventLog `changes[].op`。WriteACL `operation` 和生成阶段 `GeneratorOutputItem.operation` 是上游权限/生成语义，不是 EventLog change payload 语义；`materialize`、`derive`、`propose`、`project_read` 不能出现在 `changes[].op` 中。
+
+语义边界：
+
+```text
+create：创建完整规范化实体。
+update：更新已存在实体的已注册字段。
+deactivate：把可停用实体切换为 inactive/expired/depleted 等 schema 允许的非活动状态。
+delete_for_migration：仅迁移工具可用，用于删除旧 schema 下不可保留的字段或实体。
+```
+
+`move`、`link`、`unlink`、`consume`、`open`、`close`、`equip` 等都是业务语义，不是底层 `change_op`。它们必须通过 `event_type`、`caused_by.id`、resolver 名称和一组确定的 `update/create/deactivate` changes 表达。
 
 P0 `event_cause_kind` 闭集：
 

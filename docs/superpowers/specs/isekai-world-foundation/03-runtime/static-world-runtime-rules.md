@@ -25,6 +25,8 @@ provides:
   - HazardSource
   - ObstacleSource
   - PassabilityReducer
+  - StateTransition
+  - StateTransitionBatch
   - EventLog
   - WorldSnapshot
 ---
@@ -45,6 +47,7 @@ WorldState
 -> EnvironmentResidualEffectState
 -> HazardSource / ObstacleSource
 -> PassabilityReducer
+-> StateTransition / StateTransitionBatch
 -> EventLog
 -> WorldSnapshot
 ```
@@ -503,6 +506,190 @@ P0 常规天气挂在 Region 上。`scope=world_chunk` 只用于明确的局部�
 }
 ```
 
+### StateTransition
+
+`StateTransition` 是所有权威状态变化进入 `WorldState` 和 `EventLog` 的唯一提交包络。生成器、resolver、知识传播、AI 社会结算和迁移工具可以先产生内部草稿，但进入 `StateTransitionValidator` 后必须规范化为本节 schema；只有规范化后的 `StateTransition` 可以交给 `StateTransitionCommitter`。
+
+`StateTransition` 不是 DM 叙事、不是 UI 投影，也不是 LLM proposal。它只表达一次确定性的状态变化：在指定前置状态上，按顺序应用一组 change，得到唯一 post-state hash，并生成一条 EventLogEntry。
+
+```json
+{
+  "transition_id": "st_hazard_slippery_ridge_000128",
+  "world_id": "isekai_world_001",
+  "timeline_id": "main",
+  "command_id": "cmd_worldgen_terrain_hazard_pass_0001",
+  "idempotency_key": "sha256:transition-input-hash",
+  "producer": {
+    "kind": "world_generator",
+    "id": "terrain_hazard_pass",
+    "rule_id": "terrain.steep_slope_to_fall_risk"
+  },
+  "caused_by": {
+    "kind": "world_generator",
+    "id": "terrain_hazard_pass"
+  },
+  "event_type": "HazardCreated",
+  "occurred_at": {
+    "absolute_minute": 16920,
+    "day": 12,
+    "minute_of_day": 1080
+  },
+  "expected_sequence": 127,
+  "expected_entity_revisions": [
+    {
+      "entity_type": "WorldChunk",
+      "entity_id": "chunk_north_slope_12_08_00",
+      "version_check": {
+        "kind": "state_revision",
+        "expected_revision": 4,
+        "expected_hash": null
+      }
+    }
+  ],
+  "preconditions": [
+    {
+      "path": "WorldChunk.chunk_north_slope_12_08_00.terrain.slope",
+      "operator": "equals",
+      "expected": "steep"
+    }
+  ],
+  "ordered_changes": [
+    {
+      "op": "create",
+      "entity_type": "HazardSource",
+      "entity_id": "hazard_slippery_ridge_01",
+      "path": "",
+      "value": {
+        "id": "hazard_slippery_ridge_01",
+        "source_kind": "terrain",
+        "source_entity_ids": [
+          "chunk_north_slope_12_08_00",
+          "edge_chunk_12_08_00_to_13_08_00"
+        ],
+        "generated_by": {
+          "system": "TerrainHazardObstacleDeriver",
+          "rule_id": "terrain.steep_slope_to_fall_risk",
+          "pass": "terrain_hazard_pass"
+        },
+        "hazard_type": "fall_risk",
+        "location": {
+          "scope": "chunk_edge",
+          "edge_id": "edge_chunk_12_08_00_to_13_08_00"
+        },
+        "severity": "medium",
+        "visibility": "hinted",
+        "trigger": {
+          "on_actions": ["move", "climb", "search"],
+          "conditions": ["rain_or_wet_ground", "low_light"]
+        },
+        "effects": [
+          {
+            "effect_type": "injury_risk",
+            "magnitude": "medium",
+            "reason": "湿滑岩面容易失足"
+          }
+        ],
+        "mitigations": [
+          {
+            "method": "careful_movement",
+            "time_multiplier": 1.5,
+            "risk_delta": -1
+          }
+        ],
+        "state": {
+          "active": true,
+          "depleted": false
+        }
+      }
+    }
+  ],
+  "version_context": {
+    "schema_version": "isekai-world-foundation@1",
+    "registry_hash": "sha256:registry_hash",
+    "rule_bundle_hash": "sha256:rule_bundle_hash",
+    "content_pack_hash": "sha256:content_pack_hash"
+  },
+  "previous_state_hash": "sha256:previous-state-hash",
+  "previous_event_hash": "sha256:event-hash-000127",
+  "resulting_state_hash": "sha256:post-state-hash",
+  "event_hash": "sha256:event-hash-000128",
+  "summary": "在北坡脊线东侧生成湿滑坠落风险"
+}
+```
+
+规则：
+
+```text
+StateTransition 是提交输入的 canonical schema，其他文档只能引用本节，不能重新定义字段。
+transition_id 必须在同一 world_id + timeline_id 内唯一。
+timeline_id P0 只允许 main；分支世界、回滚沙盒和模拟分支留到后续版本。
+command_id 表示上游命令或批次，例如玩家命令、生成阶段输出、AI proposal resolution、知识传播任务或迁移任务。
+idempotency_key 必须由 command_id、producer、event_type、preconditions、ordered_changes 和 version_context 的 canonical bytes 计算；相同 key 重试必须返回同一已提交结果或同一拒绝结果，不能重复结算。
+producer 表示产生 StateTransition 的系统组件；producer.kind 必须使用 `event_cause_kind` 闭集。知识传播和 AI 社会结算不新增 kind，应使用 `producer.kind=resolver`，并用 `producer.id=KnowledgePropagationResolver` 或 `producer.id=SocialActionResolver` 区分。caused_by 表示写入 EventLogEntry 的事件来源。二者可以相同，也可以不同，例如 SocialActionResolver 作为 producer，accepted AI proposal 作为 caused_by.id。
+event_type 必须属于 event_type enum。
+occurred_at 必须来自已提交 WorldTimeState，不能由 LLM 或叙事文本决定。
+单条独立提交的 expected_sequence 必须等于提交开始时 WorldState.runtime_state.latest_event_sequence；批内 StateTransition 的 expected_sequence 语义由 StateTransitionBatch 规则定义。
+expected_entity_revisions 是并发保护集合；被读取并影响结算的权威实体必须列入。实体有 state_revision 时使用 `version_check.kind=state_revision`；没有 state_revision 时使用 `version_check.kind=canonical_hash`，并把 entity_at_expected_sequence 的 canonical hash 写入 expected_hash。
+preconditions 是业务前置条件；全部满足后才能应用 ordered_changes。
+ordered_changes 必须按执行顺序排列。同一 StateTransition 内后一个 change 可以读取前一个 change 产生的 post-state。
+resulting_state_hash 必须由 StateTransitionValidator 在内存应用 ordered_changes 后重算，并与提交后的 WorldState canonical hash 一致。
+单条独立提交时，previous_state_hash 由 StateTransitionCommitter 从提交前 WorldState canonical hash 填入。
+单条独立提交时，previous_event_hash 由 StateTransitionCommitter 从 expected_sequence 对应的 EventLogEntry.event_hash 填入；expected_sequence=0 时为 null。
+event_hash 由 StateTransitionCommitter 在 EventLogEntry 规范化后计算。
+summary 只用于审计和调试，不能参与重放。
+```
+
+### StateTransitionBatch
+
+`StateTransitionBatch` 用于表达必须全有或全无的多事件提交，例如空间基础物化、生成阶段原子组、迁移前后成组状态变化。普通单事件提交可以直接提交一个 `StateTransition`；任何 `atomic_commit_group_id` 非空的场景必须提交 `StateTransitionBatch`。
+
+```json
+{
+  "batch_id": "st_batch_spatial_foundation_0001",
+  "world_id": "isekai_world_001",
+  "timeline_id": "main",
+  "command_id": "cmd_generation_stage_spatial_foundation",
+  "idempotency_key": "sha256:batch-input-hash",
+  "atomic_commit_group_id": "acg_spatial_foundation_0001",
+  "expected_sequence": 0,
+  "transitions": [
+    {
+      "transition_id": "st_world_generated_000001",
+      "group_order": 1
+    },
+    {
+      "transition_id": "st_region_generated_000002",
+      "group_order": 2
+    }
+  ],
+  "version_context": {
+    "schema_version": "isekai-world-foundation@1",
+    "registry_hash": "sha256:registry_hash",
+    "rule_bundle_hash": "sha256:rule_bundle_hash",
+    "content_pack_hash": "sha256:content_pack_hash"
+  },
+  "final_state_hash": "sha256:post-batch-state-hash"
+}
+```
+
+规则：
+
+```text
+StateTransitionBatch 只引用已经规范化并通过单项 schema 校验的 StateTransition；批内 StateTransition 不按独立提交 CAS 语义校验。
+batch.expected_sequence 必须等于提交开始时 WorldState.runtime_state.latest_event_sequence。
+batch.transitions 必须按 group_order 升序应用，group_order 从 1 开始且不能跳号。
+批内第 N 个 transition.expected_sequence 必须等于 batch.expected_sequence + N - 1。
+批内第 N 个 transition 的 EventLog.sequence 由 committer 分配为 batch.expected_sequence + N。
+批内第 1 个 transition.previous_state_hash 必须等于 batch 提交前 WorldState canonical hash。
+批内第 1 个 transition.previous_event_hash 必须等于 batch.expected_sequence 对应的 EventLogEntry.event_hash；batch.expected_sequence=0 时为 null。
+批内第 N 个 transition 在 N > 1 时，previous_state_hash 必须等于第 N-1 个 transition.resulting_state_hash。
+批内第 N 个 transition 在 N > 1 时，previous_event_hash 必须等于第 N-1 个 transition.event_hash。
+批内第 N 个 transition 的 preconditions 和 expected_entity_revisions 必须以内存中已应用前 N-1 个 transition 后的中间 WorldState 为校验上下文。
+批内第 N 个 transition 的 resulting_state_hash 是应用该 transition 后的中间 WorldState hash。
+batch.final_state_hash 必须等于最后一个 transition.resulting_state_hash。
+批内任一 transition schema 校验、precondition、revision、ACL、post-state validator 或 hash 校验失败，整个 batch 必须失败；不得写入任何批内 WorldState 变化或 EventLogEntry。
+```
+
 ### EventLogEntry
 
 `EventLogEntry` 是权威状态变更记录。任何生成、迁移、resolver 修改都必须写事件。
@@ -514,6 +701,7 @@ P0 常规天气挂在 Region 上。`scope=world_chunk` 只用于明确的局部�
   "event_id": "evt_000128",
   "world_id": "isekai_world_001",
   "sequence": 128,
+  "transition_id": "st_hazard_slippery_ridge_000128",
   "event_type": "HazardCreated",
   "occurred_at": {
     "absolute_minute": 16920,
@@ -528,6 +716,7 @@ P0 常规天气挂在 Region 上。`scope=world_chunk` 只用于明确的局部�
   "preconditions": [
     {
       "path": "WorldChunk.chunk_north_slope_12_08_00.terrain.slope",
+      "operator": "equals",
       "expected": "steep"
     }
   ],
@@ -538,8 +727,46 @@ P0 常规天气挂在 Region 上。`scope=world_chunk` 只用于明确的局部�
       "entity_id": "hazard_slippery_ridge_01",
       "path": "",
       "value": {
+        "id": "hazard_slippery_ridge_01",
+        "source_kind": "terrain",
+        "source_entity_ids": [
+          "chunk_north_slope_12_08_00",
+          "edge_chunk_12_08_00_to_13_08_00"
+        ],
+        "generated_by": {
+          "system": "TerrainHazardObstacleDeriver",
+          "rule_id": "terrain.steep_slope_to_fall_risk",
+          "pass": "terrain_hazard_pass"
+        },
         "hazard_type": "fall_risk",
-        "severity": "medium"
+        "location": {
+          "scope": "chunk_edge",
+          "edge_id": "edge_chunk_12_08_00_to_13_08_00"
+        },
+        "severity": "medium",
+        "visibility": "hinted",
+        "trigger": {
+          "on_actions": ["move", "climb", "search"],
+          "conditions": ["rain_or_wet_ground", "low_light"]
+        },
+        "effects": [
+          {
+            "effect_type": "injury_risk",
+            "magnitude": "medium",
+            "reason": "湿滑岩面容易失足"
+          }
+        ],
+        "mitigations": [
+          {
+            "method": "careful_movement",
+            "time_multiplier": 1.5,
+            "risk_delta": -1
+          }
+        ],
+        "state": {
+          "active": true,
+          "depleted": false
+        }
       }
     }
   ],
@@ -549,7 +776,10 @@ P0 常规天气挂在 Region 上。`scope=world_chunk` 只用于明确的局部�
     "rule_bundle_hash": "sha256:rule_bundle_hash",
     "content_pack_hash": "sha256:content_pack_hash"
   },
-  "resulting_state_hash": "sha256:..."
+  "previous_state_hash": "sha256:previous-state-hash",
+  "previous_event_hash": "sha256:event-hash-000127",
+  "resulting_state_hash": "sha256:post-state-hash",
+  "event_hash": "sha256:event-hash-000128"
 }
 ```
 
@@ -569,6 +799,8 @@ system_ledger
 
 `WorldGenerationManifest`、`GenerationStageContract`、`GeneratorOutputEnvelope` 和 `GeneratorOutputItem` 属于 `system_ledger.generation_audit`。恢复快照时不能把这些生成审计实体还原到 `world_facts` 或 `knowledge_facts`，也不能丢弃它们，否则生成结果无法审计和重放。
 
+`GenerationRunState`、`GenerationStageRunState`、`GenerationCheckpoint` 和 `GenerationResumeToken` 属于 `generation_control`。已完成世界的正常快照恢复不依赖它们；未完成生成的调试或断点恢复快照可以保存它们，但它们不进入 WorldStateContentHash。
+
 ```json
 {
   "snapshot_id": "snapshot_after_world_generation",
@@ -577,6 +809,7 @@ system_ledger
   "created_at": "2026-07-11T00:00:00Z",
   "reason": "after_world_generation",
   "state_hash": "sha256:...",
+  "latest_event_hash": "sha256:event-hash-000128",
   "version_lock": {
     "schema_version": "isekai-world-foundation@1",
     "schema_versions": {
@@ -605,7 +838,8 @@ system_ledger
   "validation_summary": {
     "valid": true,
     "error_count": 0
-  }
+  },
+  "snapshot_hash": "sha256:snapshot-hash"
 }
 ```
 
@@ -807,6 +1041,73 @@ system_ledger
 | `state.active` | 障碍当前是否存在并生效。 |
 | `state.removable` | 该障碍是否可被规则移除。 |
 
+### StateTransition 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `transition_id` | 状态提交包络 ID。同一 `world_id + timeline_id` 内唯一。 |
+| `world_id` | 所属 World ID。 |
+| `timeline_id` | 时间线 ID。P0 只允许 `main`。 |
+| `command_id` | 上游命令、生成阶段、AI proposal resolution、知识传播任务或迁移任务 ID。用于追踪“为什么产生这次提交”。 |
+| `idempotency_key` | 幂等键。相同 key 的重复提交不得重复结算。 |
+| `producer` | 产出该 StateTransition 的系统组件。 |
+| `producer.kind` | 生产者类型，必须属于 `event_cause_kind` 闭集，例如 world_generator、resolver、ai_runtime、migration_tool、test_fixture。知识传播和 AI 社会结算使用 resolver kind，通过 producer.id 区分。 |
+| `producer.id` | 生产者 ID。 |
+| `producer.rule_id` | 使用的规则 ID。没有具体规则时可以省略，但 resolver 和 generator P0 必须填写。 |
+| `caused_by` | 写入 EventLogEntry 的事件来源。 |
+| `caused_by.kind` | 来源类型，必须属于 `event_cause_kind` 闭集。 |
+| `caused_by.id` | 来源 ID。 |
+| `event_type` | 提交后生成的 EventLogEntry 类型，必须属于 `event_type` 闭集。 |
+| `occurred_at` | 事件对应的世界时间。 |
+| `occurred_at.absolute_minute` | 绝对世界分钟。 |
+| `occurred_at.day` | 世界日。 |
+| `occurred_at.minute_of_day` | 当日分钟。 |
+| `expected_sequence` | 独立提交时为提交前期望的 `WorldState.runtime_state.latest_event_sequence`；批内提交时为该 transition 应用前的批内逻辑事件边界。 |
+| `expected_entity_revisions` | 并发保护集合。列出本次结算读取并依赖的实体版本检查。 |
+| `expected_entity_revisions[].entity_type` | 被保护实体类型。 |
+| `expected_entity_revisions[].entity_id` | 被保护实体 ID。 |
+| `expected_entity_revisions[].version_check` | 并发检查方式。 |
+| `expected_entity_revisions[].version_check.kind` | 检查类型。P0 允许 `state_revision` 和 `canonical_hash`。 |
+| `expected_entity_revisions[].version_check.expected_revision` | 当 kind=state_revision 时的期望 revision；否则为 null。 |
+| `expected_entity_revisions[].version_check.expected_hash` | 当 kind=canonical_hash 时的期望 canonical hash；否则为 null。 |
+| `preconditions` | 业务前置条件集合。 |
+| `preconditions[].path` | 被检查的权威状态路径。 |
+| `preconditions[].operator` | 检查操作符。P0 允许 `equals`、`not_equals`、`exists`、`not_exists`、`in`、`not_in`。 |
+| `preconditions[].expected` | 期望值。`exists/not_exists` 可省略。 |
+| `ordered_changes` | 按顺序应用的状态变化列表。 |
+| `ordered_changes[].op` | 变更操作，必须引用 `change_op` 闭集。 |
+| `ordered_changes[].entity_type` | 被创建或修改的实体类型。 |
+| `ordered_changes[].entity_id` | 被创建或修改的实体 ID。 |
+| `ordered_changes[].path` | 被修改字段路径。`create` 时必须为空字符串。 |
+| `ordered_changes[].value` | 新值。`create` 时必须是完整规范化实体；`update/deactivate` 时是目标 path 的完整新值。 |
+| `version_context` | 本次提交使用的版本上下文。 |
+| `version_context.schema_version` | 世界底座总 schema 版本。 |
+| `version_context.registry_hash` | registry bundle canonical hash。 |
+| `version_context.rule_bundle_hash` | rule bundle canonical hash。 |
+| `version_context.content_pack_hash` | content pack 集合 canonical hash。 |
+| `previous_state_hash` | 应用本条 StateTransition 前的 WorldState canonical hash。独立提交时来自提交前 WorldState；批内提交时来自批开始状态或上一条 transition 的 resulting_state_hash。 |
+| `previous_event_hash` | 应用本条 StateTransition 前的最新 EventLogEntry.event_hash。独立提交时来自 expected_sequence；批内提交时来自批开始事件 hash 或上一条 transition 的 event_hash。 |
+| `resulting_state_hash` | 应用本次 StateTransition 后的 WorldState canonical hash。 |
+| `event_hash` | 由最终 EventLogEntry canonical payload 计算出的事件 hash。 |
+| `summary` | 调试摘要，不作为状态恢复依据。 |
+
+### StateTransitionBatch 字段
+
+| 字段 | 含义 |
+| --- | --- |
+| `batch_id` | 原子提交批次 ID。 |
+| `world_id` | 所属 World ID。 |
+| `timeline_id` | 时间线 ID。P0 只允许 `main`。 |
+| `command_id` | 上游批次命令 ID。 |
+| `idempotency_key` | 批次级幂等键。 |
+| `atomic_commit_group_id` | 原子提交组 ID。所有引用该组的 StateTransition 必须在同一批次内提交。 |
+| `expected_sequence` | 批次提交前期望的 `WorldState.runtime_state.latest_event_sequence`，也是批内第 1 条 transition 的 expected_sequence。 |
+| `transitions` | 批内 StateTransition 引用列表。 |
+| `transitions[].transition_id` | 被引用的 StateTransition ID。 |
+| `transitions[].group_order` | 批内应用顺序，从 1 开始连续递增。 |
+| `version_context` | 批次提交使用的版本上下文，必须与批内每个 StateTransition 一致。 |
+| `final_state_hash` | 批内全部 StateTransition 应用后的最终 WorldState canonical hash。 |
+
 ### EventLogEntry 字段
 
 | 字段 | 含义 |
@@ -814,6 +1115,7 @@ system_ledger
 | `event_id` | 事件 ID。 |
 | `world_id` | 所属 World ID。 |
 | `sequence` | 单调递增事件序号。用于回放、快照和调试。 |
+| `transition_id` | 产生该事件的 StateTransition ID。由 `StateTransitionCommitter` 写入，不能由 LLM、内容包或上游 resolver 自由指定最终值。 |
 | `event_type` | 事件类型。 |
 | `occurred_at` | 事件发生时的世界时间。 |
 | `occurred_at.absolute_minute` | 事件发生时的绝对世界分钟。运行时回放、天气边界和残留过期判断必须优先使用该字段。 |
@@ -825,9 +1127,10 @@ system_ledger
 | `summary` | 事件摘要。用于调试，不作为权威状态。 |
 | `preconditions` | 应用事件前必须满足的条件。 |
 | `preconditions[].path` | 被检查的状态路径。 |
+| `preconditions[].operator` | 检查操作符。P0 允许 `equals`、`not_equals`、`exists`、`not_exists`、`in`、`not_in`。 |
 | `preconditions[].expected` | 期望值。 |
 | `changes` | 状态变更列表。 |
-| `changes[].op` | 操作类型：create、update、delete、move、link、unlink。 |
+| `changes[].op` | 状态变更操作类型，必须引用 [字段域与注册表规则](../01-governance/field-domain-registry-rules.md) 的 `change_op` 闭集。P0 只能是 create、update、deactivate、delete_for_migration。 |
 | `changes[].entity_type` | 被修改实体类型。 |
 | `changes[].entity_id` | 被修改实体 ID。 |
 | `changes[].path` | 被修改字段路径。create 全实体时可为空。 |
@@ -837,9 +1140,233 @@ system_ledger
 | `version_context.registry_hash` | FieldSpec、enum、registry、schema、FieldOwnership、WriteACL 和 event_type 的 canonical hash。 |
 | `version_context.rule_bundle_hash` | 生成器、resolver、validator、materializer、Deriver、AI action policy 和迁移规则版本的 canonical hash。 |
 | `version_context.content_pack_hash` | 当前启用内容包和 catalog 集合的 canonical hash。 |
+| `previous_state_hash` | 应用事件前的 WorldState canonical hash。 |
+| `previous_event_hash` | 上一个 EventLogEntry 的 event_hash。sequence=1 时为 null。 |
 | `resulting_state_hash` | 应用事件后的 WorldState 哈希。 |
+| `event_hash` | 当前 EventLogEntry 的 canonical hash。 |
 
-`changes` 原则上必须非空。P0 只有 `ServiceRequestRefused`、`KnowledgeDisclosureResolved` 和 `RumorSpreadRequested` 可以作为 occurrence-only 领域事件使用空数组；它们分别表达一次已经结算的拒绝、知识披露行为或流言传播请求，并可作为后续 Projection/KnowledgePropagation 的权威输入。空 changes 时 `resulting_state_hash` 必须等于前一事件，其他 event_type 使用空 changes 必须被拒绝。
+`changes` 原则上必须非空。P0 只有 `ServiceRequestRefused`、`KnowledgeDisclosureResolved`、`RumorSpreadRequested` 和可选调试审计 `SnapshotCreated` 可以作为 occurrence-only 领域事件使用空数组；它们分别表达一次已经结算的拒绝、知识披露行为、流言传播请求或快照创建审计，并可作为后续 Projection/KnowledgePropagation/调试恢复的权威输入。空 changes 时 `resulting_state_hash` 必须等于应用该 occurrence-only 事件后的 WorldStateContentHash，其他 event_type 使用空 changes 必须被拒绝。
+
+运行时文档不得重新定义 `change_op`。`move/link/unlink` 等业务动作必须通过 `event_type` 和 `caused_by.id` 表达，并落成一个或多个 `update/create/deactivate` changes。例如 `ContainerObjectTransferred` 可以由 `ContainmentTransferResolver.move_object` 产生，但 EventLog changes 仍只能更新相关容器和对象字段。
+
+EventLogEntry 必须由已经通过 `StateTransitionValidator` 的 StateTransition 生成。EventLogEntry 的 `event_type`、`occurred_at`、`caused_by`、`preconditions`、`changes`、`version_context`、`resulting_state_hash` 和 `summary` 必须逐字段复制或规范化自 StateTransition，不能由 EventLog writer 临时重算另一套业务结果。
+
+EventLogEntry 必须自包含重放所需 payload。`transition_id` 只用于审计和幂等关联，事件重放不能要求额外读取 StateTransition 原始对象；否则旧日志在清理 system_ledger 或迁移后会失去可重放性。
+
+EventLogEntry 的 `event_hash` 必须按本文“Canonical hash 与 replay 规则”计算。计算 `event_hash` 时必须排除 `event_hash` 字段自身，必须包含 `previous_state_hash`、`previous_event_hash`、`resulting_state_hash` 和全部 `changes`。
+
+### StateTransition 提交规则
+
+```text
+1. Resolver、Generator、KnowledgePropagation、AI Social Resolver 或 MigrationTool 只能产出 StateTransition 或 StateTransitionBatch，不能直接写 WorldState 或 EventLog。
+2. StateTransitionValidator 读取当前已提交 WorldState，校验 world_id、timeline_id、version_context、event_type、producer、caused_by、preconditions、expected_entity_revisions、ordered_changes 和 ACL；批内校验时，每条 transition 使用已应用前序 transition 后的中间 WorldState 作为上下文。
+3. Validator 在内存中按 ordered_changes 顺序应用变化，得到 candidate post-state。
+4. Candidate post-state 必须通过目标实体 validator、跨实体不变量 validator、命名空间隔离 validator、数量守恒 validator 和字段域 validator。
+5. Validator 计算 resulting_state_hash；若 StateTransition 中已有 resulting_state_hash，必须一致；若没有，由 validator 填入规范化 StateTransition。
+6. StateTransitionCommitter 使用 CAS 原子提交：独立 StateTransition 只有当前 latest_event_sequence == expected_sequence，且 expected_entity_revisions 全部仍匹配时，才能写入 WorldState 变化、追加 EventLogEntry、推进 latest_event_sequence；StateTransitionBatch 只对 batch.expected_sequence 做一次外部 CAS，批内 transition.expected_sequence 按 group_order 链式校验。
+7. 单条 StateTransition 成功后，EventLog.sequence 必须等于 expected_sequence + 1，WorldState.runtime_state.latest_event_sequence 必须等于该 sequence。
+8. StateTransitionBatch 成功后，EventLog.sequence 必须连续分配，WorldState.runtime_state.latest_event_sequence 必须等于 batch.expected_sequence + batch.transitions.length。
+9. 任一校验、CAS、持久化或 hash 检查失败，必须拒绝整个 StateTransition 或 StateTransitionBatch；不得留下部分 WorldState、部分 EventLogEntry 或推进后的 latest_event_sequence。
+10. 相同 idempotency_key 的重复提交必须返回第一次提交或拒绝的结果，不得再次应用 ordered_changes。
+```
+
+EventLog append 是 `StateTransitionCommitter` 原子提交包络的一部分，不再为“追加 EventLogEntry 这个行为本身”递归生成新的 EventLogEntry。否则会形成无限自记录。
+
+### StateTransition change payload 规则
+
+```text
+op=create:
+  path 必须为空字符串。
+  value 必须是完整规范化实体，包含目标 schema 的全部必填字段。
+  entity_id 在提交前不得已存在。
+
+op=update:
+  path 必须指向已注册字段。
+  entity_id 必须引用已存在实体。
+  value 是该 path 的新值，不是 patch 片段。
+
+op=deactivate:
+  path 必须指向目标实体 schema 允许的状态字段，例如 state.active、state.status 或 lifecycle.state。
+  value 必须是 schema 允许的非活动状态，例如 false、inactive、expired、depleted。
+  不能用 deactivate 删除实体引用；引用清理必须由同一个 StateTransition 中的显式 update 完成。
+
+op=delete_for_migration:
+  只允许 migration_tool 使用。
+  必须携带 migration rule id，并且只能在 schema migration 提交中出现。
+```
+
+数组字段在 P0 不支持隐式 append/remove patch。凡是修改数组字段，`op=update` 的 `value` 必须是修改后的完整数组；validator 必须校验数组元素闭集、排序规则、唯一性和引用完整性。
+
+### 生成 operation lowering 规则
+
+`GeneratorOutputItem.operation` 是生成阶段权限语义，不能直接进入 EventLog `changes[].op`。`GenerationCommitter` 必须先把生成输出降低为 StateTransition `ordered_changes`：
+
+```text
+operation=create:
+  降低为 ordered_changes[].op=create。
+  value 必须是完整规范化实体。
+
+operation=update:
+  降低为 ordered_changes[].op=update。
+  value 必须是目标 path 的完整新值。
+
+operation=deactivate:
+  降低为 ordered_changes[].op=deactivate。
+  value 必须是目标状态字段允许的非活动值。
+
+operation=materialize:
+  先运行 materializer 纯函数，生成完整 runtime entity candidate。
+  通过目标 entity validator 后，降低为 ordered_changes[].op=create。
+  EventLog changes 只能记录最终完整实体，不能记录 catalog diff、merge 步骤或 materialize operation。
+
+operation=derive:
+  如果输出仍是 Candidate 或 generation_audit，只能留在 system_ledger.generation_audit，不进入 WorldState changes。
+  如果输出物化为权威实体字段，必须降低为 create 或 update。
+  EventLog changes 只能记录最终字段值，不能记录 derive operation。
+```
+
+示例：
+
+```text
+GenericItemMaterializer(materialize container_waterskin)
+-> GeneratorOutputItem.operation=materialize
+-> StateTransition.ordered_changes[0].op=create
+-> entity_type=WorldObject
+-> value=完整 WorldObject(container)，包含 provenance、placement、physical、components.container 和 state。
+
+ChunkBiomeCandidateDerivation(derive biome_tags)
+-> GeneratorOutputItem.operation=derive
+-> Candidate 保留在 generation_audit
+-> RegionBiomeCandidateAggregation 通过后
+-> StateTransition.ordered_changes[0].op=update
+-> entity_type=WorldChunk
+-> path=WorldChunk.chunk_12_08_00.biome_tags
+-> value=最终 biome_tags 完整数组。
+```
+
+### 迁移 deletion payload 规则
+
+`delete_for_migration` 只能由 migration_tool 使用，且只能出现在 `event_type=SchemaMigrated` 或明确的内容迁移事件中。普通玩法、生成、resolver、AI 和内容包都不能使用。
+
+`delete_for_migration` 的 `value` 不是新字段值，而是迁移删除审计 payload：
+
+```json
+{
+  "migration_plan_id": "migration_2026_07_schema_v2",
+  "migration_rule_id": "migration.remove_legacy_temperature_offset",
+  "delete_scope": "field",
+  "old_value_hash": "sha256:old-field-value-hash",
+  "reason_code": "field_replaced_by_environment_temperature",
+  "replacement": {
+    "entity_type": "EnvironmentState",
+    "entity_id": "env_chunk_12_08_00_16920",
+    "path": "temperature.ambient_c"
+  }
+}
+```
+
+规则：
+
+```text
+delete_scope 必须是 field 或 entity。
+delete_scope=field 时 path 必须指向迁移前 schema 中存在、迁移后 schema 中删除或废弃的字段。
+delete_scope=entity 时 path 必须为空字符串，entity_type 必须是迁移计划允许删除的旧实体类型。
+old_value_hash 必须等于删除前目标值或目标实体的 canonical hash。
+replacement 可以为 null；非 null 时必须引用同一 StateTransition 或同一 StateTransitionBatch 中 create/update 后存在的替代字段或实体。
+preconditions 必须记录迁移前 version_lock 和 old_value_hash，避免重复迁移或误删新字段。
+重放 delete_for_migration 时，replay engine 必须先校验 old_value_hash，再删除目标字段或实体，最后应用同一事件中的替代 create/update。
+```
+
+### Canonical hash 与 replay 规则
+
+P0 所有状态、事件和快照 hash 都使用同一基础规范，复用 [内容包、Catalog 与物化版本规则](../05-content-packs/content-pack-materialization-rules.md) 的 canonical JSON 协议：
+
+```text
+CanonicalBytes(payload) = canonical_json_utf8(payload)
+Hash(payload) = "sha256:" + sha256(CanonicalBytes(payload)).hex_lowercase
+```
+
+补充规则：
+
+```text
+object key 按 Unicode code point 升序排序。
+array 默认保留顺序；被 FieldSpec 声明为 set 的数组必须先去重并稳定排序。
+number 必须先按 FieldSpec 规范化；守恒数值使用 decimal string。
+null、空数组和空对象参与 hash；缺失字段和 null 不是同一状态。
+不得把注释、文件路径、mtime、数据库行号、加载顺序、本地化排序或运行环境写入 hash。
+```
+
+`WorldStateContentHash` 计算范围：
+
+```text
+Hash({
+  hash_kind: "AuthoritativeWorldStateContentHash",
+  hash_version: "isekai-state-hash@1",
+  world_id,
+  timeline_id,
+  version_lock,
+  runtime_state_without_latest_snapshot_id,
+  world_facts,
+  knowledge_facts,
+  system_ledger_without_event_log_entries_world_snapshots_and_generation_control
+})
+```
+
+说明：
+
+```text
+EventLogEntry 和 WorldSnapshot 不进入 WorldStateContentHash，避免 resulting_state_hash、event_hash 和 snapshot_hash 自引用。
+runtime_state.latest_event_sequence 必须进入 WorldStateContentHash，因为它表达已应用事件边界。
+runtime_state.latest_snapshot_id 是恢复索引，不进入 WorldStateContentHash；更新它不得改变世界内容 hash。
+system_ledger 中的 generation_audit、ai_proposal ledger、migration_audit 等非 EventLog/Snapshot/generation_control 账本进入 WorldStateContentHash。
+generation_control 只保存未完成世界生成的 RunState、StageRunState、Checkpoint 和 ResumeToken；它不进入 WorldStateContentHash，避免崩溃次数和恢复次数改变最终世界内容 hash。
+```
+
+`EventLogEntry.event_hash` 计算范围：
+
+```text
+Hash({
+  hash_kind: "EventLogEntryHash",
+  hash_version: "isekai-event-hash@1",
+  event_log_entry_without_event_hash
+})
+```
+
+`WorldSnapshot.snapshot_hash` 计算范围：
+
+```text
+Hash({
+  hash_kind: "WorldSnapshotHash",
+  hash_version: "isekai-snapshot-hash@1",
+  snapshot_without_snapshot_hash
+})
+```
+
+重放规则：
+
+```text
+1. 选择 snapshot.event_sequence <= target_sequence 的最新 WorldSnapshot。
+2. 校验 snapshot.snapshot_hash、snapshot.state_hash、snapshot.version_lock 和 snapshot.latest_event_hash。
+3. 恢复 snapshot.storage 指向的 WorldState，并运行 foundation validators。
+4. 从 snapshot.event_sequence + 1 开始按 sequence 连续读取 EventLogEntry，直到 target_sequence。
+5. 每条事件必须满足 previous_state_hash == 当前 WorldStateContentHash。
+6. 每条事件必须满足 previous_event_hash == 上一条事件 event_hash；若从 snapshot 后开始，则上一条事件 hash 必须等于 snapshot.latest_event_hash。
+7. 按 changes 顺序应用事件，应用后重算 WorldStateContentHash。
+8. 重算值必须等于 EventLogEntry.resulting_state_hash。
+9. 重算 EventLogEntry.event_hash，必须等于事件内 event_hash。
+10. target_sequence 应用完成后的 WorldStateContentHash 必须等于目标 expected hash；若目标是某个 snapshot，则必须等于该 snapshot.state_hash。
+```
+
+从 event 0 开始重放时，初始状态是空世界容器：
+
+```text
+world_id 已知。
+timeline_id = main。
+runtime_state.latest_event_sequence = 0。
+world_facts、knowledge_facts、system_ledger 均为空集合。
+version_lock 使用创世事件 version_context。
+previous_event_hash = null。
+```
 
 ### WorldSnapshot 字段
 
@@ -851,6 +1378,7 @@ system_ledger
 | `created_at` | 快照创建的真实时间戳。 |
 | `reason` | 创建快照的原因，例如 after_world_generation、before_migration、debug_checkpoint。 |
 | `state_hash` | 快照内 WorldState 的哈希。 |
+| `latest_event_hash` | `event_sequence` 对应的 EventLogEntry.event_hash。event_sequence=0 时为 null。 |
 | `version_lock` | 快照依赖的完整版本锁。 |
 | `version_lock.schema_version` | 世界底座总 schema 版本。 |
 | `version_lock.schema_versions` | 各权威文档或 schema 的版本表。 |
@@ -862,6 +1390,24 @@ system_ledger
 | `storage.ref` | 快照存储引用。 |
 | `validation_summary.valid` | 快照创建时 validator 是否通过。 |
 | `validation_summary.error_count` | validator 错误数量。 |
+| `snapshot_hash` | WorldSnapshot 自身 canonical hash。计算时排除 `snapshot_hash` 字段。 |
+
+### SnapshotWriter 规则
+
+`WorldSnapshot` 是恢复检查点，不是游戏内世界事实。SnapshotWriter 只写 snapshot namespace 和恢复索引，不能修改 world_facts、knowledge_facts、EventLogEntry 或 resolver 可见状态。
+
+```text
+1. SnapshotWriter 只能读取已经提交的 WorldState 和 EventLog。
+2. SnapshotWriter 必须固定一个 committed boundary：event_sequence = 当前 WorldState.runtime_state.latest_event_sequence。
+3. SnapshotWriter 计算 WorldStateContentHash，并写入 snapshot.state_hash。
+4. SnapshotWriter 读取 event_sequence 对应 EventLogEntry.event_hash，并写入 snapshot.latest_event_hash；event_sequence=0 时为 null。
+5. SnapshotWriter 写入 snapshot payload 后计算 snapshot_hash。
+6. snapshot payload、snapshot metadata 和 runtime_state.latest_snapshot_id 恢复索引必须原子写入；任一步失败都不得留下半个快照或推进 latest_snapshot_id。
+7. runtime_state.latest_snapshot_id 不进入 WorldStateContentHash；更新它不改变 resulting_state_hash。
+8. SnapshotWriter 不生成 StateTransition，也不为“创建快照”递归要求新的 Snapshot。
+```
+
+`SnapshotCreated` event_type 只允许作为调试审计事件使用。P0 默认不要求创建快照时形成 `SnapshotCreated` StateTransition；如果实现选择审计，必须由调试审计 resolver 形成 occurrence-only StateTransition，`changes=[]`，`resulting_state_hash` 等于该审计事件后的 WorldStateContentHash，且仍不得把 WorldSnapshot payload 写入 EventLog changes。
 
 ### OriginMetadata 字段
 
@@ -1343,7 +1889,7 @@ EnvironmentDeriver 读取当前 WeatherState 和当前有效 EnvironmentResidual
 硬规则：
 
 ```text
-残留创建、衰减、过期都必须写 EventLog。
+残留创建、衰减、过期都必须通过 StateTransition 提交，并由 StateTransitionCommitter 生成 EventLogEntry。
 残留到期不能靠 DM 文本自然消失，必须由 EnvironmentResidualEffectState.state 或新的衰减阶段表达。
 如果残留影响通行、风险或可见度，EnvironmentDeriver 必须触发 Hazard/Obstacle Deriver 和 PassabilityReducer。
 同一 scope、effect_type、source_entity_id 在同一时间不能存在重叠 active 区间。
@@ -1497,7 +2043,7 @@ HazardSource / ObstacleSource 不直接删除，优先更新 state.active=false�
 当 source_entity_ids 中任一实体被 removed，相关 HazardSource / ObstacleSource 必须重新校验。
 当 EnvironmentState 超出 valid_for，依赖该 EnvironmentState 的临时危险/障碍必须重新派生或关闭。
 当 ObstacleSource.state.active 或 passability_override 变化时，必须触发 PassabilityReducer 重算关联 edge。
-每次 create/update/deactivate 必须写 EventLogEntry。
+每次 create/update/deactivate 必须先形成 StateTransition，并由 StateTransitionCommitter 原子提交 WorldState 变化和 EventLogEntry。
 ```
 
 ## 运行规则
@@ -1516,7 +2062,7 @@ WorldTimeState 不允许持有最终 light_level、ambient_c、weather_state_id�
 light_level、ambient_c、visibility_modifier、ground_effects 必须由 EnvironmentState 表达。
 EnvironmentState 必须由 WorldTimeState、weather_state、terrain、LocationNode.environment、WorldObject 光源/热源等输入派生或校验。
 WeatherState 字段必须与气候地形形成规则文档的 WeatherFormation 输出保持一致。
-时间推进必须写 TimeAdvanced 事件。
+时间推进必须形成 TimeAdvanced StateTransition，并由 StateTransitionCommitter 生成 EventLogEntry。
 所有运行时有效期必须使用 GameTimeInterval。
 时间推进后，受影响的 EnvironmentState 必须重新派生、标记失效，或通过 validator 证明仍在 valid_for 范围内。
 时间推进到某个区间的 end_world_minute 时，该区间已经失效，必须读取或生成下一个覆盖当前 absolute_minute 的区间。
@@ -1542,13 +2088,13 @@ WeatherService.advance(time_delta) 是正常时间推进中的天气入口。
 WeatherResolver 只处理规则事件或 LLM proposal 触发的天气变化请求。
 同样 RandomSeedMaterial、Region、上一段 WeatherState 和目标时间必须得到同样的下一段 WeatherState。
 短行动不检查天气变化，除非行动后当前时间跨过天气片段结束时间。
-长休、睡觉、赶路或等待跨过多个天气片段时，必须按片段逐段生成 WeatherChanged EventLog；DM/UI 可以只总结重要变化。
+长休、睡觉、赶路或等待跨过多个天气片段时，必须按片段逐段形成 WeatherChanged StateTransition，并由 StateTransitionCommitter 生成 EventLogEntry；DM/UI 可以只总结重要变化。
 玩家跨 Region 时读取目标 Region 当前 WeatherState，不把原 Region 天气带到新 Region。
 天气变化后，受影响的 EnvironmentState 必须重新派生、标记失效，或通过 validator 证明仍在 valid_for 范围内。
 天气结束后仍存在的 wet/muddy/slippery/snow_covered/fast_water 必须创建或更新 EnvironmentResidualEffectState。
 天气变化后，依赖 EnvironmentState 的 HazardSource / ObstacleSource 必须重新派生、关闭或降级。
 WeatherState 不允许直接创建物品。
-LLM proposal 不允许直接创建 WeatherState、修改 WeatherState 或写 WeatherChanged EventLog。
+LLM proposal 不允许直接创建 WeatherState、修改 WeatherState 或提交 WeatherChanged StateTransition。
 ```
 
 天气推进流程：
@@ -1558,9 +2104,9 @@ LLM proposal 不允许直接创建 WeatherState、修改 WeatherState 或写 Wea
 2. WeatherService.advance 读取每个受影响 Region 当前覆盖目标 absolute_minute 的 base_region WeatherState。
 3. 如果目标 absolute_minute 仍满足 start_world_minute <= target < end_world_minute，天气不变。
 4. 如果目标 absolute_minute 跨过一个或多个 WeatherState.end_world_minute，按天气转移表逐段生成下一段 WeatherState。
-5. 每生成一段新 WeatherState，必须让上一段 end_world_minute 等于下一段 start_world_minute，并写 WeatherChanged EventLog。
-6. 对上一段天气结束后仍应保留的 ground_effects，EnvironmentDeriver 创建或更新 EnvironmentResidualEffectState，并写 EnvironmentResidualEffectCreated / EnvironmentResidualEffectStateChanged EventLog。
-7. 更新 runtime_state.active_weather_state_ids 和 active_environment_residual_effect_ids。
+5. 每生成一段新 WeatherState，必须让上一段 end_world_minute 等于下一段 start_world_minute，并形成 WeatherChanged StateTransition。
+6. 对上一段天气结束后仍应保留的 ground_effects，EnvironmentDeriver 创建或更新 EnvironmentResidualEffectState，并形成 EnvironmentResidualEffectCreated / EnvironmentResidualEffectStateChanged StateTransition。
+7. 由 StateTransitionCommitter 原子更新 runtime_state.active_weather_state_ids、active_environment_residual_effect_ids 和对应 EventLogEntry。
 8. EnvironmentDeriver 使用当前 WeatherState、当前有效残留、WorldTimeState 和空间输入重新派生受影响空间的 EnvironmentState。
 9. Hazard/Obstacle Deriver 根据新的 EnvironmentState 更新危险和障碍及其 passability_override。
 10. PassabilityReducer 重算受影响 edge 的 effective_passability / effective_traversal。
@@ -1601,7 +2147,7 @@ WeatherResolver 必须校验：
 新 WeatherState 是否使用合法 GameTimeInterval。
 新 WeatherState 是否破坏同 Region base_region 唯一性、连续性或不重叠约束。
 局部天气覆盖是否有父级 Region WeatherState，并且生命周期是否完全落在父级区间内。
-是否写入 WeatherChanged EventLog。
+是否形成 WeatherChanged StateTransition，并由 StateTransitionCommitter 生成 EventLogEntry。
 是否触发 EnvironmentState 重算。
 ```
 
@@ -1615,7 +2161,7 @@ WeatherState 结束后，EnvironmentState 不能继续把旧 weather_state.condi
 雨停、雪停、风暴结束、泼水、燃烧、异常场消退后仍存在的局部效果，必须进入 EnvironmentResidualEffectState。
 EnvironmentResidualEffectState 有效判断固定为 start_world_minute <= current_absolute_minute < end_world_minute。
 EnvironmentResidualEffectState 到达 end_world_minute 时必须过期，或按 decay 生成下一阶段残留。
-残留创建、衰减、过期必须写 EventLog，并触发 EnvironmentState 重算。
+残留创建、衰减、过期必须通过 StateTransition 提交，并由 StateTransitionCommitter 生成 EventLogEntry，同时触发 EnvironmentState 重算。
 EnvironmentDeriver 只能读取 active 残留，不能读取过期残留来派生当前环境。
 ```
 
@@ -1637,16 +2183,16 @@ ObstacleSource.generated_by.rule_id 必须来自 ObstacleSource 产生规则表�
 如果障碍来自具体对象，例如门、箱子、倒木，优先使用 WorldObject + placement；ObstacleSource 只记录其阻挡语义。
 内容包和 LLM proposal 不允许新增 source_kind、hazard_type 或 obstacle_type。
 内容包和 LLM proposal 不允许直接创建最终 HazardSource / ObstacleSource。
-HazardSource / ObstacleSource 的 create/update/deactivate 必须写 EventLog。
-PassabilityReducer 写入 effective_passability / effective_traversal 时必须写 EdgeEffectivePassabilityChanged EventLog。
+HazardSource / ObstacleSource 的 create/update/deactivate 必须通过 StateTransition 提交，并由 StateTransitionCommitter 生成 EventLogEntry。
+PassabilityReducer 写入 effective_passability / effective_traversal 时必须通过 StateTransition 提交，并由 StateTransitionCommitter 生成 event_type=EdgeEffectivePassabilityChanged 的 EventLogEntry。
 ```
 
 ### 事件日志规则
 
 ```text
-所有权威状态变更必须写 EventLog。
+所有权威状态变更必须通过 StateTransition 或 StateTransitionBatch 提交，并在同一原子提交中生成 EventLogEntry。
 EventLog.sequence 必须单调递增。
-EventLog 只能由确定性生成器、resolver、迁移工具或测试夹具写入。
+EventLog 只能由 StateTransitionCommitter 写入；确定性生成器、resolver、迁移工具或测试夹具只能产出 StateTransition。
 LLM proposal 不能直接写 EventLog。
 EventLog.summary 不是权威状态，不能作为 resolver 输入。
 EventLogEntry 不自动成为任何 NPC、群体或玩家的知识；知情关系必须由 KnowledgePropagation 写入 KnowledgeState。
@@ -1660,13 +2206,17 @@ SchemaMigrated 事件必须用 preconditions 记录迁移前 `World.version_lock
 世界生成完成后必须创建一次 WorldSnapshot。
 schema migration 前后必须创建 WorldSnapshot。
 调试验收流程可以创建 WorldSnapshot。
-WorldSnapshot.event_sequence 必须等于创建快照时 WorldState.latest_event_sequence。
+WorldSnapshot.event_sequence 必须等于创建快照时 WorldState.runtime_state.latest_event_sequence。
+WorldSnapshot.state_hash 必须等于创建快照时的 WorldStateContentHash。
+WorldSnapshot.latest_event_hash 必须等于 event_sequence 对应 EventLogEntry.event_hash；event_sequence=0 时为 null。
+WorldSnapshot.snapshot_hash 必须可由 snapshot payload 重算。
 WorldSnapshot.version_lock 必须存在，并与创建快照时 WorldState.version_lock 一致。
 WorldSnapshot.version_lock 必须包含 schema_version、registry_hash、rule_bundle_hash、content_pack_hash 和 content_pack_refs。
 Snapshot 恢复后必须重新运行 validator。
 Snapshot 恢复后必须重新校验 world_facts、knowledge_facts 和 system_ledger 命名空间。
+恢复到 target_sequence 时，可以选择 event_sequence <= target_sequence 的最近有效 Snapshot，并从 snapshot.event_sequence + 1 开始重放。
 Snapshot.version_lock 与当前运行时 version_lock 不一致时，不能直接恢复到可运行状态，必须通过迁移流程。
-迁移流程必须创建 before_migration 和 after_migration 两个 Snapshot，并写 SchemaMigrated EventLog。
+迁移流程必须创建 before_migration 和 after_migration 两个 Snapshot，并通过 StateTransitionCommitter 生成 SchemaMigrated EventLogEntry。
 ```
 
 ### 历史来历规则
@@ -1689,7 +2239,7 @@ OriginEvent.evidence_entity_ids 与实体反向 OriginMetadata 必须保持一�
 | 知识、发现与事件知情规则 | 定义 KnowledgeState、KnowledgePropagation 和 AgentObservationSnapshot；本文件的 EventLog 不能直接暴露为游戏内记忆。 |
 | 自然生态与资源规则 | 自然资源可能生成 HazardSource，例如毒水、泥潭、腐败资源。 |
 | WorldObject 规则 | 具体门、陷阱、容器、火把、倒木等仍是 WorldObject；本文件只定义其危险或障碍语义。 |
-| AI 社会心智 | AIDecisionTick、AI proposal 和 reservation 存入 system_ledger；只有通过 validator、冲突处理和 resolver 的 proposal 才能修改权威状态，并且必须写入 EventLog。 |
+| AI 社会心智 | AIDecisionTick、AI proposal 和 reservation 存入 system_ledger；只有通过 validator、冲突处理和 resolver 的 proposal 才能修改权威状态，并且必须形成 StateTransition，由 StateTransitionCommitter 生成 EventLogEntry。 |
 
 ## Validator 规则
 
@@ -1772,8 +2322,8 @@ OriginEvent.evidence_entity_ids 与实体反向 OriginMetadata 必须保持一�
 75. `EventLog.changes[].entity_id` 引用的实体必须存在，除非 `op=create`。
 76. `EventLog.version_context` 必须存在，并与提交后的 `WorldState.version_lock` 一致。
 77. `EventLog.event_type=SchemaMigrated` 时必须记录迁移前后 version context。
-78. `WorldSnapshot.event_sequence` 必须不大于当前最新事件序号。
-79. `WorldSnapshot.state_hash` 必须可由快照内容重算。
+78. 创建 `WorldSnapshot` 时，`WorldSnapshot.event_sequence` 必须等于当前 `WorldState.runtime_state.latest_event_sequence`；恢复到 `target_sequence` 时，恢复器只能选择 `event_sequence <= target_sequence` 的有效 Snapshot。
+79. `WorldSnapshot.state_hash`、`latest_event_hash` 和 `snapshot_hash` 必须可由快照内容与对应 EventLog 重算。
 80. `WorldSnapshot.version_lock` 必须包含 schema_version、registry_hash、rule_bundle_hash、content_pack_hash 和 content_pack_refs。
 81. `WorldSnapshot.version_lock` 必须与快照内容中的 `AuthoritativeWorldState.version_lock` 一致。
 82. Snapshot 直接恢复只能发生在 `snapshot.version_lock == runtime.version_lock` 时。
@@ -1832,7 +2382,7 @@ WorldTimeState 尚未提交时，WeatherFormation 会被阶段依赖校验拒绝
 ```text
 同一 RandomSeedMaterial、Region、上一段天气和目标时间必须生成同一段下一天气。
 当前天气未过期时，短行动不会生成新的 WeatherState。
-长休跨过多个天气片段时，必须生成连续 WeatherChanged 事件。
+长休跨过多个天气片段时，必须生成连续 WeatherChanged StateTransition，并由 StateTransitionCommitter 提交。
 当前 absolute_minute 等于 WeatherState.valid_for.end_world_minute 时，必须切到下一段天气。
 同一 Region 两个 base_region WeatherState 区间重叠会被 validator 拒绝。
 同一 Region base_region WeatherState 中间有时间空洞会被 validator 拒绝。
@@ -1891,17 +2441,34 @@ source_entity_ids 为空会被 validator 拒绝。
 除 PassabilityReducer 外的系统写 effective_passability 会被 validator 拒绝。
 ```
 
-### P0.3：EventLog
+### P0.3：StateTransition / EventLog
 
+- 增加 `StateTransition` 和 `StateTransitionBatch` schema。
+- 增加 `StateTransitionValidator`。
+- 增加 `StateTransitionCommitter`，唯一负责原子写入 WorldState 和 EventLogEntry。
 - 增加事件序列表。
-- 所有生成器和 resolver 状态写入必须产生 EventLogEntry。
-- 增加 state_hash 计算接口。
+- 所有生成器和 resolver 状态写入必须先产生 StateTransition，再由 committer 生成 EventLogEntry。
+- 增加 WorldStateContentHash、EventLogEntry.event_hash 和 replay hash 计算接口。
+- 增加 materialize/derive lowering validator。
+- 增加 delete_for_migration 迁移 payload validator。
 
 验收：
 
 ```text
-创建 HazardSource 后必须出现 HazardCreated 事件。
+创建 HazardSource 的 StateTransition 必须包含完整 HazardSource create.value。
+创建 HazardSource 后必须由 StateTransitionCommitter 生成 HazardCreated 事件。
 事件 sequence 缺号或重复会被 validator 拒绝。
+expected_sequence 与当前 latest_event_sequence 不一致时，提交必须被拒绝且不改变 WorldState。
+expected_entity_revisions 不匹配时，提交必须被拒绝且不追加 EventLogEntry。
+相同 idempotency_key 重试必须返回既有提交结果，不能重复应用 ordered_changes。
+StateTransitionBatch 中任一 transition 校验失败时，整个批次必须回滚。
+StateTransitionBatch 中第 N 条 transition.expected_sequence 必须等于 batch.expected_sequence + N - 1。
+StateTransitionBatch 中每条 transition.previous_state_hash 和 previous_event_hash 必须按批内中间状态链式连接。
+materialize operation 进入 EventLog 前必须降低为 create，且 create.value 是完整实体。
+derive operation 进入 EventLog 前必须降低为 create/update/deactivate，Candidate 不得进入 world_facts。
+delete_for_migration 必须携带 migration_plan_id、migration_rule_id、delete_scope、old_value_hash 和 reason_code。
+EventLogEntry.event_hash 必须可重算，并且 previous_event_hash 必须连接上一条事件。
+从 event 0 重放到任意 event_sequence，最终 WorldStateContentHash 必须等于最后一条 EventLogEntry.resulting_state_hash。
 ```
 
 ### P0.4：WorldSnapshot
@@ -1910,6 +2477,8 @@ source_entity_ids 为空会被 validator 拒绝。
 - 世界生成完成后自动创建快照。
 - 快照恢复后运行所有 foundation validators。
 - 快照必须保存 version_lock，并在恢复时校验版本锁。
+- 快照必须保存 state_hash、latest_event_hash 和 snapshot_hash。
+- SnapshotWriter 必须原子写入 snapshot payload、metadata 和 latest_snapshot_id 恢复索引。
 
 验收：
 
@@ -1917,6 +2486,11 @@ source_entity_ids 为空会被 validator 拒绝。
 after_world_generation 快照存在。
 snapshot.event_sequence 等于 runtime_state.latest_event_sequence。
 snapshot.version_lock 等于 AuthoritativeWorldState.version_lock。
+snapshot.state_hash 等于 WorldStateContentHash。
+snapshot.latest_event_hash 等于 event_sequence 对应 EventLogEntry.event_hash。
+snapshot.snapshot_hash 可以重算。
+恢复到 target_sequence 时，恢复器选择 event_sequence <= target_sequence 的最近快照，并从 event_sequence + 1 重放。
+从任意有效 Snapshot 重放到 target_sequence，最终 WorldStateContentHash 必须与从 event 0 重放得到的 hash 一致。
 version_lock 不一致时恢复流程拒绝直接进入运行态。
 ```
 
@@ -1989,12 +2563,36 @@ test_passability_reducer_blocks_over_conditional_difficult_open
 test_passability_reducer_restores_from_base_when_override_removed
 test_deriver_cannot_read_effective_passability_for_source_generation
 test_route_resolver_reads_effective_passability_only
+test_state_transition_requires_registered_event_type_and_change_ops
+test_state_transition_create_value_must_be_complete_entity
+test_state_transition_rejects_expected_sequence_mismatch
+test_state_transition_rejects_entity_revision_mismatch
+test_state_transition_commit_is_atomic_with_event_log_append
+test_state_transition_idempotency_key_returns_existing_result
+test_state_transition_batch_assigns_contiguous_event_sequences
+test_state_transition_batch_requires_chained_expected_sequence
+test_state_transition_batch_chains_previous_hashes
+test_state_transition_batch_rolls_back_on_any_invalid_transition
+test_generation_materialize_lowers_to_create_change
+test_generation_derive_lowers_to_update_change_or_candidate_audit
+test_delete_for_migration_requires_migration_payload
+test_delete_for_migration_rejects_non_migration_producer
+test_world_state_content_hash_excludes_event_log_and_snapshot
+test_event_hash_chains_previous_event_hash
+test_event_replay_hash_matches_resulting_state_hash
+test_event_replay_from_zero_restores_target_hash
+test_event_log_entry_must_reference_state_transition
+test_only_state_transition_committer_can_create_event_log_entry
 test_event_log_sequence_is_monotonic
 test_event_log_absolute_minute_matches_minute_of_day
 test_event_change_create_allows_missing_entity_before_apply
 test_event_change_update_requires_existing_entity
 test_world_snapshot_sequence_matches_runtime_state
 test_snapshot_hash_can_be_recomputed
+test_snapshot_latest_event_hash_matches_boundary_event
+test_snapshot_writer_updates_recovery_index_atomically
+test_snapshot_restore_replays_from_sequence_plus_one
+test_snapshot_restore_hash_matches_full_event_replay_hash
 test_origin_metadata_origin_event_ids_are_validated
 test_origin_event_evidence_references_are_bidirectional
 ```
@@ -2008,7 +2606,7 @@ test_origin_event_evidence_references_are_bidirectional
 5. `source_kind + hazard_type / obstacle_type` 必须符合映射表，不能只因为叙事合理就绕过 validator。
 6. HazardSource / ObstacleSource 的生成入口是有限 producer 集合，必须通过 `generated_by.system` 和 `generated_by.rule_id` 追溯。
 7. 每条产生规则只能输出一个 primary hazard_type 或 obstacle_type，避免实现时出现模糊分支。
-8. EventLog 是状态账本，不是 DM 叙事。
+8. StateTransition 是所有权威状态变化的唯一提交包络；EventLog 是该提交产生的状态账本，不是 DM 叙事。
 9. Snapshot 是调试和恢复边界，不是玩家可见剧情。
 10. 历史来历使用轻量 `OriginEvent / OriginMetadata`，不做完整历史模拟。
 11. `WorldRuntimeInitialization` 是初始天气的强制前置阶段，并原子创建 StaticWorldRuntimeState 与 WorldTimeState。

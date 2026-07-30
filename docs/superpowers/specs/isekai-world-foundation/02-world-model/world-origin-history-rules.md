@@ -70,7 +70,7 @@ OriginEvent：这个地点为什么变成现在这样。
 EventLog：当前存档从生成开始之后发生过什么状态变化。
 ```
 
-世界生成创建 `OriginEvent` 时，仍必须写生成阶段 EventLog，但二者语义不同。
+世界生成创建 `OriginEvent` 时，仍必须形成生成阶段 StateTransition，并由 StateTransitionCommitter 生成 EventLogEntry；但 `OriginEvent` 与运行时 `EventLog` 语义不同。
 
 ### 2. 历史必须留下证据
 
@@ -632,7 +632,7 @@ AI 社会心智只能读取主体可知的历史来历摘要。若某 NPC 或群
 13. `OriginMetadata.age_band` 必须与引用的 OriginEvent.age_band 相容；例如 fresh 证据不能引用 ancient 事件，除非 `origin_role=clue` 且对应 `OriginEvent.expected_outputs` 明确允许线索跨年代保存。
 14. `OriginEvent.scope` 必须覆盖证据实体的位置。
 15. LLM proposal 不能直接写 OriginEvent 或 OriginMetadata。
-16. 生成 OriginEvent、附加 OriginMetadata 和创建证据实体必须写 EventLog。
+16. 生成 OriginEvent、附加 OriginMetadata 和创建证据实体必须通过 StateTransition 提交，并由 StateTransitionCommitter 生成 EventLogEntry。
 17. OriginHistoryCandidateFormation 的输入清单不能包含 SettlementProfile、LawPolicy、EconomyState、SocialPressureState、NamedNPCState 或 ServiceState。
 
 ## 推荐生成顺序
@@ -647,7 +647,7 @@ P0 推荐：
 5. OriginHistoryMaterialization 读取 OriginEventCandidate 和已物化证据，提交权威 OriginEvent。
 6. OriginAttachment 为相关实体附加 OriginMetadata。
 7. OriginHistoryValidator 校验双向引用、证据数量和空间范围。
-8. 写 EventLog。
+8. 由 StateTransitionCommitter 为上述权威变化生成 EventLogEntry。
 9. 初始 Snapshot 覆盖 OriginEvent 和所有 origin attachment。
 ```
 

@@ -1107,15 +1107,15 @@ proposal 必须通过 validator 和 resolver，才可以产生权威变化。示
 
 | AI proposal 类型 | Resolver 可写目标 |
 | --- | --- |
-| `spread_rumor` | SocialActionResolver 写 RumorSpreadRequested；KnowledgePropagation 写 RumorState，SocialRumorIndexReducer 写 SocialPressureState.active_rumor_ids；三个写者分别追加领域 EventLog |
-| `adjust_social_pressure` | SocialPressureState.pressure 中指定键和 EventLog；delta 由规则映射并受单次/每日上限约束 |
-| `request_patrol_change` | SocialPressureState.active_patrol_level 和 EventLog；每次最多移动一级 |
-| `change_group_attitude` | SocialGroupState.attitude_to_player 和 EventLog；必须经过 AttitudeTransitionRegistry |
-| `offer_service` | 确定性服务报价、可选 ProposalResourceReservation 和 EventLog；不能直接扣款或授予权益 |
+| `spread_rumor` | SocialActionResolver 形成 RumorSpreadRequested StateTransition；KnowledgePropagation 形成 RumorState StateTransition；SocialRumorIndexReducer 形成 SocialPressureState.active_rumor_ids StateTransition；事件统一由 StateTransitionCommitter 生成 |
+| `adjust_social_pressure` | SocialPressureState.pressure 中指定键；delta 由规则映射并受单次/每日上限约束，事件由 StateTransitionCommitter 生成 |
+| `request_patrol_change` | SocialPressureState.active_patrol_level；每次最多移动一级，事件由 StateTransitionCommitter 生成 |
+| `change_group_attitude` | SocialGroupState.attitude_to_player；必须经过 AttitudeTransitionRegistry，事件由 StateTransitionCommitter 生成 |
+| `offer_service` | 确定性服务报价、可选 ProposalResourceReservation；不能直接扣款或授予权益，事件由 StateTransitionCommitter 生成 |
 | `refuse_service` | 单次服务请求结果，不直接永久关闭 ServiceState |
-| `reveal_known_fact` | KnowledgePropagation 输入和 EventLog；不能直接创建 KnowledgeState |
-| `withhold_known_fact` | 单次交互结果和 EventLog；不能删除或修改主体已有 KnowledgeState |
-| `change_npc_attitude` | NamedNPCState.attitude_to_player 和 EventLog；必须经过 AttitudeTransitionRegistry |
+| `reveal_known_fact` | KnowledgePropagation 输入；不能直接创建 KnowledgeState，事件由 StateTransitionCommitter 生成 |
+| `withhold_known_fact` | 单次交互结果；不能删除或修改主体已有 KnowledgeState，事件由 StateTransitionCommitter 生成 |
+| `change_npc_attitude` | NamedNPCState.attitude_to_player；必须经过 AttitudeTransitionRegistry，事件由 StateTransitionCommitter 生成 |
 
 P0 不接受 `offer_trade`、`raise_price`、`increase_patrol`、`change_attitude` 等含义重叠的旧名称。交易统一使用 `offer_service(service_type=trade)`，报价由 `offer_service.requested_price_modifier` 表达，巡逻和态度分别使用表中的明确 action_type。
 
@@ -1210,7 +1210,7 @@ AI proposal 直接扣钱或发钥匙。
 21. `EconomyState.social_markup_rules` 不能直接改 ServiceState.base_price，只能作为 resolver 输入。
 22. `SocialPressureState.pressure` 只能使用 P0 pressure 数值键，数值必须在 0.0 到 1.0。
 23. AI proposal 不能直接写任何本文件定义的权威状态。
-24. 所有社会状态变化必须写 EventLog。
+24. 所有社会状态变化必须通过 StateTransition 提交，并由 StateTransitionCommitter 生成 EventLog。
 25. 初始 NamedNPCFormation 不能读取 ServiceState；服务需求只能来自已形成的 Institution.services。
 26. 初始 ServiceFormation 必须在 PolicyAndPressureFormation 与 NamedNPCFormation 完成后运行。
 27. SettlementSocialFormation 的子阶段结果必须作为同一个待校验输出批次处理；Institution.operator_npc_ids 回填和全部引用校验完成前，不得提交部分社会实体。
@@ -1230,7 +1230,7 @@ AI proposal 直接扣钱或发钥匙。
 8. NamedNPCFormation 读取 Institution.services，生成 NamedNPCState，并回填 Institution.operator_npc_ids。
 9. ServiceFormation 读取 Institution、NamedNPCState、LawPolicy、EconomyState 和 SocialPressureState，生成 ServiceState。
 10. SettlementSocialWorldValidator 校验所有引用、闭集和完整 post-state。
-11. 同一原子提交写入全部社会实体和对应 EventLog；任一引用失败则整批回滚。
+11. 同一 StateTransitionBatch 写入全部社会实体，并由 StateTransitionCommitter 生成对应 EventLog；任一引用失败则整批回滚。
 12. 初始 Snapshot 覆盖社会状态。
 ```
 

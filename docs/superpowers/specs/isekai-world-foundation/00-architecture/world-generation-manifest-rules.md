@@ -4,11 +4,13 @@ status: active
 layer: architecture
 owner: architecture
 created_at: 2026-07-13
-updated_at: 2026-07-18
+updated_at: 2026-07-19
 depends_on:
   - isekai.field_domain_registry_rules
   - isekai.deterministic_random_protocol_rules
   - isekai.world_collection_influence_rules
+  - isekai.formation_rule_contract_rules
+  - isekai.executable_numeric_algorithm_rules
   - isekai.static_world_runtime_rules
   - isekai.world_knowledge_rules
 provides:
@@ -36,6 +38,7 @@ provides:
 - 统一所有生成器的输出格式。
 - 明确候选、世界事实、知识事实、事件草案和快照引用的边界。
 - 让每个生成阶段的输入、输出、随机流、规则版本和内容包版本可审计。
+- 让每个生成阶段必须引用已注册的 FormationRuleContract。
 - 让生成器输出能被 FieldSpec、FieldOwnership、WriteACL 和目标实体 validator 机器校验。
 - 保证世界生成完成后可以根据 manifest、EventLog 和 Snapshot 复现 canonical hash。
 
@@ -50,13 +53,14 @@ provides:
 
 ### 1. 生成器不能自由写 WorldState
 
-生成器只能输出 `GeneratorOutputEnvelope`。Envelope 通过 `GenerationOutputValidator` 后，才可以被提交器转换为 `StateTransition` 和 `EventLogEntry`。
+生成器只能输出 `GeneratorOutputEnvelope`。Envelope 通过 `GenerationOutputValidator` 后，才可以被提交器转换为 `StateTransition` 或 `StateTransitionBatch`；最终 EventLogEntry 必须由 StateTransitionCommitter 在原子提交时生成。
 
 ```text
 Generator
 -> GeneratorOutputEnvelope
 -> GenerationOutputValidator
 -> StateTransition
+-> StateTransitionCommitter
 -> EventLogEntry
 -> Authoritative WorldState
 ```
@@ -86,6 +90,10 @@ snapshot_refs：提交后创建或引用的快照。
 
 `GenerationStageContract` 必须声明阶段能读取哪些 entity、candidate、event boundary 和 content pack。实现不能在生成器内部临时读取未声明集合。
 
+### 6. 每个阶段必须绑定 FormationRuleContract
+
+`GenerationStageContract.rule_id` 必须引用 [FormationRule 合约与注册表规则](./formation-rule-contract-rules.md) 中 `FormationRuleRegistry` 已注册且 `contract_status=complete` 的规则。一个阶段包含多条内部规则时，必须在 `formation_rule_refs[]` 中逐条列出；`GeneratorOutputItem.rule_id` 必须引用其中一条。
+
 ## 总体流程
 
 ```text
@@ -100,7 +108,8 @@ WorldGenerationParameters
 -> GeneratorOutputEnvelope[]
 -> WorldGenerationManifest
 -> GenerationOutputValidator
--> StateTransition batch
+-> StateTransitionBatch
+-> StateTransitionCommitter
 -> EventLog
 -> WorldSnapshot(after_world_generation)
 ```
@@ -269,6 +278,13 @@ WorldGenerationManifest 不能包含自由文本结论作为权威事实。
   "atomic_commit_group_id": null,
   "producer": "InitialKnowledgeFormation",
   "rule_id": "knowledge.initial_from_public_world_facts",
+  "formation_rule_refs": [
+    {
+      "rule_id": "knowledge.initial.public_world_fact_discovery.v1",
+      "rule_version": "1.0.0",
+      "required": true
+    }
+  ],
   "reads": [
     {
       "input_class": "world_fact",
@@ -337,6 +353,10 @@ object
 | `atomic_commit_group_id` | 原子提交组 ID。非空时，同组全部输出必须同时提交或全部不提交。 |
 | `producer` | 生成器名称。 |
 | `rule_id` | 该阶段执行的规则 ID。 |
+| `formation_rule_refs` | 本阶段允许调用的 FormationRuleContract 引用列表。每个引用必须在 FormationRuleRegistry 中存在。 |
+| `formation_rule_refs[].rule_id` | FormationRuleContract 的 rule_id。 |
+| `formation_rule_refs[].rule_version` | FormationRuleContract 的版本。 |
+| `formation_rule_refs[].required` | 是否为该阶段必需规则。true 时本阶段输出必须至少引用一次该 rule_id，除非阶段无输出并记录 deterministic fallback audit。 |
 | `reads` | 允许读取的输入引用，必须使用 `GenerationInputRef` 结构。 |
 | `allowed_output_classes` | 允许输出的 item 类别。 |
 | `allowed_entity_types` | 允许输出的权威实体类型。只适用于 `world_fact` 和 `knowledge_fact`。 |
@@ -351,9 +371,13 @@ object
 ```text
 depends_on_stage_contract_ids 必须形成有向无环图。
 stage_index 只用于同一合法拓扑层内的稳定排序，不能代替依赖声明。
+rule_id 和 formation_rule_refs[].rule_id 必须引用 FormationRuleRegistry 中 contract_status=complete 的规则。
+GeneratorOutputItem.rule_id 必须属于当前阶段 formation_rule_refs[]。
 一个阶段只有在所有直接前置阶段的全部分区完成并通过 GenerationOutputValidator 后才能启动；这构成阶段屏障。
 parallelizable=true 时只能按 execution_scope 的稳定 scope ID 分区；分区不得共享可变本地 PRNG、遍历计数器或未声明临时状态。
 同一阶段所有分区的 GeneratorOutputEnvelope 必须按 scope.kind、scope.id、output_id 稳定排序后进入 manifest。
+parallelizable=false 且 execution_scope=world 的阶段在同一 GenerationRunState 中只能产生一个 GeneratorOutputEnvelope；该 envelope 的 scope.kind 必须是 world，scope.id 必须是当前 world_id。
+world 级不可并行阶段内部调用子作用域 FormationRuleContract 时，子作用域只表示 GeneratorOutputItem 目标实体的派生范围，不能拆出额外的 child-scope GeneratorOutputEnvelope。
 atomic_commit_group_id 非空时，组内任一输出校验失败都必须回滚整个组，禁止留下部分权威实体。
 ```
 
@@ -494,6 +518,7 @@ candidate payload 由 value_ref 指向，value_hash 必须能由规范化 payloa
   "knowledge_outputs": [
     {
       "item_id": "item_knowledge_innkeeper_fire_rumor_001",
+      "rule_id": "knowledge.initial.public_world_fact_discovery.v1",
       "output_class": "knowledge_fact",
       "operation": "create",
       "entity_type": "KnowledgeState",
@@ -501,12 +526,14 @@ candidate payload 由 value_ref 指向，value_hash 必须能由规范化 payloa
       "field_path": "*",
       "value_ref": "value_knowledge_innkeeper_fire_rumor_001",
       "value_hash": "sha256:value_knowledge_innkeeper_fire_rumor_001",
+      "algorithm_ref": null,
       "authority_domain": "knowledge_runtime"
     }
   ],
   "event_drafts": [
     {
       "item_id": "item_event_knowledge_created_001",
+      "rule_id": "knowledge.initial.public_world_fact_discovery.v1",
       "output_class": "event_draft",
       "operation": "create",
       "entity_type": "EventLogEntry",
@@ -514,6 +541,7 @@ candidate payload 由 value_ref 指向，value_hash 必须能由规范化 payloa
       "field_path": "*",
       "value_ref": "value_event_draft_knowledge_created_001",
       "value_hash": "sha256:value_event_draft_knowledge_created_001",
+      "algorithm_ref": null,
       "authority_domain": "event_log",
       "event_type": "KnowledgeCreated",
       "depends_on_item_ids": ["item_knowledge_innkeeper_fire_rumor_001"]
@@ -543,6 +571,64 @@ candidate payload 由 value_ref 指向，value_hash 必须能由规范化 payloa
 | `snapshot_refs` | 快照引用输出。数组内元素必须全部是 `GeneratorOutputItem(output_class=snapshot_ref)`。 |
 | `output_hash` | 输出规范化 hash。 |
 
+### World 级单 Envelope 的子作用域输出
+
+当 `GenerationStageContract.execution_scope=world` 且 `parallelizable=false` 时，阶段输出采用单 world envelope。
+
+```text
+GeneratorOutputEnvelope.scope.kind = world
+GeneratorOutputEnvelope.scope.id = World.id
+```
+
+如果该阶段内部的 `FormationRuleContract.target_scope.kind` 是 `world_chunk`、`location_node` 或其他比 world 更细的作用域，这些 target scope 只表示输出实体的目标派生范围，不改变 envelope 粒度。
+
+例如 `EnvironmentDeriver` 在 `environment_derivation` 阶段算出：
+
+```text
+env_chunk_a
+env_chunk_b
+env_node_1
+env_node_2
+```
+
+这些结果必须作为同一个 `GeneratorOutputEnvelope(scope=world:<world_id>)` 的 `world_fact_outputs[]` 中的四个 `GeneratorOutputItem` 提交。每个 item 的 `value_ref` payload 必须由目标实体 schema 表达实际作用域，例如 `EnvironmentState.scope=world_chunk` 并引用 `chunk_id`，或 `EnvironmentState.scope=site_node` 并引用 `site_id`、`node_id`。
+
+同一 bucket 内的子作用域 item 必须使用稳定顺序：
+
+```text
+target_scope_kind_rank,
+target_scope_id,
+entity_type,
+entity_id,
+field_path,
+item_id
+```
+
+`target_scope_kind_rank` 必须使用以下固定顺序：
+
+```text
+none = 0
+world = 10
+region = 20
+world_chunk = 30
+chunk_edge = 40
+settlement = 50
+named_npc = 55
+site = 60
+location_node = 70
+site_node = 80
+zone = 90
+object = 100
+population = 110
+resource_node = 120
+resource_deposit = 130
+flora_patch = 140
+```
+
+`target_scope_id` 必须由目标实体 payload 中的 canonical scope 字段派生，格式为 `<target_scope.kind>:<canonical_id>`。目标实体 payload 使用 `EnvironmentState.scope=site_node` 时，排序用 `target_scope_kind_rank=site_node`，`target_scope_id=site_node:<node_id>`。目标实体没有 scope 字段时，`target_scope_kind_rank=none`，`target_scope_id=""`。`target_scope_id` 是排序和审计键，不等同于确定性随机协议的 `RandomStreamRef.scope_id`。
+
+子作用域 item 使用随机时，`RandomStreamRef.scope_id` 必须使用实际随机作用范围，例如 `chunk:<chunk_id>` 或 `location_node:<node_id>`；它可以等于、粗于或细于 `target_scope_id`，但必须属于确定性随机协议允许的 `scope_id` 格式，并由规则随机声明解释。这不改变 `GeneratorOutputEnvelope.scope=world:<world_id>`。如果规则确实只进行一次全世界随机抽样，才使用 `world:<world_id>` 作为 `RandomStreamRef.scope_id`。
+
 ## GeneratorOutputItem
 
 `GeneratorOutputItem` 表示一次实体创建、字段更新或状态关闭。
@@ -569,11 +655,14 @@ derive
 
 生成阶段禁止使用 `propose`、`project_read` 和 `delete_for_migration`。这些 operation 属于 AI proposal、投影读取或迁移工具，不属于世界生成提交协议。
 
+`materialize` 和 `derive` 是生成阶段 operation，不是 EventLog `changes[].op`。进入权威状态前，`GenerationCommitter` 必须按 [静态世界运行规则](../03-runtime/static-world-runtime-rules.md) 的“生成 operation lowering 规则”把它们降低为可重放的 `create/update/deactivate` StateTransition changes；Candidate 或 generation_audit 输出不得伪装成已提交世界事实。
+
 字段说明：
 
 | 字段 | 含义 |
 | --- | --- |
 | `item_id` | 输出项 ID。 |
+| `rule_id` | 产生该输出项的 FormationRuleContract.rule_id。必须属于当前 `GenerationStageContract.formation_rule_refs[].rule_id`，并引用 `FormationRuleRegistry` 中 `contract_status=complete` 的规则。 |
 | `output_class` | 输出类别。 |
 | `operation` | 写入操作。 |
 | `entity_type` | 目标权威实体类型。`output_class=candidate` 时必须为 `null`。 |
@@ -583,6 +672,10 @@ derive
 | `field_path` | 目标字段路径，创建完整实体时可为 `*`。 |
 | `value_ref` | 规范化 value 存储引用或内联值引用。 |
 | `value_hash` | `value_ref` 对应 payload 的 canonical hash。 |
+| `algorithm_ref` | 产生该输出的可执行数值算法引用。非数值输出为 `null`；数值生成输出必须填写。 |
+| `algorithm_ref.algorithm_id` | NumericAlgorithmRegistry 中的算法 ID。 |
+| `algorithm_ref.algorithm_version` | NumericAlgorithmSpec.algorithm_version。必须与实际规则包版本一致。 |
+| `algorithm_ref.algorithm_status` | NumericAlgorithmSpec.algorithm_status。进入长期可重放基线时必须为 `ready`。 |
 | `authority_domain` | 目标字段对应权威域。 |
 | `event_type` | 当 `output_class=event_draft` 时必填，必须属于 `allowed_event_types`。 |
 | `snapshot_reason` | 当 `output_class=snapshot_ref` 时必填，必须属于 `allowed_snapshot_reasons`。 |
@@ -591,13 +684,16 @@ derive
 规则：
 
 ```text
+每个 GeneratorOutputItem 必须填写 rule_id，用于输出项级别的规则归属、WriteACL 校验和 replay 审计。
 world_fact 输出不能使用 KnowledgeState、DiscoveryState、RumorState、SecretState、AgentObservationSnapshot。
 knowledge_fact 输出只能使用 KnowledgeState、DiscoveryState、RumorState、SecretState。
 candidate 输出只能使用注册的 Candidate 类型，例如 OriginEventCandidate；不能进入 world_facts 或 knowledge_facts。
 candidate 输出必须填写 candidate_type、candidate_id，并把 entity_type、entity_id 设为 null。
 非 candidate 输出必须填写 entity_type、entity_id，并把 candidate_type、candidate_id 设为 null。
-event_draft 输出的 entity_type 必须是 EventLogEntry，entity_id 是草案 ID，不是最终 EventLogEntry ID；提交器负责填入 sequence、changes 和 resulting_state_hash。
+event_draft 输出的 entity_type 必须是 EventLogEntry，entity_id 是草案 ID，不是最终 EventLogEntry ID；提交器只能把它转换为 StateTransition 字段，最终 sequence、transition_id、changes 和 resulting_state_hash 由 StateTransitionCommitter 生成或校验。
 snapshot_ref 输出的 entity_type 必须是 WorldSnapshot；value_ref 只能包含 snapshot_id、reason、event_sequence 和 state_hash 引用，不能内联完整快照内容。
+如果输出由 NumericAlgorithmSpec 产生，algorithm_ref 必须存在，并且 algorithm_id、algorithm_version、algorithm_status 能与 NumericAlgorithmRegistry 重算一致。
+如果输出 payload 含数值字段且对应 FormationRuleContract.algorithm.status=ready，algorithm_ref 不能为 null。
 所有 output bucket 内的元素必须是 GeneratorOutputItem；禁止任何自由格式对象。
 ```
 
@@ -607,37 +703,42 @@ snapshot_ref 输出的 entity_type 必须是 WorldSnapshot；value_ref 只能包
 
 ```text
 1. stage_contract_id 存在，depends_on_stage_contract_ids 形成合法 DAG，且所有直接前置阶段已经完成。
-2. producer 和 rule_id 与 GenerationStageContract 匹配。
-3. input_refs 只读取 contract.reads 允许的 input_class、实体、字段、候选、内容包或事件边界。
-4. 每个 bucket 只能包含与 bucket 名匹配的 GeneratorOutputItem。
-5. output_class 属于闭集。
-6. operation 属于生成阶段 operation 子集。
-7. entity_type、candidate_type、event_type 和 snapshot_reason 分别属于 contract allowed 列表。
-8. output_class 与 entity_type / authority_domain 分桶一致。
-9. value_ref 必须可解析，value_hash 必须能由 canonical value 重算。
-10. FieldSpec 校验所有 value。
-11. WorldKnowledgeBoundaryValidator 校验世界事实和知识事实禁用字段。
-12. EntityAuthorityDomain 和 FieldOwnership 校验字段归属。
-13. WriteACL 校验 rule_id、EntityType、FieldPath 和 operation。
-14. 目标实体 validator 校验完整 post-state。
-15. event_drafts 覆盖所有权威状态变化，且不能提前声明最终 EventLog sequence。
-16. snapshot_refs 只能引用提交边界之后的 WorldSnapshot。
-17. output_hash 与规范化输出一致。
-18. random_draw_refs 必须能按确定性随机协议重算。
-19. weighted_choice 的 candidate_set_hash 必须能重算。
-20. parallelizable 阶段的 scope 分区唯一，envelope 稳定排序与串行执行结果一致。
-21. atomic_commit_group_id 相同的输出形成完整提交组，且组内不存在缺失或失败项。
+2. GeneratorOutputEnvelope.producer 和 GeneratorOutputEnvelope.rule_id 与 GenerationStageContract 匹配。
+3. GeneratorOutputEnvelope.rule_id 必须引用 FormationRuleRegistry 中 contract_status=complete 的规则。
+4. input_refs 只读取 contract.reads 和 FormationRuleContract.read_set 允许的 input_class、实体、字段、候选、内容包或事件边界。
+5. input_refs 不得命中 FormationRuleContract.forbidden_read_set。
+6. 每个 bucket 只能包含与 bucket 名匹配的 GeneratorOutputItem，且每个 GeneratorOutputItem.rule_id 必须属于当前阶段 formation_rule_refs[]。
+7. output_class 属于闭集。
+8. operation 属于生成阶段 operation 子集。
+9. entity_type、candidate_type、event_type 和 snapshot_reason 分别属于 contract allowed 列表。
+10. output_class 与 entity_type / authority_domain 分桶一致。
+11. 数值生成输出的 algorithm_ref 必须引用 NumericAlgorithmRegistry 中的 ready NumericAlgorithmSpec。
+12. value_ref 必须可解析，value_hash 必须能由 canonical value 重算。
+13. FieldSpec 校验所有 value。
+14. WorldKnowledgeBoundaryValidator 校验世界事实和知识事实禁用字段。
+15. EntityAuthorityDomain 和 FieldOwnership 校验字段归属。
+16. WriteACL 校验 GeneratorOutputItem.rule_id、EntityType、FieldPath 和 operation。
+17. 目标实体 validator 校验完整 post-state。
+18. event_drafts 覆盖所有权威状态变化，且不能提前声明最终 EventLog sequence。
+19. snapshot_refs 只能引用提交边界之后的 WorldSnapshot。
+20. output_hash 与规范化输出一致。
+20. random_draw_refs 必须能按确定性随机协议重算。
+21. weighted_choice 的 candidate_set_hash 必须能重算。
+22. parallelizable 阶段的 scope 分区唯一，envelope 稳定排序与串行执行结果一致。
+23. parallelizable=false 且 execution_scope=world 的阶段必须只有一个 world scope envelope；validator 必须拒绝同一 stage 下额外的 child-scope envelope。
+24. world 级单 envelope 内的子作用域 item 必须按 target_scope_kind_rank、target_scope_id、entity_type、entity_id、field_path、item_id 稳定排序。
+25. atomic_commit_group_id 相同的输出形成完整提交组，且组内不存在缺失或失败项。
 ```
 
 提交规则：
 
 ```text
 GenerationCommitter 只能提交已验证的 exact GeneratorOutputItem。
-GenerationCommitter 不能改写 value、field_path、entity_type、entity_id、operation 或 rule_id。
-权威写入许可必须以原始 producer/rule_id 为准，不能以 GenerationCommitter 身份重新申请更宽权限。
-GenerationCommitter 只能把 world_fact_outputs 和 knowledge_outputs 转成 StateTransition。
+GenerationCommitter 不能改写 value、field_path、entity_type、entity_id、operation 或 GeneratorOutputItem.rule_id。
+权威写入许可必须以原始 producer 和 GeneratorOutputItem.rule_id 为准，不能以 GenerationCommitter 身份重新申请更宽权限。
+GenerationCommitter 只能把 world_fact_outputs 和 knowledge_outputs 转成 [静态世界运行规则](../03-runtime/static-world-runtime-rules.md) 定义的 StateTransition 或 StateTransitionBatch。
 GenerationCommitter 只能把 ContentMaterializationContext 写入 system_ledger.generation_audit，不能提交进 world_facts 或 knowledge_facts。
-GenerationCommitter 只能根据 event_drafts 创建最终 EventLogEntry，并补入 sequence、changes、caused_by 和 resulting_state_hash。
+GenerationCommitter 只能根据 event_drafts 填充 StateTransition 的 event_type、caused_by、summary 和 ordered_changes；最终 EventLogEntry 必须由 StateTransitionCommitter 在原子提交时生成。
 GenerationCommitter 只能根据 snapshot_refs 调用 SnapshotWriter 创建或引用 WorldSnapshot，不能把 snapshot 内容写进 GeneratorOutputItem。
 candidate_outputs 只能留在 generation_audit 中供后续生成阶段显式读取，不能提交进 world_facts 或 knowledge_facts。
 同一 atomic_commit_group_id 的 StateTransition 必须在一个提交事务中全部成功；任一失败时不得追加该组的领域 EventLogEntry，也不得留下部分 WorldState。
@@ -669,6 +770,19 @@ snapshot_refs 缺失或内联完整快照内容。
 候选输出被运行时 resolver、AI 或 UI 直接消费。
 一个 stage 隐式读取未声明输入。
 ```
+
+## 与生成恢复规则的关系
+
+`WorldGenerationManifest` 只记录最终可审计生成结果，不记录恢复控制状态。
+
+```text
+GenerationRunState
+GenerationStageRunState
+GenerationCheckpoint
+GenerationResumeToken
+```
+
+以上结构属于 [生成失败恢复与断点续生成规则](./generation-recovery-rules.md) 定义的 `generation_control`，不能写入 `WorldGenerationManifest`。Manifest 可以引用最终接受的 `GeneratorOutputEnvelope`、`GeneratorOutputItem`、`RandomDrawRef`、`algorithm_ref` 和 hash，但不能记录 attempt_no、失败重试次数、进程恢复次数或 resume token。
 
 ## 与知识规则的关系
 
@@ -714,8 +828,12 @@ test_generator_output_runs_field_spec_and_write_acl
 test_generation_manifest_hash_is_stable_for_same_seed_and_versions
 test_generation_manifest_records_seed_material_hash
 test_generation_manifest_records_random_stream_refs
+test_numeric_generation_output_records_algorithm_ref
 test_generator_output_random_draw_refs_recompute
 test_candidate_set_hash_recomputes_for_weighted_choice
+test_world_scope_non_parallel_stage_outputs_single_world_envelope
+test_world_envelope_subscope_items_are_stably_sorted
+test_world_envelope_random_scope_is_not_inferred_from_target_scope
 test_initial_knowledge_requires_committed_world_fact_inputs
 test_event_drafts_cover_all_authoritative_generation_changes
 test_snapshot_stage_outputs_snapshot_ref_only
@@ -739,3 +857,4 @@ test_snapshot_stage_outputs_snapshot_ref_only
 14. `GenerationStageContract.depends_on_stage_contract_ids` 是生成 DAG 的权威依赖，`stage_index` 只用于稳定排序。
 15. Region 和 WorldChunk 分区可以并行生成，但后继阶段必须等待前置阶段全部分区通过校验。
 16. `World`、`Region`、`WorldChunkGrid` 和 `WorldChunk` 的初始创建属于同一个原子提交组。
+17. world 级不可并行阶段采用单 `GeneratorOutputEnvelope(scope=world)` 承载子作用域输出；子作用域不拆成额外 envelope。

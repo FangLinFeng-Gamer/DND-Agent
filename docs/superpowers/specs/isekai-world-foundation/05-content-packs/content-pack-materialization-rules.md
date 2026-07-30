@@ -313,7 +313,7 @@ else:
 
 1. 创建 `before_migration` Snapshot。
 2. 运行 migration tool，并只写迁移计划允许的字段。
-3. 写 `SchemaMigrated` EventLogEntry：preconditions 记录旧 `World.version_lock`，changes 更新新 `World.version_lock`，`version_context` 等于新版本锁。
+3. 形成 `SchemaMigrated` StateTransition：preconditions 记录旧 `World.version_lock`，changes 更新新 `World.version_lock`，`version_context` 等于新版本锁，并由 StateTransitionCommitter 生成 EventLogEntry。
 4. 创建 `after_migration` Snapshot。
 5. 重放并校验 canonical hash。
 
@@ -336,7 +336,7 @@ else:
 6. Materializer 输出必须包含 `provenance`。
 7. `provenance.source_kind=content_pack` 时，pack、catalog、materializer、schema、registry、rule 和 content hash 必须完整。
 8. `content_pack_hash`、`registry_hash`、`rule_bundle_hash` 不一致时，Snapshot 不能直接恢复。
-9. 版本升级必须写迁移 EventLog，并创建迁移前后 Snapshot。
+9. 版本升级必须通过 StateTransitionCommitter 生成迁移 EventLogEntry，并创建迁移前后 Snapshot。
 10. Catalog、projection、DM 文本和 AI proposal 不能直接成为权威状态。
 
 ## 验收测试

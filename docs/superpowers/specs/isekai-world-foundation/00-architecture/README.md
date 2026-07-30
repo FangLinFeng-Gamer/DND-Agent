@@ -12,6 +12,8 @@
 
 - [世界集合与影响规则](./world-collection-influence-rules.md)
 - [世界生成输出清单规则](./world-generation-manifest-rules.md)
+- [生成失败恢复与断点续生成规则](./generation-recovery-rules.md)
+- [FormationRule 合约与注册表规则](./formation-rule-contract-rules.md)
 
 ## 规则
 
